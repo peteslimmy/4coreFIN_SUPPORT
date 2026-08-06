@@ -77,7 +77,13 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
 
 - [ ] **Email confirmation ON**: Authentication → Providers → Email → enable "Confirm email". Until enabled, `email_confirm` is set true by `admin.createUser`.
 - [ ] **Password policy**: min 8 chars, require letters+numbers+symbol where acceptable to business.
-- [ ] **MFA TOTP** for `SUPER_ADMIN` and `BU_SUPPORT`: Authentication → Multi-factor → enable TOTP; app already sets cookies `httpOnly`/`secure` in prod.
+- [ ] **MFA TOTP** for `SUPER_ADMIN` and `BU_SUPPORT`:
+  1. Go to Supabase Dashboard → **Authentication → Multi-factor**.
+  2. Toggle **TOTP** to ON.
+  3. Under **Enforced roles**, select `SUPER_ADMIN` and `BU_SUPPORT` so users with these roles are required to set up TOTP on next login.
+  4. Under **Issuer**, set a label like `4CoreFinSupport` (displayed in authenticator apps).
+  5. Save. Users will be prompted to scan a QR code with their authenticator app (Google Authenticator, Authy, etc.) on next login.
+  6. The app already sets cookies `httpOnly`/`secure` in prod; no code changes needed for MFA.
 - [ ] **Auth rate limiting**: keep default 60 req/min; enable CAPTCHA for the login/register endpoints in the Dashboard if bot volume warrants.
 - [ ] Add a `roles` / `metadata` sync so new `auth.users` get an initial app role only via self-registration (PARTNER) or admin provisioning.
 
