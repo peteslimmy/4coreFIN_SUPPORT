@@ -127,7 +127,7 @@ importers:
         specifier: ^6.4.24
         version: 6.4.24
       '@types/pino':
-        specifier: ^7.0.4
+        specifier: ^7.0.5
         version: 7.0.5
       '@types/swagger-ui-express':
         specifier: ^4.1.8
