@@ -1,0 +1,407 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import type { AddressInfo } from 'net';
+import type { Server } from 'http';
+
+vi.mock('../server/supabase', () => {
+  const s = { from: () => { throw new Error('not initialised'); } };
+  return { supabase: s, supabaseAuth: s };
+});
+
+import express from 'express';
+import { supabase } from '../server/supabase';
+import { createApiRouter } from '../server/routes';
+import { requireCsrf, hashPassword } from '../server/auth';
+import { createReferenceRouter } from '../server/routes/reference';
+import { createFakeSupabase, type TableStore } from './helpers/fakeSupabase';
+
+const ALPHA = 'tnt-ALPHA';
+const PASSWORD = 'password123';
+
+function seedStore(): TableStore {
+  const pass = hashPassword(PASSWORD);
+  return {
+    users: [
+      { id: 'usr-a', name: 'Alice Alpha', email: 'alice@alpha.com', password_hash: pass, role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
+      { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: pass, role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA },
+      { id: 'usr-prov', name: 'Rep', email: 'rep@provider.com', password_hash: pass, role: 'PROVIDER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
+    ],
+    tickets: [
+      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, provider: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
+    ],
+    comments: [],
+    evidence: [],
+    audit_logs: [],
+    watcher_notifications: [],
+    major_incidents: [],
+    customers: [],
+    app_config: [],
+    sla_rules: [],
+    holidays: [],
+    ticket_templates: [],
+    kb_articles: [],
+  };
+}
+
+let base: string;
+let server: Server | undefined;
+
+const app = express();
+app.use(express.json({ limit: '5mb', strict: false }));
+app.use('/api', (req, res, next) => requireCsrf(req as any, res, next));
+app.use('/api', createApiRouter());
+app.use('/api/reference', createReferenceRouter());
+
+interface Session { session: string; csrf: string; }
+
+async function login(email: string): Promise<Session> {
+  const res = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password: PASSWORD }),
+  });
+  expect(res.status).toBe(200);
+  const cookies = (res.headers.get('set-cookie') || '').split(',').map((c) => c.split(';')[0].trim());
+  return {
+    session: cookies.find((c) => c.startsWith('4c_session=')) || '',
+    csrf: cookies.find((c) => c.startsWith('4c_csrf=')) || '',
+  };
+}
+
+function authedHeaders(s: Session, mutate = true): Record<string, string> {
+  const headers: Record<string, string> = { Cookie: `${s.session}; ${s.csrf}` };
+  if (mutate && s.csrf) headers['X-CSRF-Token'] = s.csrf.split('=')[1];
+  return headers;
+}
+
+beforeEach(async () => {
+  Object.assign(supabase, createFakeSupabase(seedStore()));
+  server = app.listen(0);
+  await new Promise<void>((resolve) => server!.once('listening', resolve));
+  base = `http://127.0.0.1:${(server!.address() as AddressInfo).port}/api`;
+});
+
+afterEach(async () => {
+  if (server) {
+    await new Promise<void>((resolve) => server!.close(() => resolve()));
+    server = undefined;
+  }
+});
+
+describe('Reference data — access control', () => {
+  it('rejects unauthenticated requests', async () => {
+    const res = await fetch(`${base}/reference/businessUnits`);
+    expect(res.status).toBe(401);
+  });
+
+  it('rejects non-admin (PROVIDER lacks admin:config)', async () => {
+    const s = await login('rep@provider.com');
+    const res = await fetch(`${base}/reference/businessUnits`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('Reference data — config-key CRUD (businessUnits)', () => {
+  const seedBus = () => {
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      app_config: [{ key: 'businessUnits', value: ['ALPHA', 'BETA'] }],
+    }));
+  };
+
+  it('lists config items', async () => {
+    seedBus();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual(['ALPHA', 'BETA']);
+  });
+
+  it('creates an item (uppercased) and persists it', async () => {
+    seedBus();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify('retail-b'),
+    });
+    expect(res.status).toBe(201);
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
+    expect(data.value).toEqual(['ALPHA', 'BETA', 'RETAIL-B']);
+  });
+
+  it('rejects duplicate', async () => {
+    seedBus();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify('alpha'),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('updates an item', async () => {
+    seedBus();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits/ALPHA`, {
+      method: 'PATCH',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify('ALPHA-NORTH'),
+    });
+    expect(res.status).toBe(200);
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
+    expect(data.value as string[]).toEqual(['ALPHA-NORTH', 'BETA']);
+  });
+
+  it('deletes an unreferenced item', async () => {
+    seedBus();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits/BETA`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(200);
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
+    expect(data.value as string[]).toEqual(['ALPHA']);
+  });
+
+  it('blocks deleting a business unit that has tickets (409)', async () => {
+    // Only tickets reference ALPHA — users reference BETA
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      app_config: [{ key: 'businessUnits', value: ['ALPHA'] }],
+      users: (seedStore().users as any[]).map((u) => ({ ...u, bu: 'BETA' })),
+    }));
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits/ALPHA`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.referencedBy).toEqual({ tickets: 1 });
+  });
+
+  it('blocks deleting a business unit that has users (409)', async () => {
+    // Only users reference ALPHA — tickets reference BETA
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      app_config: [{ key: 'businessUnits', value: ['ALPHA'] }],
+      tickets: (seedStore().tickets as any[]).map((t) => ({ ...t, business_unit: 'BETA', tenant_id: ALPHA })),
+    }));
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/businessUnits/ALPHA`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(409);
+    const body = await res.json();
+    expect(body.referencedBy).toEqual({ users: 1 });
+  });
+});
+
+describe('Reference data — object config CRUD (categories)', () => {
+  const seedCats = () => {
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      app_config: [{ key: 'categories', value: [{ name: 'Payment Dispute', description: 'a' }] }],
+    }));
+  };
+
+  it('lists object items', async () => {
+    seedCats();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/categories`, { headers: authedHeaders(s, false) });
+    expect(await res.json()).toEqual([{ name: 'Payment Dispute', description: 'a' }]);
+  });
+
+  it('creates an object item with a generated id', async () => {
+    seedCats();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/categories`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Technical Issue', description: 'b' }),
+    });
+    expect(res.status).toBe(201);
+    const { data } = await supabase.from('app_config').select('value').eq('key', 'categories').single();
+    const arr = data.value as any[];
+    expect(arr.some((c) => c.name === 'Technical Issue')).toBe(true);
+  });
+
+  it('blocks deleting a referenced category', async () => {
+    seedCats();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/categories/Payment%20Dispute`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(409);
+  });
+});
+
+describe('Reference data — table CRUD (sla_rules)', () => {
+  const seedSla = () => {
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      sla_rules: [{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', duration_hours: 24 }],
+    }));
+  };
+
+  it('lists table items using the row mapper (camelCase)', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules`, { headers: authedHeaders(s, false) });
+    expect(await res.json()).toEqual([{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', durationHours: 24 }]);
+  });
+
+  it('creates a table row', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ id: 'sla-2', category: 'Refund', priority: 'LOW', durationHours: 12 }),
+    });
+    expect(res.status).toBe(201);
+    const { data } = await supabase.from('sla_rules').select('*');
+    expect((data as any[]).length).toBe(2);
+  });
+
+  it('updates a table row', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules/sla-1`, {
+      method: 'PATCH',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ durationHours: 12 }),
+    });
+    expect(res.status).toBe(200);
+    const { data } = await supabase.from('sla_rules').select('*');
+    expect((data as any[])[0].duration_hours).toBe(12);
+  });
+
+  it('rejects invalid payloads with 400', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: '', priority: 'HIGH', durationHours: -1 }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts camelCase UI kind labels (slaRules → sla_rules)', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/slaRules`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', durationHours: 24 }]);
+  });
+});
+
+describe('Reference data — unknown kind & audits', () => {
+  it('404 for unknown kind', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/nope`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(404);
+  });
+
+  it('writes a config create to the audit ledger', async () => {
+    const s = await login('admin@4core.com');
+    await fetch(`${base}/reference/providers`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify('Stripe'),
+    });
+    const { data } = await supabase.from('audit_logs').select('*');
+    const actions = (data as any[]).map((a) => a.action);
+    expect(actions).toContain('REFERENCE_PROVIDERS_CREATED');
+  });
+});
+
+describe('Reference data — users kind', () => {
+  it('rejects a user that has admin:config but not admin:users (BU_SUPPORT)', async () => {
+    const s = await login('alice@alpha.com');
+    const res = await fetch(`${base}/reference/users`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(403);
+  });
+
+  it('lists users as public rows', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/users`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(200);
+    const users = await res.json();
+    expect(Array.isArray(users)).toBe(true);
+    expect(users.some((u: any) => u.email === 'alice@alpha.com')).toBe(true);
+  });
+
+  it('creates a user (hashed password) and persists it', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/users`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Carol', email: 'carol@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'secret123' }),
+    });
+    expect(res.status).toBe(201);
+    const { data } = await supabase.from('users').select('*').eq('email', 'carol@alpha.com').single();
+    expect(data.name).toBe('Carol');
+    expect(data.password_hash).not.toBe('secret123');
+    expect(data.password_hash.startsWith('$2')).toBe(true);
+  });
+
+  it('rejects a user with a short password', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/users`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Dave', email: 'dave@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'short' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('updates a user without touching the password when omitted', async () => {
+    const s = await login('admin@4core.com');
+    const { data: before } = await supabase.from('users').select('*').eq('id', 'usr-prov').single();
+    const res = await fetch(`${base}/reference/users/usr-prov`, {
+      method: 'PATCH',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ phone: '08000000000' }),
+    });
+    expect(res.status).toBe(200);
+    const { data: after } = await supabase.from('users').select('*').eq('id', 'usr-prov').single();
+    expect(after.phone).toBe('08000000000');
+    expect(after.password_hash).toBe(before.password_hash);
+  });
+
+  it('rejects BU_SUPPORT (admin:config) from creating users', async () => {
+    const s = await login('alice@alpha.com');
+    const res = await fetch(`${base}/reference/users`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'Eve', email: 'eve@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'secret123' }),
+    });
+    expect(res.status).toBe(403);
+  });
+
+  it('allows SUPER_ADMIN to delete a user', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/users/usr-prov`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(200);
+    const { data } = await supabase.from('users').select('*').eq('id', 'usr-prov');
+    expect((data as any[]).length).toBe(0);
+  });
+
+  it('blocks BU_SUPPORT from deleting a user even with admin:config', async () => {
+    const s = await login('alice@alpha.com');
+    const res = await fetch(`${base}/reference/users/usr-prov`, {
+      method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(403);
+  });
+});

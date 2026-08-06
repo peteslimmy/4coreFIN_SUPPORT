@@ -1,0 +1,71 @@
+# Dependencies
+node_modules
+bun.lock
+pnpm-lock.yaml
+
+# Build output
+dist
+build
+*.log
+
+# Source control
+.git
+.gitignore
+.github
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# Test coverage
+coverage
+.nyc_output
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Data files
+data/
+*.db
+*.db-wal
+*.db-shm
+
+# Logs
+server*.log
+build-output.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Documentation (optional - keep if needed in image)
+README.md
+docs/
+
+# Development scripts
+scripts/
+.mimocode/
+
+# Test files
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+**/*.spec.tsx
+vitest.config.ts
+playwright.config.ts
+e2e/
+
+# Config files (copied via package.json)
+eslint.config.js
+.prettierrc
+tsconfig.json
+vite.config.ts

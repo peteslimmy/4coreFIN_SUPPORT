@@ -1,0 +1,73 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy'
+        required: false
+        type: string
+  push:
+    branches: [develop]
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+  SERVICE_NAME: 4corefinsupport-staging
+
+jobs:
+  deploy:
+    name: Deploy to Cloud Run (Staging)
+    runs-on: ubuntu-latest
+    environment: staging
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha || github.sha }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ghcr.io/${{ github.repository }}:latest
+          flags: >
+            --set-env-vars=NODE_ENV=staging
+            --set-secrets=SUPABASE_URL=SUPABASE_URL:latest
+            --set-secrets=SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_KEY:latest
+            --set-secrets=JWT_SECRET=JWT_SECRET:latest
+            --set-secrets=ENCRYPTION_KEY=ENCRYPTION_KEY:latest
+            --set-secrets=AUTH_PROVIDER=AUTH_PROVIDER:latest
+            --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
+            --set-secrets=DEMO_PASSWORD=DEMO_PASSWORD:latest
+            --min-instances=0
+            --max-instances=10
+            --memory=1Gi
+            --cpu=1
+            --port=3000
+
+      - name: Run smoke tests
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          # Health check
+          curl -f "$SERVICE_URL/api/health" || exit 1
+          # Wait for readiness
+          sleep 10
+          curl -f "$SERVICE_URL/api/health" || exit 1
+          echo "Staging deployment successful"

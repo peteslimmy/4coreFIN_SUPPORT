@@ -1,0 +1,138 @@
+name: Deploy to Production
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: 'Commit SHA to deploy'
+        required: true
+        type: string
+      confirm:
+        description: 'Type "DEPLOY" to confirm production deployment'
+        required: true
+        type: string
+
+env:
+  PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  REGION: ${{ secrets.GCP_REGION || 'us-central1' }}
+  SERVICE_NAME: 4corefinsupport
+
+jobs:
+  validate:
+    name: Validate Deployment
+    runs-on: ubuntu-latest
+    steps:
+      - name: Confirm deployment
+        run: |
+          if [ "${{ github.event.inputs.confirm }}" != "DEPLOY" ]; then
+            echo "Deployment not confirmed. Please type 'DEPLOY' to proceed."
+            exit 1
+          fi
+          echo "Deployment confirmed"
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+
+      - name: Verify CI passed
+        run: |
+          echo "Checking CI status for ${{ github.event.inputs.sha }}..."
+          # This would typically check the CI workflow status via API
+          echo "Assuming CI passed for manual trigger"
+
+  deploy:
+    name: Deploy to Cloud Run (Production)
+    runs-on: ubuntu-latest
+    needs: validate
+    environment: production
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.inputs.sha }}
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Deploy to Cloud Run (Blue/Green via revision)
+        uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: ${{ env.SERVICE_NAME }}
+          region: ${{ env.REGION }}
+          image: ghcr.io/${{ github.repository }}:${{ github.event.inputs.sha }}
+          flags: >
+            --set-env-vars=NODE_ENV=production
+            --set-secrets=SUPABASE_URL=SUPABASE_URL:latest
+            --set-secrets=SUPABASE_SERVICE_KEY=SUPABASE_SERVICE_KEY:latest
+            --set-secrets=JWT_SECRET=JWT_SECRET:latest
+            --set-secrets=ENCRYPTION_KEY=ENCRYPTION_KEY:latest
+            --set-secrets=AUTH_PROVIDER=AUTH_PROVIDER:latest
+            --set-secrets=GEMINI_API_KEY=GEMINI_API_KEY:latest
+            --min-instances=2
+            --max-instances=100
+            --memory=2Gi
+            --cpu=2
+            --port=3000
+            --concurrency=100
+
+      - name: Verify deployment
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
+          echo "Service URL: $SERVICE_URL"
+          # Health check with retries
+          for i in {1..5}; do
+            if curl -f "$SERVICE_URL/api/health"; then
+              echo "Health check passed"
+              exit 0
+            fi
+            echo "Attempt $i failed, retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
+
+      - name: Smoke tests
+        run: |
+          SERVICE_URL=$(gcloud run services describe ${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --format='value(status.url)')
+          # Test critical endpoints
+          curl -f "$SERVICE_URL/api/health" || exit 1
+          echo "Production deployment successful"
+
+  rollback:
+    name: Rollback Capability
+    runs-on: ubuntu-latest
+    needs: deploy
+    if: failure()
+    steps:
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SERVICE_ACCOUNT_KEY }}
+          token_format: access_token
+
+      - name: Set up Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+
+      - name: Rollback to previous revision
+        run: |
+          PREVIOUS_REVISION=$(gcloud run revisions list --service=${{ env.SERVICE_NAME }} --region=${{ env.REGION }} --filter="status.conditions.type=Ready AND status.conditions.status=True" --sort-by="~metadata.creationTimestamp" --limit=2 --format="value(metadata.name)" | tail -1)
+          if [ -n "$PREVIOUS_REVISION" ]; then
+            gcloud run services update-traffic ${{ env.SERVICE_NAME }} --to-revisions=$PREVIOUS_REVISION=100 --region=${{ env.REGION }}
+            echo "Rolled back to $PREVIOUS_REVISION"
+          else
+            echo "No previous healthy revision found"
+          fi

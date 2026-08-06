@@ -1,0 +1,6 @@
+{
+  "name": "4CoreFinSupport",
+  "description": "Enterprise Payment Operations and Complaint Resolution Management Platform conforming to ISO 10002, NDPA 2023, and GAID 2025 guidelines.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

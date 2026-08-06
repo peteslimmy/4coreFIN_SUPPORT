@@ -1,0 +1,22 @@
+-- 4CoreFinSupport — Partitioning (DEFERRED)
+-- Migration 019: Disabled pending data migration strategy
+--
+-- This migration created partitioned tables but did not migrate data from
+-- the original tables. The application still queries the original tables,
+-- so partitioning was ineffective and potentially confusing.
+--
+-- DECISION: Remove this migration after confirming no downstream dependencies.
+-- The original tables (tickets, audit_logs) remain in use.
+--
+-- To re-enable partitioning later:
+-- 1. Migrate all data from tickets -> tickets_partitioned
+-- 2. Migrate all data from audit_logs -> audit_logs_partitioned
+-- 3. Update application queries to use partitioned tables
+-- 4. Set up pg_cron for maintenance (vacuum, detach old partitions)
+
+-- Original content preserved for reference:
+-- CREATE TABLE tickets_partitioned (LIKE tickets INCLUDING ALL) PARTITION BY RANGE (created_at);
+-- CREATE TABLE audit_logs_partitioned (LIKE audit_logs INCLUDING ALL) PARTITION BY RANGE (timestamp);
+--
+-- CREATE INDEX idx_tickets_partitioned_tenant ON tickets_partitioned(tenant_id);
+-- CREATE INDEX idx_audit_logs_partitioned_tenant ON audit_logs_partitioned(tenant_id);

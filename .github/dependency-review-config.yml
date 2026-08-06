@@ -1,0 +1,23 @@
+fail-on-severity: high
+license-policy:
+  allow:
+    - MIT
+    - Apache-2.0
+    - BSD-2-Clause
+    - BSD-3-Clause
+    - ISC
+    - CC0-1.0
+    - Unlicense
+  deny:
+    - GPL-3.0
+    - AGPL-3.0
+scope-policy:
+  allow:
+    - runtime
+    - production
+    - development
+  deny:
+    - optional
+severity-threshold:
+  high: 0
+  critical: 0
