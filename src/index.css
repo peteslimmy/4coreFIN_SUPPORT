@@ -1,6 +1,42 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;450;500;600;700&family=Montserrat:wght@500;600;700;800&display=swap');
 @import "tailwindcss";
 
+@theme {
+  /* Register the design-system tokens so Tailwind can generate gradient-stop
+     (from-/via-/to-), ring, border-* variant and opacity-modifier utilities.
+     Values mirror the :root/.dark custom properties below. */
+  --color-accent: #8B0000;
+  --color-accent-light: #A52A2A;
+  --color-accent-dark: #6B0000;
+  --color-primary: #8B0000;
+  --color-primary-light: #FFF5F5;
+  --color-primary-dark: #6B0000;
+  --color-secondary: #6B7280;
+  --color-secondary-light: #F3F4F6;
+  --color-success: #16A34A;
+  --color-success-light: #F0FDF4;
+  --color-success-dark: #166534;
+  --color-error: #DC2626;
+  --color-error-light: #FEF2F2;
+  --color-error-dark: #991B1B;
+  --color-warning: #D97706;
+  --color-warning-light: #FFFBEB;
+  --color-warning-dark: #92400E;
+  --color-info: #8B0000;
+  --color-info-light: #FFF5F5;
+  --color-surface-app: #F8F9FA;
+  --color-surface: #F8F9FA;
+  --color-surface-card: #FFFFFF;
+  --color-surface-sidebar: #FFFFFF;
+  --color-surface-hover: #F0F1F3;
+  --color-surface-elevated: #FFFFFF;
+  --color-border: #E5E7EB;
+  --color-border-subtle: #EEF0F3;
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #4B5563;
+  --color-text-muted: #6B7280;
+}
+
 @custom-variant dark (&.dark *);
 
 /* ==============================================
@@ -30,7 +66,7 @@
   /* — Text — */
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #4B5563;
-  --color-text-muted: #9CA3AF;
+  --color-text-muted: #6B7280;
 
   /* — Semantic — */
   --color-primary: #8B0000;
@@ -409,11 +445,22 @@ body {
   from { opacity: 0; filter: blur(4px); }
   to { opacity: 1; filter: blur(0); }
 }
-.animate-shimmer { animation: shimmer 2s ease-in-out infinite; }
-.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
-.animate-slide-in { animation: slide-in 0.3s var(--ease-out); }
-.animate-slide-up { animation: slide-up 0.4s var(--ease-out); }
-.animate-fade-blur { animation: fade-blur-in 0.4s var(--ease-out); }
+@keyframes shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-6px); }
+  40% { transform: translateX(6px); }
+  60% { transform: translateX(-4px); }
+  80% { transform: translateX(4px); }
+}
+.animate-shake { animation: shake 0.4s var(--ease-out); }
+@keyframes check-pop {
+  0% { transform: scale(0); opacity: 0; }
+  50% { transform: scale(1.2); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.animate-check-pop { animation: check-pop 0.3s var(--ease-out); }
+.animate-slide-in { animation: slide-in var(--duration-normal) var(--ease-out) both; }
+.animate-slide-up { animation: slide-up var(--duration-normal) var(--ease-out) both; }
 
 /* ==============================================
    Reduced Motion

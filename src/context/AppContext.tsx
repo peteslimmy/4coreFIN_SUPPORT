@@ -76,8 +76,12 @@ export interface AppContextType {
   setSavedReplies: Dispatch<SetStateAction<string[]>>;
   businessUnits: string[];
   setBusinessUnits: Dispatch<SetStateAction<string[]>>;
+  businessUnitCodes: Record<string, string>;
+  setBusinessUnitCodes: Dispatch<SetStateAction<Record<string, string>>>;
   providers: string[];
   setProviders: Dispatch<SetStateAction<string[]>>;
+  paymentChannels: string[];
+  setPaymentChannels: Dispatch<SetStateAction<string[]>>;
   categories: CategoryRecord[];
   setCategories: Dispatch<SetStateAction<CategoryRecord[]>>;
   buFormConfigs: BuFormConfig[];
@@ -131,7 +135,9 @@ interface LatestState {
   savedReplies: string[];
   customers: CustomerRecord[];
   businessUnits: string[];
+  businessUnitCodes: Record<string, string>;
   providers: string[];
+  paymentChannels: string[];
   categories: CategoryRecord[];
   evidence: FileEvidence[];
   buFormConfigs: BuFormConfig[];
@@ -152,7 +158,9 @@ interface PersistedState {
   savedReplies?: string[];
   customers?: CustomerRecord[];
   businessUnits?: string[];
+  businessUnitCodes?: Record<string, string>;
   providers?: string[];
+  paymentChannels?: string[];
   categories?: CategoryRecord[];
   evidence?: FileEvidence[];
   buFormConfigs?: BuFormConfig[];
@@ -160,27 +168,32 @@ interface PersistedState {
 }
 
 async function persistToDexie(state: PersistedState): Promise<void> {
-  const writes: Promise<void>[] = [];
-  if (state.tickets) writes.push(db.tickets.bulkPut(state.tickets).then(() => undefined));
-  if (state.comments) writes.push(db.comments.bulkPut(state.comments).then(() => undefined));
-  if (state.auditLogs) writes.push(db.auditLogs.bulkPut(state.auditLogs).then(() => undefined));
-  if (state.majorIncidents) writes.push(db.majorIncidents.bulkPut(state.majorIncidents).then(() => undefined));
-  if (state.watcherNotifications) writes.push(db.watcherNotifications.bulkPut(state.watcherNotifications).then(() => undefined));
-  if (state.users) writes.push(db.users.bulkPut(state.users).then(() => undefined));
-  if (state.slaRules) writes.push(db.slaRules.bulkPut(state.slaRules).then(() => undefined));
-  if (state.holidays) writes.push(db.holidays.bulkPut(state.holidays).then(() => undefined));
-  if (state.ticketTemplates) writes.push(db.ticketTemplates.bulkPut(state.ticketTemplates).then(() => undefined));
-  if (state.kbArticles) writes.push(db.kbArticles.bulkPut(state.kbArticles).then(() => undefined));
-  if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies).then(() => undefined));
-  if (state.customers) writes.push(db.customers.bulkPut(state.customers).then(() => undefined));
-  if (state.businessUnits) writes.push(db.businessUnits.bulkPut(state.businessUnits).then(() => undefined));
-  if (state.providers) writes.push(db.providers.bulkPut(state.providers).then(() => undefined));
-  if (state.categories) writes.push(db.categories.bulkPut(state.categories).then(() => undefined));
-  if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence).then(() => undefined));
-  if (state.buFormConfigs) writes.push(db.buFormConfigs.bulkPut(state.buFormConfigs).then(() => undefined));
-  if (state.roles) writes.push(db.roles.bulkPut(state.roles).then(() => undefined));
-  await Promise.all(writes);
-}
+   try {
+     const writes: Promise<unknown>[] = [];
+     if (state.tickets) writes.push(db.tickets.bulkPut(state.tickets));
+     if (state.comments) writes.push(db.comments.bulkPut(state.comments));
+     if (state.auditLogs) writes.push(db.auditLogs.bulkPut(state.auditLogs));
+     if (state.majorIncidents) writes.push(db.majorIncidents.bulkPut(state.majorIncidents));
+     if (state.watcherNotifications) writes.push(db.watcherNotifications.bulkPut(state.watcherNotifications));
+     if (state.users) writes.push(db.users.bulkPut(state.users));
+     if (state.slaRules) writes.push(db.slaRules.bulkPut(state.slaRules));
+     if (state.holidays) writes.push(db.holidays.bulkPut(state.holidays));
+     if (state.ticketTemplates) writes.push(db.ticketTemplates.bulkPut(state.ticketTemplates));
+     if (state.kbArticles) writes.push(db.kbArticles.bulkPut(state.kbArticles));
+if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies.map(s => ({ id: s }))));
+      if (state.customers) writes.push(db.customers.bulkPut(state.customers));
+      if (state.businessUnits) writes.push(db.businessUnits.bulkPut(state.businessUnits.map(s => ({ id: s }))));
+      if (state.providers) writes.push(db.providers.bulkPut(state.providers.map(s => ({ id: s }))));
+      if (state.paymentChannels) writes.push(db.paymentChannels.bulkPut(state.paymentChannels.map(s => ({ id: s }))));
+     if (state.categories) writes.push(db.categories.bulkPut(state.categories));
+     if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence));
+     if (state.buFormConfigs) writes.push(db.buFormConfigs.bulkPut(state.buFormConfigs));
+     if (state.roles) writes.push(db.roles.bulkPut(state.roles));
+     await Promise.all(writes);
+   } catch (error) {
+     console.warn('Failed to persist state to Dexie:', error);
+   }
+ }
 
 /**
  * Seed the TanStack Query cache with bootstrap payload so domain hooks
@@ -232,6 +245,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     ticketTemplates: admin.ticketTemplates, kbArticles: config.kbArticles,
     savedReplies: config.savedReplies, customers: config.customers,
     businessUnits: admin.businessUnits, providers: admin.providers,
+    businessUnitCodes: admin.businessUnitCodes, paymentChannels: admin.paymentChannels,
     categories: admin.categories, evidence: [], buFormConfigs: config.buFormConfigs,
     roles: config.roles,
   });
@@ -278,7 +292,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_saved_replies', JSON.stringify(sReplies !== undefined ? sReplies : latest.savedReplies));
     localStorage.setItem('4c_customers', JSON.stringify(cList !== undefined ? cList : latest.customers));
     localStorage.setItem('4c_business_units', JSON.stringify(buList !== undefined ? buList : latest.businessUnits));
+    localStorage.setItem('4c_business_unit_codes', JSON.stringify(latest.businessUnitCodes));
     localStorage.setItem('4c_providers', JSON.stringify(provList !== undefined ? provList : latest.providers));
+    localStorage.setItem('4c_payment_channels', JSON.stringify(latest.paymentChannels));
     localStorage.setItem('4c_categories', JSON.stringify(catList !== undefined ? catList : latest.categories));
     localStorage.setItem('4c_evidence', JSON.stringify(eList !== undefined ? eList : latest.evidence));
     localStorage.setItem('4c_bu_form_configs', JSON.stringify(fConfigs !== undefined ? fConfigs : latest.buFormConfigs));
@@ -300,6 +316,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customers: cList !== undefined ? cList : latest.customers,
       businessUnits: buList !== undefined ? buList : latest.businessUnits,
       providers: provList !== undefined ? provList : latest.providers,
+      paymentChannels: latest.paymentChannels,
       categories: catList !== undefined ? catList : latest.categories,
       evidence: eList !== undefined ? eList : latest.evidence,
       buFormConfigs: fConfigs !== undefined ? fConfigs : latest.buFormConfigs,
@@ -328,7 +345,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
       savedReplies: config.savedReplies,
       customers: config.customers,
       businessUnits: admin.businessUnits,
+      businessUnitCodes: admin.businessUnitCodes,
       providers: admin.providers,
+      paymentChannels: admin.paymentChannels,
       categories: admin.categories,
       evidence: ticket.evidence,
       buFormConfigs: config.buFormConfigs,
@@ -357,7 +376,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.customers) config.setCustomers(data.customers);
     if (data.savedReplies) config.setSavedReplies(data.savedReplies);
     if (data.businessUnits) admin.setBusinessUnits(data.businessUnits);
+    if (data.businessUnitCodes) admin.setBusinessUnitCodes(data.businessUnitCodes);
     if (data.providers) admin.setProviders(data.providers);
+    if (data.paymentChannels) admin.setPaymentChannels(data.paymentChannels);
     if (data.categories) admin.setCategories(data.categories);
     if (data.buFormConfigs) config.setBuFormConfigs(data.buFormConfigs);
     if (data.roles) config.setRoles(getRoles(data.roles));
@@ -378,7 +399,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_saved_replies', JSON.stringify(data.savedReplies || []));
     localStorage.setItem('4c_customers', JSON.stringify(data.customers || []));
     localStorage.setItem('4c_business_units', JSON.stringify(data.businessUnits || []));
+    localStorage.setItem('4c_business_unit_codes', JSON.stringify(data.businessUnitCodes || {}));
     localStorage.setItem('4c_providers', JSON.stringify(data.providers || []));
+    localStorage.setItem('4c_payment_channels', JSON.stringify(data.paymentChannels || []));
     localStorage.setItem('4c_categories', JSON.stringify(data.categories || []));
     localStorage.setItem('4c_bu_form_configs', JSON.stringify(data.buFormConfigs || []));
     localStorage.setItem('4c_evidence', JSON.stringify(data.evidence || []));
@@ -398,6 +421,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customers: data.customers,
       businessUnits: data.businessUnits,
       providers: data.providers,
+      paymentChannels: data.paymentChannels,
       categories: data.categories,
       evidence: data.evidence,
       buFormConfigs: data.buFormConfigs,
@@ -495,6 +519,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     shell.setActiveTab('tickets');
     void clearAppData().catch(() => {});
     showToast('Logged out successfully.', 'info');
+    if (window.location.pathname !== '/auth/login') {
+      window.location.assign('/auth/login');
+    }
   }, [shell, showToast, logAuditAction]);
 
   // Restore the session on refresh when a server session cookie is present.
@@ -588,7 +615,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Persist state to localStorage whenever these values change
   useEffect(() => {
     saveToStorage();
-  }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.providers, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
+  }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.businessUnitCodes, admin.providers, admin.paymentChannels, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
 
   const appContextValue: AppContextType = {
     isLoading: shell.isLoading,
@@ -630,8 +657,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setSavedReplies: config.setSavedReplies,
     businessUnits: admin.businessUnits,
     setBusinessUnits: admin.setBusinessUnits,
+    businessUnitCodes: admin.businessUnitCodes,
+    setBusinessUnitCodes: admin.setBusinessUnitCodes,
     providers: admin.providers,
     setProviders: admin.setProviders,
+    paymentChannels: admin.paymentChannels,
+    setPaymentChannels: admin.setPaymentChannels,
     categories: admin.categories,
     setCategories: admin.setCategories,
     buFormConfigs: config.buFormConfigs,

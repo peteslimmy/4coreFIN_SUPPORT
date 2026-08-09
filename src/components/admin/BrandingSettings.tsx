@@ -10,20 +10,53 @@ export default function BrandingSettings() {
   const [saved, setSaved] = useState(false);
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light');
 
-  const handleUpload = (folder: string) => async (files: File[]): Promise<(string | null)[]> => {
+  const handleUpload = (folder: string, settingKey?: string) => async (files: File[]): Promise<(string | null)[]> => {
     const results: (string | null)[] = [];
     for (const file of files) {
-      const res = await authorizedFetch('/api/admin/branding/upload', {
-        method: 'POST',
-        headers: {
-          'Content-Type': file.type,
-          'X-Filename': file.name,
-          'X-Folder': folder,
-        },
-        body: file,
-      });
-      const data = await res.json();
-      results.push(data.url || null);
+      if (folder === 'landing_page') {
+        // Use the dedicated landing page image upload system instead of generic branding upload
+        const formData = new FormData();
+        formData.append('image', file);
+        formData.append('status', 'published');
+        formData.append('title', 'Landing Page Hero');
+        formData.append('alt_text', 'Enterprise Operations & Compliance Platform');
+
+        const res = await authorizedFetch('/api/landing-page/images', {
+          method: 'POST',
+          body: formData,
+          credentials: 'include',
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          results.push(data.desktop_url || data.storage_path);
+        } else {
+          results.push(null);
+        }
+      } else {
+        const res = await authorizedFetch('/api/admin/branding/upload', {
+          method: 'POST',
+          headers: {
+            'Content-Type': file.type,
+            'X-Filename': file.name,
+            'X-Folder': folder,
+            ...(settingKey ? { 'X-Setting-Key': settingKey } : {}),
+          },
+          body: file,
+        });
+        const data = await res.json();
+        if (res.ok && data.path) {
+          if (settingKey) {
+            const persisted = await updateSetting(settingKey, data.path);
+            if (!persisted) {
+              throw new Error(`Upload succeeded but saving "${settingKey}" failed. Check server logs.`);
+            }
+          }
+          results.push(`/api/public/branding/${settingKey?.split('.').pop()}`);
+        } else {
+          results.push(null);
+        }
+      }
     }
     return results;
   };
@@ -56,15 +89,15 @@ export default function BrandingSettings() {
           label="Logo (Light Mode)"
           accept="image/png,image/svg+xml,image/webp"
           maxSize={2 * 1024 * 1024}
-          currentUrls={logoLight ? [logoLight] : []}
-          onUpload={handleUpload('branding')}
+          currentUrls={logoLight ? ['/api/public/branding/logo_light'] : []}
+          onUpload={handleUpload('branding', 'branding.logo_light')}
         />
         <FileUpload
           label="Logo (Dark Mode)"
           accept="image/png,image/svg+xml,image/webp"
           maxSize={2 * 1024 * 1024}
-          currentUrls={logoDark ? [logoDark] : []}
-          onUpload={handleUpload('branding')}
+          currentUrls={logoDark ? ['/api/public/branding/logo_dark'] : []}
+          onUpload={handleUpload('branding', 'branding.logo_dark')}
         />
       </div>
 
@@ -73,8 +106,8 @@ export default function BrandingSettings() {
         label="Favicon"
         accept="image/png,image/x-icon,image/svg+xml"
         maxSize={500 * 1024}
-        currentUrls={settings['branding.favicon'] ? [settings['branding.favicon']] : []}
-        onUpload={handleUpload('branding')}
+        currentUrls={settings['branding.favicon'] ? ['/api/public/branding/favicon'] : []}
+        onUpload={handleUpload('branding', 'branding.favicon')}
         className="max-w-sm"
       />
 
@@ -84,7 +117,7 @@ export default function BrandingSettings() {
         accept="image/png,image/jpeg,image/webp"
         maxSize={5 * 1024 * 1024}
         currentUrls={settings['branding.hero_image'] ? [settings['branding.hero_image']] : []}
-        onUpload={handleUpload('branding')}
+        onUpload={handleUpload('landing_page')}
         className="max-w-lg"
       />
 
@@ -111,7 +144,9 @@ export default function BrandingSettings() {
           <div className={`flex items-center gap-3 p-3 rounded-lg ${previewMode === 'dark' ? 'bg-surface-card' : 'bg-surface border border-border-subtle'}`}>
             {(previewMode === 'dark' ? (logoDark || logoLight) : logoLight) ? (
               <img
-                src={previewMode === 'dark' ? (logoDark || logoLight) : logoLight}
+                src={previewMode === 'dark'
+                  ? (logoDark ? '/api/public/branding/logo_dark' : '/api/public/branding/logo_light')
+                  : '/api/public/branding/logo_light'}
                 alt="Logo preview"
                 className="max-h-10 w-auto object-contain"
               />

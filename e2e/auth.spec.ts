@@ -1,15 +1,30 @@
 import { test, expect } from '@playwright/test';
 import { login, DEMO_EMAIL } from './helpers';
 
+test.describe('Public landing page', () => {
+  test('renders the landing page at / with a full-screen hero and sign-in CTA', async ({ page }) => {
+    await page.goto('/');
+    await expect(page.getByRole('heading', { name: /4CoreFin/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('link', { name: /Sign In/i }).first()).toBeVisible();
+  });
+
+  test('navigates to the login page from the sign-in CTA', async ({ page }) => {
+    await page.goto('/');
+    await page.getByRole('link', { name: /Sign In/i }).first().click();
+    await expect(page).toHaveURL(/\/auth\/login/);
+    await expect(page.getByRole('heading', { name: /Sign in/i })).toBeVisible();
+  });
+});
+
 test.describe('Authentication', () => {
   test('renders the login page when unauthenticated', async ({ page }) => {
-    await page.goto('/');
-    await expect(page.getByRole('heading', { name: '4CoreFinSupport' })).toBeVisible();
+    await page.goto('/auth/login');
+    await expect(page.getByRole('heading', { name: /Sign in/i })).toBeVisible();
     await expect(page.getByRole('button', { name: /Sign In/i })).toBeVisible();
   });
 
   test('rejects invalid credentials with an error', async ({ page }) => {
-    await page.goto('/');
+    await page.goto('/auth/login');
     await page.getByPlaceholder('you@company.com').fill(DEMO_EMAIL);
     await page.getByPlaceholder('Enter your password').fill('definitely-wrong-password');
     await page.getByRole('button', { name: /Sign In/i }).click();
@@ -29,8 +44,8 @@ test.describe('Authenticated session', () => {
   test('logout returns to the login page', async ({ page }) => {
     await login(page);
     await expect(page.locator('#main-content')).toBeVisible({ timeout: 20_000 });
-    await page.getByRole('button', { name: /Sarah|Adaobi|Okafor|Okeke/i }).first().click();
+    await page.getByRole('button', { name: /Sarah|Adaobi|Okafor|Okeke|Pete/i }).first().click();
     await page.getByRole('button', { name: /Logout/i }).click();
-    await expect(page.getByRole('heading', { name: '4CoreFinSupport' })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByRole('heading', { name: /Sign in/i })).toBeVisible({ timeout: 15_000 });
   });
 });

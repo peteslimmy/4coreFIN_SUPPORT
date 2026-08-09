@@ -9,7 +9,6 @@ import { GoogleGenAI, Type } from "@google/genai";
 // if SUPABASE_* are absent. `import 'dotenv/config'` runs during ESM
 // import evaluation (hoisted first), ahead of downstream server/ imports.
 import "dotenv/config";
-import { seedDatabase } from "./server/seed";
 import { createApiRouter } from "./server/routes";
 import { createAdminSettingsRouter } from "./server/routes/adminSettings";
 import { createReferenceRouter } from "./server/routes/reference";
@@ -56,16 +55,9 @@ function validateEnv() {
 
 async function startServer() {
   validateEnv();
-  // Dev seeding must NEVER run in production: the seed creates known-password
-  // demo accounts (password123) that would be a credential backdoor. Dev data
-  // is only inserted when explicitly requested for a non-production environment.
-  const isProd = process.env.NODE_ENV === 'production';
-  if (!isProd) {
-    const seeded = await seedDatabase();
-    if (seeded) {
-      console.warn('DEV-ONLY: seeded demo data. Demo accounts MUST NOT exist in production.');
-    }
-  }
+  // Note: no automatic data seeding on boot. First-run data (e.g. the initial
+  // SUPER_ADMIN account, reference lists) must be created explicitly via the
+  // documented bootstrap flow (see docs/BOOTSTRAP.md).
 
   const app = express();
   const PORT = Number(process.env.PORT) || 3001;

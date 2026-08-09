@@ -7,9 +7,10 @@ import { requireAdmin } from '../middleware/requireAdmin';
 import { listJsonTable, replaceJsonTable, getConfig, setConfig, appendAuditLog } from '../repository';
 import { DEFAULT_ROLES, getRoles } from '../rbac';
 import { getDefaultBuFormConfigs, mergeConfigs } from '../../src/lib/formConfigs';
+import { businessUnitNames } from '../../src/lib/buCodes';
 
 const CONFIG_TABLES = ['sla_rules', 'holidays', 'ticket_templates', 'kb_articles'];
-const CONFIG_KEYS = ['businessUnits', 'providers', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules'];
+const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'providers', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules'];
 
 export function createConfigRouter(): Router {
   const router = Router();

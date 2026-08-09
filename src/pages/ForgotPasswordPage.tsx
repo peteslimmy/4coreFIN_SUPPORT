@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Mail, ArrowLeft, CheckCircle } from 'lucide-react';
 import AuthLogo from '../components/auth/AuthLogo';
+import AuthBackground from '../components/auth/AuthBackground';
 import PageTransition from '../components/layout/PageTransition';
 
 export default function ForgotPasswordPage() {
@@ -35,15 +36,18 @@ export default function ForgotPasswordPage() {
 
   return (
     <PageTransition>
-    <div className="min-h-screen bg-app flex items-center justify-center p-4">
-      <div className="w-full max-w-sm">
-        <div className="text-center mb-6">
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <AuthBackground />
+      <div className="relative z-10 w-full max-w-sm">
+        <div className="mb-6 text-center">
           <AuthLogo />
           <h1 className="text-display font-bold text-text-primary">Reset password</h1>
-          <p className="text-body-sm text-text-muted mt-1">We'll send you a recovery link</p>
+          <p className="mt-1 text-body-sm text-text-muted">We'll send you a recovery link</p>
         </div>
 
-        <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-card">
+        <div className="animate-slide-up">
+        <div className="relative overflow-hidden rounded-2xl border border-border-subtle bg-surface-card p-6 shadow-card md:p-7">
+          <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-accent via-accent-light to-accent" aria-hidden="true" />
           {sent ? (
             <div className="text-center py-4">
               <div className="w-12 h-12 bg-success/15 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -81,6 +85,7 @@ export default function ForgotPasswordPage() {
               <ArrowLeft className="w-3 h-3" /> Back to sign in
             </a>
           </div>
+        </div>
         </div>
       </div>
     </div>

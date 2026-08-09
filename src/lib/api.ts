@@ -33,6 +33,8 @@ export interface BootstrapData {
   customers?: CustomerRecord[];
   savedReplies?: string[];
   businessUnits?: string[];
+  businessUnitCodes?: Record<string, string>;
+  paymentChannels?: string[];
   providers?: string[];
   categories?: CategoryRecord[];
   buFormConfigs?: BuFormConfig[];
@@ -45,14 +47,6 @@ export interface ApiListOptions {
   limit?: number;
   offset?: number;
   filters?: Record<string, any>;
-}
-
-export interface ApiTicketTransitions {
-  from: string;
-  to: string;
-  action: string;
-  label: string;
-  requiresPermission?: string;
 }
 
 export const SESSION_COOKIE = '4c_session';
@@ -117,8 +111,7 @@ export async function apiFetch<T = unknown>(path: string, options: RequestInit =
   }
 
   const res = await authorizedFetch(path, { ...options, headers });
-  if (res.status === 401) {
-    // Dispatch logout event so AppContext can clear state
+  if (res.status === 401 && hasSession()) {
     window.dispatchEvent(new CustomEvent('auth:expired'));
   }
   if (!res.ok) {
@@ -168,19 +161,14 @@ export const api = {
   updateTicket: (id: string, patch: unknown) =>
     apiFetch<TicketRecord>(`/api/tickets/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
-  getTicketTransitions: (id: string) =>
-    apiFetch<ApiTicketTransitions[]>(`/api/tickets/${encodeURIComponent(id)}/transitions`),
-
   transitionTicket: (id: string, status: string) =>
     apiFetch<TicketRecord>(`/api/tickets/${encodeURIComponent(id)}`, {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
 
-  listComments: (ticketId?: string) =>
-    ticketId
-      ? apiFetch<CommentRecord[]>(`/api/tickets/${encodeURIComponent(ticketId)}/comments`)
-      : apiFetch<CommentRecord[]>('/api/comments'),
+  listComments: (ticketId: string) =>
+    apiFetch<CommentRecord[]>(`/api/tickets/${encodeURIComponent(ticketId)}/comments`),
 
   submitFeedback: (id: string, patch: unknown) =>
     apiFetch<TicketRecord>(`/api/tickets/${id}/feedback`, { method: 'PATCH', body: JSON.stringify(patch) }),

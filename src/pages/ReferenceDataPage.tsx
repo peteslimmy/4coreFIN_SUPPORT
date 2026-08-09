@@ -15,7 +15,7 @@ export default function ReferenceDataPage() {
   if (currentRole !== 'SUPER_ADMIN' && !can('admin:config')) {
     return (
       <PageTransition>
-        <PageContainer maxWidth="lg">
+        <PageContainer maxWidth="full">
           <div className="text-center py-12 text-text-muted text-base">Access denied. Admin only.</div>
         </PageContainer>
       </PageTransition>
@@ -26,7 +26,7 @@ export default function ReferenceDataPage() {
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="lg">
+      <PageContainer maxWidth="full">
         <PageHeader
           title="Reference Data"
           subtitle="Manage business units, providers, categories, SLA rules, templates, and other configuration lists used across the platform"
@@ -47,6 +47,7 @@ export default function ReferenceDataPage() {
                   }`}
                 >
                   {k.kind === 'businessUnits' && <Database className="w-4 h-4" />}
+                  {k.kind === 'paymentChannels' && <Database className="w-4 h-4" />}
                   {k.kind === 'providers' && <Database className="w-4 h-4" />}
                   {k.kind === 'categories' && <Database className="w-4 h-4" />}
                   {k.kind === 'slaRules' && <Database className="w-4 h-4" />}

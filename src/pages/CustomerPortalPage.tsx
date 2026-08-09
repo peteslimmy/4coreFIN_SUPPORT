@@ -48,7 +48,7 @@ export default function CustomerPortalPage() {
     isLoading, ticketTemplates, providers, categories, currentUser, showToast,
     tickets, setTickets, comments, setAuditLogs, saveToStorage,
     setActiveTicketId, setActiveTab, slaRules, holidays, currentRole, auditLogs,
-    setEvidence, evidence, buFormConfigs, setComments
+    setEvidence, evidence, buFormConfigs, setComments, paymentChannels
   } = useApp();
 
   const [customerView, setCustomerView] = useState<'file_complaint' | 'my_tickets'>('file_complaint');
@@ -331,7 +331,7 @@ export default function CustomerPortalPage() {
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="md">
+      <PageContainer maxWidth="full">
         {isLoading ? (
           <div className="space-y-4">
             <Skeleton variant="card" count={3} />
@@ -441,6 +441,7 @@ export default function CustomerPortalPage() {
                       values={txValues}
                       errors={txErrors}
                       context={{ category: newTicket.category }}
+                      paymentChannels={paymentChannels}
                       onChange={(id, value) => {
                         setTxValues(prev => ({ ...prev, [id]: value }));
                         if (txErrors[id]) {

@@ -8,7 +8,7 @@ import TicketActivitySection from './TicketActivitySection';
 import type { TicketRecord } from '../../types/app';
 import { TicketStatus, UserRole } from '../../types/app';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, getTicketStatusStep, TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
+import { formatCurrency, formatSlaDuration, getTicketStatusStep, TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
 import { syncTicketPatch, syncKbArticles } from '../../lib/sync';
 
 interface TicketDetailPaneProps {
@@ -92,7 +92,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
             </button>
             <div className="min-w-0">
               <p className="text-overline">Ticket ID</p>
-              <h2 className="font-numeric font-bold text-xs text-text-primary tracking-tight truncate max-w-full">{activeTicket.id}</h2>
+              <h2 className="font-numeric font-bold text-[10px] text-text-primary tracking-tight max-w-full">{activeTicket.id}</h2>
             </div>
             {(() => {
               const pColor = getPriorityColor(activeTicket.priority);
@@ -177,7 +177,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="bg-error/5 border-b border-error/15 px-5 py-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-error shrink-0" />
-                  <span className="text-xs font-bold text-error uppercase tracking-wider">{activeTicket.provider} Provider Team / SLA Breached</span>
+                  <span className="text-xs font-bold text-error uppercase tracking-wider">{activeTicket.provider} Provider Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
                 </div>
               </div>
             );

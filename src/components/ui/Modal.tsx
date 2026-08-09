@@ -27,24 +27,30 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
     }
   }, []);
 
+  const onCloseRef = useRef(onClose);
+  const trapFocusRef = useRef(trapFocus);
+  onCloseRef.current = onClose;
+  trapFocusRef.current = trapFocus;
+
   useEffect(() => {
     if (!open) return;
     previousFocusRef.current = document.activeElement as HTMLElement;
     const prev = document.body.style.overflow;
     document.body.style.overflow = 'hidden';
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
+      if (e.key === 'Escape') onCloseRef.current();
     };
+    const handleTrap = (e: KeyboardEvent) => trapFocusRef.current(e);
     document.addEventListener('keydown', handleEscape);
-    document.addEventListener('keydown', trapFocus);
+    document.addEventListener('keydown', handleTrap);
     contentRef.current?.focus();
     return () => {
       document.body.style.overflow = prev;
       document.removeEventListener('keydown', handleEscape);
-      document.removeEventListener('keydown', trapFocus);
+      document.removeEventListener('keydown', handleTrap);
       previousFocusRef.current?.focus();
     };
-  }, [open, onClose, trapFocus]);
+  }, [open]);
 
   const sizeClass = {
     sm: 'max-w-sm',

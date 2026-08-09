@@ -12,9 +12,19 @@ interface DynamicFormStepProps {
   onChange: (id: string, value: FormFieldValue) => void;
   onValidation?: (errors: Record<string, string>) => void;
   context?: Record<string, FormFieldValue>;
+  /** Managed payment-channel list that overrides the stored `channel` field options. */
+  paymentChannels?: string[];
 }
 
-export default function DynamicFormStep({ config, values, errors = {}, onChange, onValidation, context }: DynamicFormStepProps) {
+/** Live options for the `channel` field, overriding the stored defaults with the managed payment-channel list. */
+function channelOptions(f: BuFormConfig['fields'][number], paymentChannels: string[] | undefined): string[] {
+  if (f.id === 'channel' && paymentChannels && paymentChannels.length > 0) {
+    return paymentChannels;
+  }
+  return f.options || [];
+}
+
+export default function DynamicFormStep({ config, values, errors = {}, onChange, onValidation, context, paymentChannels }: DynamicFormStepProps) {
   const allValues = { ...context, ...values };
   const visible = config.fields.filter(f => f.enabled && isFieldVisible(f, allValues));
 
@@ -26,7 +36,7 @@ export default function DynamicFormStep({ config, values, errors = {}, onChange,
       case 'textarea':
         return <Textarea label={label} rows={3} placeholder={f.placeholder} value={String(value ?? '')} onChange={(e) => onChangeField(e.target.value)} error={error} required={f.required} disabled={disabled} />;
       case 'select':
-        return <Select label={label} value={String(value ?? '')} onChange={(e) => onChangeField(e.target.value)} options={(f.options || []).map(o => ({ value: o, label: o }))} error={error} required={f.required} disabled={disabled} />;
+        return <Select label={label} value={String(value ?? '')} onChange={(e) => onChangeField(e.target.value)} options={channelOptions(f, paymentChannels).map(o => ({ value: o, label: o }))} error={error} required={f.required} disabled={disabled} />;
       case 'date':
         return <Input label={label} type="date" value={String(value ?? '')} onChange={(e) => onChangeField(e.target.value)} error={error} required={f.required} disabled={disabled} />;
       case 'number':

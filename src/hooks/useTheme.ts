@@ -32,7 +32,7 @@ export function applyTheme(settings: Record<string, string>) {
   }
 
   // Favicon
-  updateFavicon(settings['branding.favicon'] || null);
+  updateFavicon(settings['branding.favicon'] ? '/api/public/branding/favicon' : null);
 }
 
 export function useTheme() {

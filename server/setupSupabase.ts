@@ -27,43 +27,100 @@ function runSql(query: string): Promise<any> {
       }
     };
 
-    const req = https.request(options, (res) => {
-      let body = '';
-      res.on('data', (chunk) => body += chunk);
-      res.on('end', () => {
-        try {
-          resolvePromise({ status: res.statusCode, data: JSON.parse(body) });
-        } catch {
-          resolvePromise({ status: res.statusCode, data: body });
+    const attempt = (remaining: number, delayMs: number) => {
+      const req = https.request(options, (res) => {
+        let body = '';
+        res.on('data', (chunk) => body += chunk);
+        res.on('end', () => {
+          try {
+            resolvePromise({ status: res.statusCode, data: JSON.parse(body) });
+          } catch {
+            resolvePromise({ status: res.statusCode, data: body });
+          }
+        });
+      });
+      req.on('error', (err: any) => {
+        const transient = /ENOTFOUND|ECONNRESET|ETIMEDOUT|ECONNREFUSED|socket hang up|EAI_AGAIN/i.test(String(err.code || err.message));
+        if (transient && remaining > 0) {
+          console.log(`  (retrying runSql in ${delayMs}ms — ${err.code || err.message})`);
+          setTimeout(() => attempt(remaining - 1, Math.min(delayMs * 2, 10000)), delayMs);
+        } else {
+          reject(err);
         }
       });
-    });
-    req.on('error', reject);
-    req.write(data);
-    req.end();
+      req.write(data);
+      req.end();
+    };
+
+    attempt(4, 1000);
   });
 }
 
 function parseSqlStatements(sql: string): string[] {
-  const lines = sql.split('\n');
-  let current = '';
   const stmts: string[] = [];
+  let current = '';
+  let i = 0;
+  let dollarTag: string | null = null;
+  let inString: string | null = null; // '\'' | '"' | null
+  const n = sql.length;
 
-  for (const line of lines) {
-    const trimmed = line.trim();
-    // Skip comment-only lines and empty lines
-    if (trimmed.startsWith('--') || trimmed === '') continue;
+  while (i < n) {
+    const ch = sql[i];
+    const next = sql[i + 1];
 
-    current += line + '\n';
-
-    // Statement ends when line ends with ;
-    if (trimmed.endsWith(';')) {
-      stmts.push(current.trim());
-      current = '';
+    // Line comment (skipped only when outside quotes/dollar-quotes)
+    if (inString === null && dollarTag === null && ch === '-' && next === '-') {
+      while (i < n && sql[i] !== '\n') i++;
+      continue;
     }
+    // Block comment
+    if (inString === null && dollarTag === null && ch === '/' && next === '*') {
+      i += 2;
+      while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++;
+      i += 2;
+      continue;
+    }
+    // Dollar-quoted string open/close (e.g. $$ ... $$, $tag$ ... $tag$)
+    if (inString === null && ch === '$') {
+      const tag = /^\$[A-Za-z_0-9]*\$/.exec(sql.slice(i))?.[0];
+      if (tag) {
+        if (dollarTag === null) {
+          dollarTag = tag;
+        } else if (dollarTag === tag) {
+          dollarTag = null;
+        }
+        current += tag;
+        i += tag.length;
+        continue;
+      }
+    }
+    // Single/double quoted strings
+    if (dollarTag === null) {
+      if (inString === null && (ch === "'" || ch === '"')) {
+        inString = ch;
+      } else if (inString === ch) {
+        if (inString === "'" && next === "'") {
+          current += ch + next;
+          i += 2;
+          continue;
+        }
+        inString = null;
+      }
+    }
+    // Statement terminator
+    if (dollarTag === null && inString === null && ch === ';') {
+      const trimmed = current.trim();
+      if (trimmed) stmts.push(trimmed);
+      current = '';
+      i++;
+      continue;
+    }
+    current += ch;
+    i++;
   }
 
-  if (current.trim()) stmts.push(current.trim());
+  const trimmed = current.trim();
+  if (trimmed) stmts.push(trimmed);
   return stmts;
 }
 
@@ -109,12 +166,24 @@ async function setup() {
           success++;
         } else {
           const err = result.data?.message || result.data?.error || JSON.stringify(result.data).substring(0, 120);
-          console.log(`  [${i + 1}/${statements.length}] ${result.status}: ${firstLine}\n     → ${err}`);
-          failed++;
+          // Treat idempotency errors ("already exists") as success so re-runs are safe.
+          if (/already exists/i.test(String(err))) {
+            console.log(`  [${i + 1}/${statements.length}] OK (idempotent): ${firstLine}\n     → ${err}`);
+            success++;
+          } else {
+            console.log(`  [${i + 1}/${statements.length}] ${result.status}: ${firstLine}\n     → ${err}`);
+            failed++;
+          }
         }
       } catch (e: any) {
-        console.log(`  [${i + 1}/${statements.length}] ERROR: ${firstLine}\n     → ${e.message}`);
-        failed++;
+        const msg = String(e.message || '');
+        if (/already exists/i.test(msg)) {
+          console.log(`  [${i + 1}/${statements.length}] OK (idempotent): ${firstLine}\n     → ${msg}`);
+          success++;
+        } else {
+          console.log(`  [${i + 1}/${statements.length}] ERROR: ${firstLine}\n     → ${msg}`);
+          failed++;
+        }
       }
     }
 

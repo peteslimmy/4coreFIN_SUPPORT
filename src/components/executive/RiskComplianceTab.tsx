@@ -136,7 +136,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
     { key: 'ageHours', header: 'Age', align: 'right' as const, sortable: true, render: (r: RiskRow) => <span className="font-mono text-text-muted">{formatHours(r.ageHours)}</span> },
     { key: 'slaRemainingHours', header: 'SLA Left', align: 'right' as const, sortable: true, render: (r: RiskRow) => {
       const color = r.slaRemainingHours < 0 ? 'text-error' : r.slaRemainingHours < 24 ? 'text-warning' : 'text-success';
-      return <span className={`font-mono ${color}`}>{r.slaRemainingHours < 0 ? 'Breached' : formatHours(r.slaRemainingHours)}</span>;
+      return <span className={`font-mono ${color}`}>{r.slaRemainingHours < 0 ? `Breached -${formatHours(Math.abs(r.slaRemainingHours))}` : formatHours(r.slaRemainingHours)}</span>;
     }},
     { key: 'riskScore', header: 'Risk', align: 'right' as const, sortable: true, render: (r: RiskRow) => (
       <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full border text-[10px] font-bold uppercase ${RISK_BADGE[r.riskLevel]}`}>

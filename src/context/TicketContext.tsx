@@ -10,15 +10,10 @@ import {
   type MajorIncidentRecord,
   type FileEvidence,
 } from '../types/app';
-import {
-  SEED_COMMENTS,
-  SEED_AUDIT_LOGS,
-  getSeedTickets,
-  getSeedMajorIncidents,
-} from '../lib/seedData';
 import { computeAuditHash } from '../lib/compliance';
 import { syncAudit, syncNotification, syncTicketPatch, syncCreateTicket } from '../lib/sync';
 import { calculateSlaDeadline } from '../lib/slaCalculator';
+import { nextTicketId } from '../lib/buCodes';
 import {
   applyTransition,
   getAvailableTransitions,
@@ -74,7 +69,7 @@ interface TicketDomainDeps {
 
 export function useTicketDomain({ shell, admin, saveToStorage, showToast }: TicketDomainDeps): TicketDomain {
   const { currentUser, currentRole, activeTicketId } = shell;
-  const { slaRules, holidays } = admin;
+  const { slaRules, holidays, businessUnitCodes } = admin;
 
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [comments, setComments] = useState<CommentRecord[]>([]);
@@ -83,38 +78,24 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
   const [evidence, setEvidence] = useState<FileEvidence[]>([]);
   const [majorIncidents, setMajorIncidents] = useState<MajorIncidentRecord[]>([]);
 
-  // Initialize from localStorage or seed data
+  // Initialize from localStorage only
   useEffect(() => {
-    const load = <T,>(key: string, fallback: T, setter: Dispatch<SetStateAction<T>>) => {
+    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
       const raw = localStorage.getItem(key);
       if (raw !== null) {
-        let parsed: T;
         try {
-          parsed = JSON.parse(raw);
+          setter(JSON.parse(raw));
         } catch {
-          parsed = fallback;
+          // If parsing fails, keep existing state
         }
-        const isEmpty = Array.isArray(parsed) && parsed.length === 0;
-        const hasSeed = Array.isArray(fallback) && fallback.length > 0;
-        if (isEmpty && hasSeed && import.meta.env.DEV) {
-          setter(fallback);
-          localStorage.setItem(key, JSON.stringify(fallback));
-        } else {
-          setter(parsed);
-        }
-      } else if (import.meta.env.DEV) {
-        setter(fallback);
-        localStorage.setItem(key, JSON.stringify(fallback));
       }
     };
-    load('4c_tickets', getSeedTickets(), (val: TicketRecord[]) => {
-      setTickets(val.map(t => ({ ...t, status: normalizeStatus(t.status) ?? t.status })));
-    });
-    load('4c_comments', SEED_COMMENTS, setComments);
-    load('4c_audit', SEED_AUDIT_LOGS, setAuditLogs);
-    load('4c_major_incidents', getSeedMajorIncidents(), setMajorIncidents);
-    load('4c_watcher_notifications', [], setWatcherNotifications);
-    load('4c_evidence', [], setEvidence);
+    load('4c_tickets', setTickets);
+    load('4c_comments', setComments);
+    load('4c_audit', setAuditLogs);
+    load('4c_major_incidents', setMajorIncidents);
+    load('4c_watcher_notifications', setWatcherNotifications);
+    load('4c_evidence', setEvidence);
   }, []);
 
   // Log Immutable audits with hash chain
@@ -261,7 +242,11 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
 
   // Create ticket helper
   const handleCreateTicket = useCallback((ticketData: Partial<TicketRecord>): string => {
-    const tId = ticketData.id || 'TKT-' + Date.now();
+    const tId = ticketData.id || nextTicketId(
+      ticketData.businessUnit || currentUser.bu,
+      Object.keys(businessUnitCodes).map((name) => ({ name, code: businessUnitCodes[name] })),
+      tickets.map((t) => t.id)
+    );
     const deadlineDate = calculateSlaDeadline(
       new Date(),
       ticketData.category || 'Failed Payment',
@@ -321,7 +306,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     syncCreateTicket(record);
     showToast(`Ticket ${tId} created.`, 'success');
     return tId;
-  }, [currentUser, currentRole, slaRules, holidays, tickets, comments, auditLogs, saveToStorage, showToast]);
+  }, [currentUser, currentRole, slaRules, holidays, businessUnitCodes, tickets, comments, auditLogs, saveToStorage, showToast]);
 
   const value: TicketDomain = {
     tickets, setTickets,

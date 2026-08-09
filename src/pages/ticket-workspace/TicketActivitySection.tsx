@@ -203,7 +203,7 @@ export default function TicketActivitySection({
                         {replyingTo === c.id ? "Cancel" : "Reply"}
                       </button>
                     )}
-                    {c.seenBy && c.seenBy.length > 0 && (
+                    {Array.isArray(c.seenBy) && c.seenBy.length > 0 && (
                       <span title={c.seenBy.join(", ")} className="text-[9px] text-black/50 flex items-center gap-0.5">
                         <Check className="w-2.5 h-2.5 text-black/60" /> {c.seenBy.length}
                       </span>

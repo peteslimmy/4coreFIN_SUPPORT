@@ -131,7 +131,7 @@ export default function ProfileSettingsPage() {
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="lg">
+      <PageContainer maxWidth="full">
         <PageHeader title="Profile Settings" subtitle="Manage your account information and security" breadcrumbs={[{ label: 'Home' }, { label: 'Account' }, { label: 'Profile' }]} />
 
         <div className="flex flex-col md:flex-row gap-6">

@@ -51,7 +51,7 @@ export default function AuditLogsPage({ auditLogs, showToast, searchQuery }: Aud
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="xl" className="space-y-6">
+      <PageContainer maxWidth="full" className="space-y-6">
         <PageHeader
           title="Compliance & Immutable Audit Logs"
           subtitle="Continuous cryptographic ledger capturing all system perspective changes, PII decrypts, and status mutations"

@@ -104,7 +104,7 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
   const seedBus = () => {
     Object.assign(supabase, createFakeSupabase({
       ...seedStore(),
-      app_config: [{ key: 'businessUnits', value: ['ALPHA', 'BETA'] }],
+      app_config: [{ key: 'businessUnits', value: [{ name: 'ALPHA', code: 'ALPH' }, { name: 'BETA', code: 'BETA' }] }],
     }));
   };
 
@@ -113,7 +113,7 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     const s = await login('admin@4core.com');
     const res = await fetch(`${base}/reference/businessUnits`, { headers: authedHeaders(s, false) });
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual(['ALPHA', 'BETA']);
+    expect(await res.json()).toEqual([{ name: 'ALPHA', code: 'ALPH' }, { name: 'BETA', code: 'BETA' }]);
   });
 
   it('creates an item (uppercased) and persists it', async () => {
@@ -122,11 +122,11 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     const res = await fetch(`${base}/reference/businessUnits`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify('retail-b'),
+      body: JSON.stringify({ name: 'retail-b', code: 'retb' }),
     });
     expect(res.status).toBe(201);
     const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
-    expect(data.value).toEqual(['ALPHA', 'BETA', 'RETAIL-B']);
+    expect(data.value).toEqual([{ name: 'ALPHA', code: 'ALPH' }, { name: 'BETA', code: 'BETA' }, { name: 'RETAIL-B', code: 'RETB' }]);
   });
 
   it('rejects duplicate', async () => {
@@ -135,7 +135,7 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     const res = await fetch(`${base}/reference/businessUnits`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify('alpha'),
+      body: JSON.stringify({ name: 'ALPHA-COPY', code: 'ALPH' }),
     });
     expect(res.status).toBe(409);
   });
@@ -146,11 +146,11 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     const res = await fetch(`${base}/reference/businessUnits/ALPHA`, {
       method: 'PATCH',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify('ALPHA-NORTH'),
+      body: JSON.stringify({ name: 'ALPHA-NORTH', code: 'ALPN' }),
     });
     expect(res.status).toBe(200);
     const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
-    expect(data.value as string[]).toEqual(['ALPHA-NORTH', 'BETA']);
+    expect(data.value).toEqual([{ name: 'ALPHA-NORTH', code: 'ALPN' }, { name: 'BETA', code: 'BETA' }]);
   });
 
   it('deletes an unreferenced item', async () => {
@@ -162,14 +162,14 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     });
     expect(res.status).toBe(200);
     const { data } = await supabase.from('app_config').select('value').eq('key', 'businessUnits').single();
-    expect(data.value as string[]).toEqual(['ALPHA']);
+    expect(data.value).toEqual([{ name: 'ALPHA', code: 'ALPH' }]);
   });
 
   it('blocks deleting a business unit that has tickets (409)', async () => {
     // Only tickets reference ALPHA — users reference BETA
     Object.assign(supabase, createFakeSupabase({
       ...seedStore(),
-      app_config: [{ key: 'businessUnits', value: ['ALPHA'] }],
+      app_config: [{ key: 'businessUnits', value: [{ name: 'ALPHA', code: 'ALPH' }] }],
       users: (seedStore().users as any[]).map((u) => ({ ...u, bu: 'BETA' })),
     }));
     const s = await login('admin@4core.com');
@@ -186,7 +186,7 @@ describe('Reference data — config-key CRUD (businessUnits)', () => {
     // Only users reference ALPHA — tickets reference BETA
     Object.assign(supabase, createFakeSupabase({
       ...seedStore(),
-      app_config: [{ key: 'businessUnits', value: ['ALPHA'] }],
+      app_config: [{ key: 'businessUnits', value: [{ name: 'ALPHA', code: 'ALPH' }] }],
       tickets: (seedStore().tickets as any[]).map((t) => ({ ...t, business_unit: 'BETA', tenant_id: ALPHA })),
     }));
     const s = await login('admin@4core.com');
@@ -349,6 +349,8 @@ describe('Reference data — users kind', () => {
     expect(data.name).toBe('Carol');
     expect(data.password_hash).not.toBe('secret123');
     expect(data.password_hash.startsWith('$2')).toBe(true);
+    expect(data.auth_user_id).toBe('auth-carol@alpha.com');
+    expect(data.must_change_password).toBe(true);
   });
 
   it('rejects a user with a short password', async () => {

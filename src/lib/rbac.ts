@@ -7,7 +7,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'major-incidents:manage', 'customers:manage', 'notifications:view',
   'audit:view', 'audit:verify', 'reports:view', 'executive:dashboard',
   'provider:rca', 'admin:config', 'admin:users', 'admin:forms', 'admin:access',
-  'admin:branding', 'admin:sla',
+  'admin:branding', 'admin:landing_page', 'admin:sla',
 ];
 
 export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; label: string }[] }[] = [
@@ -59,6 +59,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
       { id: 'admin:forms', label: 'Manage complaint forms' },
       { id: 'admin:access', label: 'Manage access control' },
       { id: 'admin:branding', label: 'Manage branding/theme/integrations' },
+      { id: 'admin:landing_page', label: 'Manage landing page images' },
       { id: 'admin:sla', label: 'Run SLA checks' },
     ],
   },

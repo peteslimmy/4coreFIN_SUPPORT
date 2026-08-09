@@ -230,7 +230,7 @@ function ExecutiveDashboardPage() {
   if (isLoading) {
     return (
       <PageTransition>
-        <PageContainer maxWidth="xl" className="space-y-5">
+        <PageContainer maxWidth="full" className="space-y-5">
           <Skeleton variant="chart" count={1} />
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4"><Skeleton variant="card" count={4} /></div>
           <Skeleton variant="table-row" count={5} />

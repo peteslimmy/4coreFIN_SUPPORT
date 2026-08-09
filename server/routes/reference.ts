@@ -1,6 +1,14 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
-import { requireAuth, hashPassword, type AuthedRequest } from '../auth';
+import {
+  requireAuth,
+  hashPassword,
+  supabaseCreateUser,
+  supabaseUpdateUser,
+  supabaseDeleteUser,
+  findUserById,
+  type AuthedRequest,
+} from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import type { Permission } from '../rbac';
 import {
@@ -21,6 +29,7 @@ import {
   upsertUser,
   deleteUser,
 } from '../repository';
+import { normalizeBusinessUnits } from '../../src/lib/buCodes';
 
 type KindStorage = 'table' | 'config' | 'users';
 
@@ -42,8 +51,11 @@ const KINDS: Record<string, KindDef> = {
   businessUnits: {
     storage: 'config',
     label: 'Business Unit',
-    schema: z.string().min(1).trim().transform((v) => v.toUpperCase()),
-    idOf: (i) => String(i),
+    schema: z.object({
+      name: z.string().min(1).trim().transform((v) => v.toUpperCase()),
+      code: z.string().trim().transform((v) => v.toUpperCase()).optional(),
+    }),
+    idOf: (i) => String(typeof i === 'string' ? i : (i?.name ?? i?.id ?? '')),
     checkDelete: async (id) => {
       const [tickets, users] = await Promise.all([countTicketsByBu(id), countUsersByBu(id)]);
       const referencedBy: Record<string, number> = {};
@@ -52,9 +64,15 @@ const KINDS: Record<string, KindDef> = {
       return Object.keys(referencedBy).length ? { referencedBy } : null;
     },
   },
+  paymentChannels: {
+    storage: 'config',
+    label: 'Payment Channel',
+    schema: z.string().min(1).trim(),
+    idOf: (i) => String(i),
+  },
   providers: {
     storage: 'config',
-    label: 'Provider',
+    label: 'Payment Partner',
     schema: z.string().min(1).trim(),
     idOf: (i) => String(i),
     checkDelete: async (id) => {
@@ -65,7 +83,7 @@ const KINDS: Record<string, KindDef> = {
   categories: {
     storage: 'config',
     label: 'Category',
-    schema: z.object({ name: z.string().min(1).trim(), description: z.string().optional().default('') }),
+    schema: z.object({ name: z.string().min(1).trim(), description: z.string().optional().default(''), slaHours: z.number().int().positive().optional() }),
     idOf: (i) => String(i.name ?? i.id ?? ''),
     checkDelete: async (id) => {
       const tickets = await countTicketsByCategory(id);
@@ -174,6 +192,17 @@ function canonicalKind(raw: string): string {
   return def ? Object.keys(KINDS).find((k) => KINDS[k] === def)! : raw;
 }
 
+/** Enforce a unique BU code across the stored business unit list. */
+async function assertUniqueBuCode(code: string | undefined, excludeId?: string) {
+  if (!code) return;
+  const list = await listConfigItems('businessUnits', []);
+  for (const item of normalizeBusinessUnits(list)) {
+    if (item.name !== excludeId && item.code.toUpperCase() === code.toUpperCase()) {
+      throw new Error(`BU code "${code}" is already in use`);
+    }
+  }
+}
+
 function audit(actorName: string, actorRole: string, action: string, details: string) {
   return appendAuditLog({ ticketId: null, actor: actorName, role: actorRole, action, details });
 }
@@ -206,7 +235,7 @@ export function createReferenceRouter(): Router {
         : def.storage === 'users'
           ? await listUsersPublic()
           : await listConfigItems(req.params.kind, []);
-    res.json(items);
+    res.json(req.params.kind === 'businessUnits' ? normalizeBusinessUnits(items) : items);
   });
 
   // ── Create ──────────────────────────────────────────────────────────
@@ -228,8 +257,10 @@ export function createReferenceRouter(): Router {
         }
         const userId = item.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
         const passwordHash = hashPassword(item.password);
+        // Provision a Supabase Auth identity so the user can actually sign in.
+        const identity = await supabaseCreateUser(item.email, item.password, item.name);
         const { password: _pw, id: _id, ...rest } = item;
-        await upsertUser({ ...rest, id: userId, passwordHash });
+        await upsertUser({ ...rest, id: userId, passwordHash, authUserId: identity.id, mustChangePassword: true });
         item = { ...rest, id: userId };
       } else if (def.storage === 'table') {
         if (!def.idOf(item)) item = { ...item, id: nextId(req.params.kind.replace(/_/g, '-')) };
@@ -237,6 +268,9 @@ export function createReferenceRouter(): Router {
       } else {
         if (typeof item !== 'string' && !def.idOf(item)) {
           item = { ...item, id: nextId(req.params.kind.replace(/_/g, '-')) };
+        }
+        if (req.params.kind === 'businessUnits') {
+          await assertUniqueBuCode((item as any)?.code);
         }
         await addConfigItem(req.params.kind, item);
       }
@@ -264,6 +298,14 @@ export function createReferenceRouter(): Router {
           return res.status(400).json({ error: `${first?.path.join('.') || 'body'}: ${first?.message || 'Invalid input'}` });
         }
         const { password, ...rest } = merged.data;
+        const existing = await findUserById(req.params.id);
+        if (existing?.auth_user_id) {
+          await supabaseUpdateUser(existing.auth_user_id, {
+            email: merged.data.email,
+            password: password || undefined,
+            name: merged.data.name,
+          });
+        }
         await upsertUser({ ...rest, id: req.params.id, passwordHash: password ? hashPassword(password) : undefined });
         await audit(req.user!.name, req.user!.role, `REFERENCE_USERS_UPDATED`, `Updated ${def.label}: ${req.params.id}`);
         return res.json({ ...rest, id: req.params.id });
@@ -292,10 +334,16 @@ export function createReferenceRouter(): Router {
         const first = merged.error.issues[0];
         return res.status(400).json({ error: `${first?.path.join('.') || 'body'}: ${first?.message || 'Invalid input'}` });
       }
+      if (req.params.kind === 'businessUnits') {
+        await assertUniqueBuCode((merged.data as any)?.code, req.params.id);
+      }
       await updateConfigItem(req.params.kind, req.params.id, merged.data);
       await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, `Updated ${def.label}: ${req.params.id}`);
       return res.json(merged.data);
     } catch (e: any) {
+      if (/already registered|already been registered/i.test(e?.message || '')) {
+        return res.status(409).json({ error: e.message });
+      }
       return res.status(500).json({ error: e.message || 'Update failed' });
     }
   });
@@ -314,6 +362,10 @@ export function createReferenceRouter(): Router {
 
     try {
       if (def.storage === 'users') {
+        const existing = await findUserById(req.params.id);
+        if (existing?.auth_user_id) {
+          await supabaseDeleteUser(existing.auth_user_id);
+        }
         await deleteUser(req.params.id);
       } else if (def.storage === 'table') {
         await deleteJsonTableRow(req.params.kind, req.params.id);

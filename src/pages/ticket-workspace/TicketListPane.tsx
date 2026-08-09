@@ -5,7 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { TicketPriority, TicketStatus } from '../../types/app';
 import { useApp } from '../../context/AppContext';
-import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
+import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, formatSlaDuration } from '../../lib/utils';
 import { syncTicketPatch } from '../../lib/sync';
 
 interface TicketListPaneProps {
@@ -25,15 +25,26 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
 
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
   const [myWatchlistFilter, setMyWatchlistFilter] = useState(false);
-  const [slaBreachingFilter, setSlaBreachingFilter] = useState(false);
+  const [slaTagFilter, setSlaTagFilter] = useState<'ALL' | 'Breached' | 'At Risk' | 'On Track'>('ALL');
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 30000);
     return () => clearInterval(id);
   }, []);
 
-  const filteredTickets = useMemo(() =>
-    getScopedTickets(tickets).filter(t => {
+  const filteredTickets = useMemo(() => {
+    const slaTagOf = (deadline: string, createdAt?: string): 'Breached' | 'At Risk' | 'On Track' => {
+      const deadlineMs = new Date(deadline).getTime();
+      const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : 24 * 3600000;
+      const start = deadlineMs - total;
+      const elapsed = now - start;
+      const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+      const remaining = deadlineMs - now;
+      if (remaining <= 0) return 'Breached';
+      if (pct > 75) return 'At Risk';
+      return 'On Track';
+    };
+    return getScopedTickets(tickets).filter(t => {
       const q = searchQuery.toLowerCase();
       const matchesSearch = !q ||
                             t.id.toLowerCase().includes(q) ||
@@ -45,22 +56,11 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
       const matchesPriority = priorityFilter === 'ALL' || t.priority === priorityFilter;
       const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;
       const matchesWatchlist = !myWatchlistFilter || (t.watchers || []).some(w => w.toLowerCase() === currentUser.email.toLowerCase());
-      const matchesSlaBreach = !slaBreachingFilter || new Date(t.slaDeadline).getTime() < now;
-      return matchesSearch && matchesPriority && matchesStatus && matchesWatchlist && matchesSlaBreach;
-    }),
-    [tickets, searchQuery, priorityFilter, statusFilter, getScopedTickets, myWatchlistFilter, slaBreachingFilter, currentUser.email, now]
-  );
-
-  const getSlaProgress = (deadline: string, createdAt?: string) => {
-    const deadlineMs = new Date(deadline).getTime();
-    const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : 24 * 3600000;
-    const start = deadlineMs - total;
-    const elapsed = now - start;
-    const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
-    const remaining = deadlineMs - now;
-    const breached = remaining <= 0;
-    return { pct, breached, remaining };
-  };
+      const ticketTag = slaTagOf(t.slaDeadline, t.createdAt);
+      const matchesSlaTag = slaTagFilter === 'ALL' || ticketTag === slaTagFilter;
+      return matchesSearch && matchesPriority && matchesStatus && matchesWatchlist && matchesSlaTag;
+    });
+  }, [tickets, searchQuery, priorityFilter, statusFilter, getScopedTickets, myWatchlistFilter, slaTagFilter, currentUser.email, now]);
 
   return (
     <div className={`${showMobileTicketList ? 'fixed inset-0 z-30 flex' : 'hidden'} lg:flex w-80 border-r border-border bg-surface-elevated flex-col shrink-0`}>
@@ -78,12 +78,17 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
             <input type="text" placeholder="Search tickets, IDs, customers..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} aria-label="Search tickets" className="text-xs bg-surface border border-border rounded-lg outline-none transition-all duration-200 w-full pl-8 pr-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all focus:bg-surface-elevated" />
           </div>
           <div className="flex gap-1.5 flex-wrap">
-            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2 py-1.5 text-[10px] text-text-primary focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring">
+            <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status" className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2 py-1.5 text-[10px] text-text-primary focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring">
               <option value="ALL">All Status</option>
               {TICKET_STATUS_ORDER.map(s => <option key={s} value={s}>{TICKET_STATUS_LABELS[s]}</option>)}
             </select>
-            <button onClick={() => { setMyWatchlistFilter(!myWatchlistFilter); setSlaBreachingFilter(false); }} className={`px-2 py-1.5 rounded-lg text-[10px] font-medium transition focus-ring ${myWatchlistFilter ? 'bg-surface text-text-primary' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}>Watch</button>
-            <button onClick={() => { setSlaBreachingFilter(!slaBreachingFilter); setMyWatchlistFilter(false); }} className={`px-2 py-1.5 rounded-lg text-[10px] font-medium transition focus-ring ${slaBreachingFilter ? 'bg-surface text-text-primary' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}>SLA</button>
+            <button onClick={() => { setMyWatchlistFilter(!myWatchlistFilter); setSlaTagFilter('ALL'); }} className={`px-2 py-1.5 rounded-lg text-[10px] font-medium transition focus-ring ${myWatchlistFilter ? 'bg-surface text-text-primary' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}>Watch</button>
+            <select value={slaTagFilter} onChange={(e) => { setSlaTagFilter(e.target.value as typeof slaTagFilter); setMyWatchlistFilter(false); }} aria-label="Filter by SLA tag" className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2 py-1.5 text-[10px] text-text-primary focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring cursor-pointer">
+              <option value="ALL">SLA: All</option>
+              <option value="Breached">SLA: Breached</option>
+              <option value="At Risk">SLA: At Risk</option>
+              <option value="On Track">SLA: On Track</option>
+            </select>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-[10px] text-text-muted">
@@ -139,9 +144,13 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
         <div className="flex-1 overflow-y-auto p-2.5 space-y-1.5">
           <AnimatePresence mode="popLayout">
             {filteredTickets.map(t => {
-              const slaInfo = getSlaProgress(t.slaDeadline, t.createdAt);
-              const slaBreached = slaInfo.breached;
-              const slaAtRisk = !slaBreached && slaInfo.pct > 75;
+              const deadlineMs = new Date(t.slaDeadline).getTime();
+              const total = t.createdAt ? Math.max(1, deadlineMs - new Date(t.createdAt).getTime()) : 24 * 3600000;
+              const start = deadlineMs - total;
+              const elapsed = now - start;
+              const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+              const slaBreached = deadlineMs - now <= 0;
+              const slaAtRisk = !slaBreached && pct > 75;
               return (
                 <motion.div
                   key={t.id}
@@ -159,11 +168,11 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                   <button onClick={() => setActiveTicketId(t.id)} title={`${t.customerName} · ${t.category} · ${t.assignedAgentId || 'Unassigned'}`} className="w-full text-left p-2.5">
                     <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-numeric text-xs font-bold text-accent truncate">{t.id}</span>
+                        <span className="font-numeric text-[10px] font-bold text-accent">{t.id}</span>
                         <StatusBadge status={t.status} size="sm" />
                       </div>
                       {slaBreached ? (
-                        <span className="bg-error/10 text-error font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-error/20 uppercase tracking-wider shrink-0">Breached</span>
+                        <span className="bg-error/10 text-error font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-error/20 uppercase tracking-wider shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
                       ) : slaAtRisk ? (
                         <span className="bg-warning/10 text-warning font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-warning/20 uppercase tracking-wider shrink-0">At Risk</span>
                       ) : (

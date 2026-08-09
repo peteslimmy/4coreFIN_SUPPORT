@@ -1,11 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { getRoles } from '../lib/rbac';
 import { getDefaultBuFormConfigs } from '../lib/formConfigs';
-import {
-  SEED_KB_ARTICLES,
-  SEED_SAVED_REPLIES,
-  SEED_CUSTOMERS,
-} from '../lib/seedData';
 import type { KbArticle } from '../types/admin';
 import type { CustomerRecord } from '../types/app';
 import type { BuFormConfig } from '../types/forms';
@@ -80,33 +75,21 @@ export function useConfigDomain(): ConfigDomain {
     { id: '3', stage: 'Resolution', email: 'compliance-alerts@company.com' }
   ]);
 
-  // Initialize from localStorage or seed data
+  // Initialize from localStorage only
   useEffect(() => {
-    const load = <T,>(key: string, fallback: T, setter: Dispatch<SetStateAction<T>>) => {
+    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
       const raw = localStorage.getItem(key);
       if (raw !== null) {
-        let parsed: T;
         try {
-          parsed = JSON.parse(raw);
+          setter(JSON.parse(raw));
         } catch {
-          parsed = fallback;
+          // If parsing fails, keep existing state
         }
-        const isEmpty = Array.isArray(parsed) && parsed.length === 0;
-        const hasSeed = Array.isArray(fallback) && fallback.length > 0;
-        if (isEmpty && hasSeed && import.meta.env.DEV) {
-          setter(fallback);
-          localStorage.setItem(key, JSON.stringify(fallback));
-        } else {
-          setter(parsed);
-        }
-      } else if (import.meta.env.DEV) {
-        setter(fallback);
-        localStorage.setItem(key, JSON.stringify(fallback));
       }
     };
-    load('4c_kb_articles', SEED_KB_ARTICLES, setKbArticles);
-    load('4c_saved_replies', SEED_SAVED_REPLIES, setSavedReplies);
-    load('4c_customers', SEED_CUSTOMERS, setCustomers);
+    load('4c_kb_articles', setKbArticles);
+    load('4c_saved_replies', setSavedReplies);
+    load('4c_customers', setCustomers);
   }, []);
 
   const value: ConfigDomain = {

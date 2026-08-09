@@ -9,6 +9,7 @@ import { TicketStatus, TicketPriority } from '../types/app';
 import { useApp } from '../context/AppContext';
 import { syncComment, syncNotification } from '../lib/sync';
 import { isAddressed, applyMention, mentionCandidates, resolveMention } from '../lib/mention';
+import { formatSlaDuration } from '../lib/utils';
 import TicketListPane from './ticket-workspace/TicketListPane';
 import TicketDetailPane from './ticket-workspace/TicketDetailPane';
 import ActivityPanel from './ticket-workspace/ActivityPanel';
@@ -68,7 +69,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const activeTicket = tickets.find(t => t.id === activeTicketId) || null;
   const slaCountdown = activeTicket ? (() => {
     const diff = new Date(activeTicket.slaDeadline).getTime() - now;
-    if (diff <= 0) return 'SLA Breached';
+    if (diff <= 0) return `Breached -${formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}`;
     const h = Math.floor(diff / 3600000);
     const m = Math.floor((diff % 3600000) / 60000);
     return `${h}h ${m}m remaining`;

@@ -25,6 +25,7 @@ export type Permission =
   | 'admin:forms'
   | 'admin:access'
   | 'admin:branding'
+  | 'admin:landing_page'
   | 'admin:sla';
 
 export interface RoleDefinition {

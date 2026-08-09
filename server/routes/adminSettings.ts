@@ -3,7 +3,7 @@ import { randomBytes } from 'crypto';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } from '../services/settingsService';
-import { uploadFile } from '../services/storageService';
+import { uploadFileToStorage, deleteFile } from '../services/storageService';
 import { encrypt, decrypt, maskValue } from '../services/encryptionService';
 import { sendEmail } from '../services/emailService';
 import { appendAuditLog } from '../repository';
@@ -45,7 +45,11 @@ export function createAdminSettingsRouter(): Router {
       value = encrypt(value);
     }
 
-    await setSetting(key, value, req.user!.id);
+    try {
+      await setSetting(key, value, req.user!.id);
+    } catch (e: any) {
+      return res.status(500).json({ error: e.message });
+    }
     await appendAuditLog({
       ticketId: null,
       actor: req.user!.name,
@@ -79,6 +83,27 @@ export function createAdminSettingsRouter(): Router {
     res.json({ ok: true });
   });
 
+  // ── Public branding assets (no auth — served with a fresh signed URL) ──
+  const PUBLIC_BRANDING_KEYS = new Set(['branding.logo_light', 'branding.logo_dark', 'branding.favicon']);
+  router.get('/public/branding/:key', async (req, res) => {
+    const key = `branding.${req.params.key}`;
+    if (!PUBLIC_BRANDING_KEYS.has(key)) return res.status(404).json({ error: 'Not found' });
+
+    const value = await getSetting(key);
+    if (!value) return res.status(404).json({ error: 'Not found' });
+
+    // Legacy value: already a full URL (may be an expired signed URL) — pass through
+    if (typeof value === 'string' && /^https?:\/\//.test(value)) {
+      return res.redirect(value);
+    }
+
+    const { data } = await supabase.storage
+      .from('branding-assets')
+      .createSignedUrl(value as string, 3600);
+    if (!data?.signedUrl) return res.status(500).json({ error: 'Failed to sign asset' });
+    res.redirect(data.signedUrl);
+  });
+
   // ── Admin: Upload branding asset ─────────────────────────────
   router.post('/admin/branding/upload', requireAuth, requirePermission('admin:branding'), async (req: AuthedRequest, res) => {
     const chunks: Buffer[] = [];
@@ -89,18 +114,34 @@ export function createAdminSettingsRouter(): Router {
         const contentType = String(req.headers['content-type'] || 'image/png');
         const filename = String(req.headers['x-filename'] || 'upload.png');
         const folder = String(req.headers['x-folder'] || 'branding');
+        const settingKey = String(req.headers['x-setting-key'] || '');
 
-        const url = await uploadFile(buffer, filename, contentType, folder);
-        if (!url) return res.status(500).json({ error: 'Upload failed' });
+        const path = await uploadFileToStorage(buffer, filename, contentType, folder);
+        if (!path) return res.status(500).json({ error: 'Upload failed' });
+
+        // Cleanup-on-replace: persist the new path first, then remove the replaced asset
+        if (settingKey) {
+          const previous = await getSetting(settingKey);
+          try {
+            await setSetting(settingKey, path, req.user!.id);
+          } catch (e: any) {
+            await deleteFile(path).catch(() => {});
+            return res.status(500).json({ error: `Failed to save setting "${settingKey}": ${e.message}` });
+          }
+          if (typeof previous === 'string' && previous && previous !== path && !/^https?:\/\//.test(previous)) {
+            const removed = await deleteFile(previous).catch(() => false);
+            if (!removed) console.error(`Branding cleanup: could not remove replaced asset for "${settingKey}"`);
+          }
+        }
 
         await appendAuditLog({
           ticketId: null,
           actor: req.user!.name,
           role: req.user!.role,
           action: 'ADMIN_BRANDING_UPLOAD',
-          details: `Uploaded branding asset: ${filename}`,
+          details: `Uploaded branding asset: ${filename}${settingKey ? ` (${settingKey})` : ''}`,
         });
-        res.json({ url });
+        res.json({ path });
       } catch (e: any) {
         res.status(500).json({ error: e.message });
       }

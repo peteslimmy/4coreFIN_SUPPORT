@@ -11,6 +11,7 @@ import { useApp } from './context/AppContext';
 import { syncMajorIncident, syncTicketPatch, syncKbArticles } from './lib/sync';
 import OnboardingTour from './components/onboarding/OnboardingTour';
 import CommandPalette from './components/CommandPalette';
+import BrandLogo from './components/BrandLogo';
 
 function RouteLoadingFallback() {
   return (
@@ -37,6 +38,10 @@ const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const ReferenceDataPage = lazy(() => import('./pages/ReferenceDataPage'));
 const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'));
 const ChangePasswordRequiredPage = lazy(() => import('./pages/ChangePasswordRequiredPage'));
+const LandingPage = lazy(() => import('./pages/LandingPage'));
+const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
+const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 
 export default function App() {
   const app = useApp();
@@ -122,6 +127,26 @@ export default function App() {
 
   
 
+  // Path-based routing for standalone public/auth/legal pages. Supabase recovery
+  // tokens arrive in the URL hash (e.g. /reset-password#access_token=...),
+  // so routing is path-based, never hash-based.
+  const { pathname } = window.location;
+  if (!isAuthenticated && pathname === '/') {
+    return <LandingPage />;
+  }
+  if (pathname === '/auth/login' && !isAuthenticated) {
+    return <LoginPage />;
+  }
+  if (pathname === '/auth/forgot-password') {
+    return <ForgotPasswordPage />;
+  }
+  if (pathname === '/auth/reset-password' || pathname === '/reset-password') {
+    return <ResetPasswordPage />;
+  }
+  if (pathname === '/privacy-policy' || pathname === '/privacy') {
+    return <PrivacyPolicyPage />;
+  }
+
   if (!isAuthenticated) {
     return <LoginPage />;
   }
@@ -175,7 +200,10 @@ export default function App() {
           >
             <Menu className="w-5 h-5" />
           </button>
-          <Shield className="w-4 h-4 text-accent" />
+          <BrandLogo
+            imgClassName="h-5 w-auto object-contain shrink-0"
+            fallback={<Shield className="w-4 h-4 text-accent" />}
+          />
           <span className="text-caption text-text-muted font-medium hidden sm:inline">Tenant Portal Switchboard</span>
         </div>
         <div className="flex items-center gap-2">

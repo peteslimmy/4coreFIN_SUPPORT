@@ -34,7 +34,7 @@ export default function WatcherNotificationsPage({
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="xl" className="space-y-6">
+      <PageContainer maxWidth="full" className="space-y-6">
         <PageHeader
           title="Watcher Operational Alerts Feed"
           subtitle="Real-time automated compliance alerts for cases you are watching or collaborating on"

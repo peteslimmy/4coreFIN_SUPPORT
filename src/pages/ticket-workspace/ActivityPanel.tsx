@@ -9,7 +9,7 @@ import {
 import type { TicketRecord, FileEvidence } from "../../types/app";
 import { TicketPriority } from "../../types/app";
 import { useApp } from "../../context/AppContext";
-import { formatCurrency } from "../../lib/utils";
+import { formatCurrency, formatSlaDuration } from "../../lib/utils";
 import { syncEvidenceUpload } from "../../lib/sync";
 import { compressFiles } from "../../lib/imageCompression";
 import WatcherPanel from "./WatcherPanel";
@@ -119,7 +119,7 @@ export default function ActivityPanel({
                     <div className="bg-error/5 border border-error/15 rounded-lg p-3 animate-slide-in">
                       <div className="flex items-center gap-1.5 mb-1">
                         <AlertTriangle className="w-3 h-3 text-error" />
-                        <span className="text-[10px] font-heading font-bold text-error uppercase tracking-wider">SLA Breached</span>
+                        <span className="text-[10px] font-heading font-bold text-error uppercase tracking-wider">SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
                       </div>
                       <p className="text-[10px] text-text-secondary leading-relaxed">Immediate manual reversal required. High exposure risk.</p>
                     </div>

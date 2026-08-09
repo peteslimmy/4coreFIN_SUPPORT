@@ -20,7 +20,7 @@ interface FileUploadProps {
   className?: string;
 }
 
-export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 1024, multiple = false, onUpload, label, className = '' }: FileUploadProps) {
+export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 1024, multiple = false, onUpload, currentUrls, label, className = '' }: FileUploadProps) {
   const [files, setFiles] = useState<FileItem[]>([]);
   const [error, setError] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
@@ -77,6 +77,22 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
   return (
     <div className={className}>
       {label && <label className="text-xs font-medium text-text-secondary block mb-2">{label}</label>}
+      {currentUrls && currentUrls.filter(Boolean).length > 0 && (
+        <div className="flex flex-wrap gap-2 mb-2">
+          {currentUrls.filter(Boolean).map((url, i) => (
+            <div key={i} className="relative">
+              <img
+                src={url as string}
+                alt="Saved asset"
+                className="h-12 w-12 object-contain rounded-lg border border-border"
+              />
+              <span className="absolute -top-1.5 -right-1.5 px-1 py-0.5 bg-surface-elevated border border-border-subtle rounded text-[8px] text-text-muted">
+                saved
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
       <button
         type="button"
         onClick={() => inputRef.current?.click()}

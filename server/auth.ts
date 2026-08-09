@@ -51,7 +51,7 @@ function sessionCookieOptions(isDev: boolean) {
     sameSite: 'lax' as const,
     secure: !isDev,
     path: '/',
-    maxAge: 12 * 60 * 60,
+    maxAge: 12 * 60 * 60 * 1000,
   };
 }
 
@@ -59,11 +59,13 @@ function sessionCookieOptions(isDev: boolean) {
 export function issueSession(res: Response, user: AuthUser): void {
   const token = signToken(user);
   const isDev = process.env.NODE_ENV !== 'production';
-  res.cookie(SESSION_COOKIE, token, sessionCookieOptions(isDev));
+  const opts = sessionCookieOptions(isDev);
+  res.cookie(SESSION_COOKIE, token, opts);
   res.cookie(CSRF_COOKIE, crypto.randomBytes(32).toString('hex'), {
-    ...sessionCookieOptions(isDev),
+    ...opts,
     httpOnly: false,
   });
+  logger.info({ userId: user.id, email: user.email, role: user.role, cookieMaxAge: opts.maxAge }, 'Session cookie issued');
 }
 
 export function clearSession(res: Response): void {
@@ -76,15 +78,14 @@ const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 /**
  * CSRF defense for state-changing requests:
  * double-submit token (header must match the JS-readable cookie) plus a
- * same-origin check. Login/register/forgot-password are exempt because no
- * session exists yet (requireAuth would reject them regardless).
+ * same-origin check. Login/forgot-password/reset-password are exempt because
+ * no session exists yet (requireAuth would reject them regardless).
  */
 export function requireCsrf(req: AuthedRequest, res: Response, next: NextFunction) {
   if (SAFE_METHODS.has(req.method)) return next();
   const path = (req.path || '').toLowerCase();
-if (
+  if (
     path.startsWith('/auth/login') ||
-    path.startsWith('/auth/register') ||
     path.startsWith('/auth/forgot-password') ||
     path.startsWith('/auth/reset-password')
   ) {
@@ -391,6 +392,11 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   }
   try {
     const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
+    // The JWT `sub` is the app-level user id (e.g. "usr-..."). Look it up by `id`
+    // only. A previous query used `.or(id.eq.sub, auth_user_id.eq.sub)`, but
+    // `auth_user_id` is UUID-typed, so Postgres rejected `auth_user_id.eq.<usr-...>`
+    // with "invalid input syntax for type uuid" and every request 401'd (which
+    // silently logged the user out). `users.id` accepts the app id directly.
     Promise.resolve(
       supabase.from('users').select('*').eq('id', decoded.sub).single()
     ).then(({ data: row, error }) => {

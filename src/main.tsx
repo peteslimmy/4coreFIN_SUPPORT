@@ -9,7 +9,13 @@ import ToastContainer from './components/ui/Toast';
 import { queryClient } from './lib/queryClient';
 import { hydrateQueryCache, persistQueryCache, setupOnlineListeners } from './lib/db';
 import { api } from './lib/api';
+import { useTheme } from './hooks/useTheme';
 import './index.css';
+
+function ThemeBootstrap() {
+  useTheme();
+  return null;
+}
 
 // Replay queued offline mutations against the API in order.
 async function replayOfflineMutation(type: string, payload: any): Promise<unknown> {
@@ -45,10 +51,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <AppProvider>
-          <App />
-          <ToastContainer />
-        </AppProvider>
+          <AppProvider>
+            <ThemeBootstrap />
+            <App />
+            <ToastContainer />
+          </AppProvider>
       </ToastProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

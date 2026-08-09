@@ -146,7 +146,7 @@ export default function ProviderPortalPage() {
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="xl" className="space-y-6">
+      <PageContainer maxWidth="full" className="space-y-6">
         <PageHeader
           title={`Provider Portal - ${providerName}`}
           subtitle="Investigation queue, RCA submission, and resolution dashboard"

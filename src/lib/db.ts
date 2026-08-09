@@ -18,6 +18,7 @@ export class AppDB extends Dexie {
   savedReplies!: Dexie.Table<any, string>;
   businessUnits!: Dexie.Table<any, string>;
   providers!: Dexie.Table<any, string>;
+  paymentChannels!: Dexie.Table<any, string>;
   categories!: Dexie.Table<any, string>;
   notificationConfigs!: Dexie.Table<any, string>;
   escalationRules!: Dexie.Table<any, string>;
@@ -57,6 +58,9 @@ export class AppDB extends Dexie {
       settings: 'key',
       queryCache: 'key',
       offlineMutations: 'id',
+    });
+    this.version(2).stores({
+      paymentChannels: 'id',
     });
   }
 }
@@ -199,7 +203,7 @@ export function setupOnlineListeners(
  * Clear all app data (for logout)
  */
 export async function clearAppData(): Promise<void> {
-  await db.delete();
-  // db.open() is synchronous in newer Dexie versions
-  db.open();
+    await Promise.all(
+        (db.tables || []).map((t) => t.clear())
+    );
 }

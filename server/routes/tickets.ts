@@ -7,6 +7,23 @@ import { appendAuditLog, listTickets, getTicket, getScopedTicket, upsertTicket, 
 import { tenantIdForBu } from '../tenant';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { getConfig } from '../repository';
+import { nextTicketId, normalizeBusinessUnits } from '../../src/lib/buCodes';
+
+/**
+ * Compute the next ticket id using the business-unit code prefix
+ * (BUCODE-yymmdd-NNN). Falls back to the legacy `tkt-<ms>-<rand>` format
+ * when the unit has no code on record, so creation never blocks.
+ */
+async function buildTicketId(businessUnit: string | undefined, existing: string[]): Promise<string> {
+  const buRaw = await getConfig<any[]>('businessUnits', []);
+  const buUnits = normalizeBusinessUnits(buRaw);
+  const now = new Date();
+  const code = (businessUnit || '').trim() ? (buUnits.find((b) => b.name.toUpperCase() === businessUnit!.toUpperCase())?.code) : undefined;
+  if (!code) {
+    return 'tkt-' + now.getTime() + '-' + Math.random().toString(36).slice(2, 7);
+  }
+  return nextTicketId(businessUnit!, buUnits, existing, now);
+}
 
 /**
  * Resolve the customer_id for a ticket: honor an explicit customerId, otherwise
@@ -46,7 +63,8 @@ export function createTicketsRouter(): Router {
       }
     }
     const now = new Date().toISOString();
-    let entry: any = { ...ticket, id: ticket.id || 'tkt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), createdAt: now, createdBy: req.user!.name };
+    const existingAll = await listTickets(req.user!, { includeDeleted: true });
+    let entry: any = { ...ticket, id: ticket.id || (await buildTicketId(ticket.businessUnit, existingAll.map((t: any) => t.id))), createdAt: now, createdBy: req.user!.name };
     const customerId = await linkTicketCustomer(ticket, req.user!.role === 'PARTNER' ? req.user!.bu : undefined);
     if (customerId) entry = { ...entry, customerId };
     await upsertTicket(entry);

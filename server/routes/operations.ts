@@ -8,6 +8,7 @@ import { addSseClient, removeSseClient } from '../broadcast';
 import { listNotifications, insertNotification, markNotificationRead, listMajorIncidents, upsertMajorIncident, getScopedMajorIncident, getScopedTicket, listTickets, listComments, listEvidence, listAuditLogs, listUsersPublic, listCustomers, listJsonTable, getConfig } from '../repository';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { uploadFile } from '../services/storageService';
+import { normalizeBusinessUnits } from '../../src/lib/buCodes';
 
 export function createOperationsRouter(): Router {
   const router = Router();
@@ -32,13 +33,22 @@ export function createOperationsRouter(): Router {
     if (wants('auditLogs') && can('audit:view')) data.auditLogs = await listAuditLogs(500, req.user!);
     if (wants('users') && can('admin:users')) data.users = await listUsersPublic();
     if (wants('customers') && can('customers:manage')) data.customers = await listCustomers(req.user!);
+    if (wants('config')) {
+      // Shared config (business-unit names/codes + payment channels) is served
+      // to every authenticated role: it feeds complaint-form channel dropdowns
+      // and BU-prefixed ticket numbering, which are not admin-only features.
+      const buRaw = await getConfig<any[]>('businessUnits', []);
+      const buList = normalizeBusinessUnits(buRaw);
+      data.businessUnits = buList.map((b) => b.name);
+      data.businessUnitCodes = buList.reduce<Record<string, string>>((acc, b) => { acc[b.name] = b.code; return acc; }, {});
+      data.paymentChannels = await getConfig('paymentChannels', []);
+    }
     if (wants('config') && can('admin:config')) {
       data.slaRules = await listJsonTable('sla_rules');
       data.holidays = await listJsonTable('holidays');
       data.ticketTemplates = await listJsonTable('ticket_templates');
       data.kbArticles = await listJsonTable('kb_articles');
       data.savedReplies = await getConfig('savedReplies', []);
-      data.businessUnits = await getConfig('businessUnits', []);
       data.providers = await getConfig('providers', []);
       data.categories = await getConfig('categories', []);
       data.buFormConfigs = await getConfig('buFormConfigs', []);

@@ -27,7 +27,6 @@ export const queryKeys = {
     detail: (id: string) => ['tickets', 'detail', id] as const,
     comments: (ticketId: string) => ['tickets', ticketId, 'comments'] as const,
     evidence: (ticketId: string) => ['tickets', ticketId, 'evidence'] as const,
-    transitions: (id: string) => ['tickets', id, 'transitions'] as const,
     risk: (id: string) => ['tickets', id, 'risk'] as const,
   },
   comments: {
@@ -53,6 +52,7 @@ export const queryKeys = {
   },
   config: {
     businessUnits: () => ['config', 'businessUnits'] as const,
+    paymentChannels: () => ['config', 'paymentChannels'] as const,
     providers: () => ['config', 'providers'] as const,
     categories: () => ['config', 'categories'] as const,
     slaRules: () => ['config', 'slaRules'] as const,

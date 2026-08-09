@@ -1,13 +1,4 @@
 import { createContext, useContext, useState, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react';
-import {
-  SEED_USERS,
-  SEED_SLA_RULES,
-  SEED_HOLIDAYS,
-  SEED_TEMPLATES,
-  SEED_BUSINESS_UNITS,
-  SEED_PROVIDERS,
-  SEED_CATEGORIES,
-} from '../lib/seedData';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, CategoryRecord } from '../types/admin';
 
 export interface AdminDomain {
@@ -21,8 +12,12 @@ export interface AdminDomain {
   setTicketTemplates: Dispatch<SetStateAction<TicketTemplate[]>>;
   businessUnits: string[];
   setBusinessUnits: Dispatch<SetStateAction<string[]>>;
+  businessUnitCodes: Record<string, string>;
+  setBusinessUnitCodes: Dispatch<SetStateAction<Record<string, string>>>;
   providers: string[];
   setProviders: Dispatch<SetStateAction<string[]>>;
+  paymentChannels: string[];
+  setPaymentChannels: Dispatch<SetStateAction<string[]>>;
   categories: CategoryRecord[];
   setCategories: Dispatch<SetStateAction<CategoryRecord[]>>;
 }
@@ -40,13 +35,7 @@ export function AdminProvider({ children, value }: { children: ReactNode; value:
 }
 
 export function useAdminDomain(): AdminDomain {
-  const [users, setUsers] = useState<UserRecord[]>([
-    { id: 'usr-1', firstName: 'Sarah', lastName: 'Jenkins', email: 's.jenkins@company.com', role: 'BU_SUPPORT', bu: 'POSSAP', phone: '+1-555-0101' },
-    { id: 'usr-2', firstName: 'Marcus', lastName: 'Lee', email: 'm.lee@provider.com', role: 'PROVIDER', bu: 'Parkway', phone: '+1-555-0202' },
-    { id: 'usr-3', firstName: 'Elena', lastName: 'Rostova', email: 'e.rostova@exec.com', role: 'EXECUTIVE', bu: 'ALL', phone: '+1-555-0303' },
-    { id: 'usr-4', firstName: 'Admin', lastName: 'User', email: 'admin@4core.com', role: 'SUPER_ADMIN', bu: 'ALL', phone: '+1-555-0404' },
-    { id: 'usr-5', firstName: 'Chidinma', lastName: 'Okafor', email: 'chidinma@example.com', role: 'PARTNER', bu: 'POSSAP', phone: '+234-801-234-5678' },
-  ]);
+const [users, setUsers] = useState<UserRecord[]>([]);
   const [slaRules, setSlaRules] = useState<SlaRule[]>([]);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [ticketTemplates, setTicketTemplates] = useState<TicketTemplate[]>([]);
@@ -59,7 +48,7 @@ export function useAdminDomain(): AdminDomain {
         // fall through to default
       }
     }
-    return import.meta.env.DEV ? SEED_BUSINESS_UNITS : ['POSSAP', 'FINANCE-B', 'TRAVEL-C', 'SUBSCRIBE-D'];
+    return [];
   });
   const [providers, setProviders] = useState<string[]>(() => {
     const provRaw = localStorage.getItem('4c_providers');
@@ -70,7 +59,29 @@ export function useAdminDomain(): AdminDomain {
         // fall through to default
       }
     }
-    return import.meta.env.DEV ? SEED_PROVIDERS : ['Parkway', 'PayPal', 'Adyen', 'Braintree'];
+    return [];
+  });
+  const [businessUnitCodes, setBusinessUnitCodes] = useState<Record<string, string>>(() => {
+    const raw = localStorage.getItem('4c_business_unit_codes');
+    if (raw !== null) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        // fall through to default
+      }
+    }
+    return {};
+  });
+  const [paymentChannels, setPaymentChannels] = useState<string[]>(() => {
+    const raw = localStorage.getItem('4c_payment_channels');
+    if (raw !== null) {
+      try {
+        return JSON.parse(raw);
+      } catch {
+        // fall through to default
+      }
+    }
+    return ['POS', 'Web', 'Mobile App', 'USSD', 'API'];
   });
   const [categories, setCategories] = useState<CategoryRecord[]>(() => {
     const catRaw = localStorage.getItem('4c_categories');
@@ -81,53 +92,30 @@ export function useAdminDomain(): AdminDomain {
         // fall through to default
       }
     }
-    return import.meta.env.DEV ? SEED_CATEGORIES : [
-      { name: 'Bank Code Issues', description: 'Issues related to incorrect or missing bank codes' },
-      { name: 'Notification Issue', description: 'Failed or delayed payment notifications' },
-      { name: 'Disbursement Discrepancy', description: 'Disbursed amount does not match expected value' },
-      { name: 'Failed Disbursement', description: 'Disbursement transaction failed entirely' },
-      { name: 'Transaction Reference Discrepancies', description: 'Transaction reference mismatches between systems' },
-      { name: 'Settlement', description: 'Settlement processing issues' },
-      { name: 'Configuration Issues', description: 'System or integration configuration problems' },
-      { name: 'Reconciliation and Settlement', description: 'Reconciliation mismatches across ledgers' },
-      { name: 'System Performance', description: 'System latency, downtime, or capacity issues' },
-      { name: 'Payment Gateway Integration', description: 'Integration issues with payment gateways' },
-      { name: 'Fund Management', description: 'Fund allocation, float, and liquidity issues' },
-      { name: 'Failed Payment', description: 'End-user payment failure at checkout' },
-      { name: 'Operational Performance', description: 'Operational workflow and processing delays' },
-      { name: 'Invoice Generation and Account Validation Issue', description: 'Invoice generation failures or account validation errors' },
-      { name: 'Delay in Receiving Notification', description: 'Notifications not received within SLA' }
-    ];
+    return [];
   });
 
-  // Initialize from localStorage or seed data
+  // Initialize from localStorage only
   useEffect(() => {
-    const load = <T,>(key: string, fallback: T, setter: Dispatch<SetStateAction<T>>) => {
+    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
       const raw = localStorage.getItem(key);
       if (raw !== null) {
-        let parsed: T;
         try {
-          parsed = JSON.parse(raw);
+          setter(JSON.parse(raw));
         } catch {
-          parsed = fallback;
+          // If parsing fails, keep existing state
         }
-        const isEmpty = Array.isArray(parsed) && parsed.length === 0;
-        const hasSeed = Array.isArray(fallback) && fallback.length > 0;
-        if (isEmpty && hasSeed && import.meta.env.DEV) {
-          setter(fallback);
-          localStorage.setItem(key, JSON.stringify(fallback));
-        } else {
-          setter(parsed);
-        }
-      } else if (import.meta.env.DEV) {
-        setter(fallback);
-        localStorage.setItem(key, JSON.stringify(fallback));
       }
     };
-    load('4c_users', SEED_USERS, setUsers);
-    load('4c_sla_rules', SEED_SLA_RULES, setSlaRules);
-    load('4c_holidays', SEED_HOLIDAYS, setHolidays);
-    load('4c_ticket_templates', SEED_TEMPLATES, setTicketTemplates);
+    load('4c_users', setUsers);
+    load('4c_sla_rules', setSlaRules);
+    load('4c_holidays', setHolidays);
+    load('4c_ticket_templates', setTicketTemplates);
+    load('4c_business_units', setBusinessUnits);
+    load('4c_providers', setProviders);
+    load('4c_payment_channels', setPaymentChannels);
+    load('4c_categories', setCategories);
+    load('4c_business_unit_codes', setBusinessUnitCodes);
   }, []);
 
   const value: AdminDomain = {
@@ -136,7 +124,9 @@ export function useAdminDomain(): AdminDomain {
     holidays, setHolidays,
     ticketTemplates, setTicketTemplates,
     businessUnits, setBusinessUnits,
+    businessUnitCodes, setBusinessUnitCodes,
     providers, setProviders,
+    paymentChannels, setPaymentChannels,
     categories, setCategories,
   };
 

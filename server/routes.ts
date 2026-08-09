@@ -9,6 +9,7 @@ import { createCustomersRouter } from './routes/customers';
 import { createConfigRouter } from './routes/config';
 import { createOperationsRouter } from './routes/operations';
 import { createProfileRouter } from './routes/profile';
+import { createLandingPageImagesRouter } from './routes/landingPageImages';
 
 // Re-export the magic-byte MIME sniffer so tests can exercise it directly.
 export { sniffMimeType } from './routes/evidence';
@@ -31,6 +32,7 @@ export function createApiRouter(): Router {
   router.use(createConfigRouter());
   router.use(createOperationsRouter());
   router.use(createProfileRouter());
+  router.use('/landing-page', createLandingPageImagesRouter());
   return router;
 }
 

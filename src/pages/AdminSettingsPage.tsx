@@ -6,13 +6,15 @@ import IntegrationSettings from '../components/admin/IntegrationSettings';
 import DataSettings from '../components/admin/DataSettings';
 import ComplaintFormsSettings from '../components/admin/ComplaintFormsSettings';
 import AccessControlSettings from '../components/admin/AccessControlSettings';
-import { Palette, Building2, Plug, Database, ClipboardList, ShieldCheck } from 'lucide-react';
+import LandingPageManager from '../components/admin/LandingPageManager';
+import { Palette, Building2, Plug, Database, ClipboardList, ShieldCheck, Image } from 'lucide-react';
 import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 
 const TABS = [
   { id: 'branding', label: 'Branding', icon: Building2 },
+  { id: 'landing', label: 'Landing Page', icon: Image },
   { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'integrations', label: 'Integrations', icon: Plug },
   { id: 'forms', label: 'Complaint Forms', icon: ClipboardList },
@@ -27,7 +29,7 @@ export default function AdminSettingsPage() {
   if (currentRole !== 'SUPER_ADMIN' && !can('admin:config') && !can('admin:access')) {
     return (
       <PageTransition>
-        <PageContainer maxWidth="lg">
+<PageContainer maxWidth="full">
           <div className="text-center py-12 text-text-muted text-base">Access denied. Admin only.</div>
         </PageContainer>
       </PageTransition>
@@ -66,12 +68,13 @@ export default function AdminSettingsPage() {
 
           {/* Content */}
           <div className="flex-1 bg-surface-elevated rounded-xl p-6">
-            {activeTab === 'branding' && <BrandingSettings />}
-            {activeTab === 'theme' && <ThemeSettings />}
-            {activeTab === 'integrations' && <IntegrationSettings />}
-            {activeTab === 'forms' && <ComplaintFormsSettings />}
-            {activeTab === 'access' && <AccessControlSettings />}
-            {activeTab === 'data' && <DataSettings />}
+  {activeTab === 'branding' && <BrandingSettings />}
+  {activeTab === 'landing' && <LandingPageManager />}
+  {activeTab === 'theme' && <ThemeSettings />}
+  {activeTab === 'integrations' && <IntegrationSettings />}
+  {activeTab === 'forms' && <ComplaintFormsSettings />}
+  {activeTab === 'access' && <AccessControlSettings />}
+  {activeTab === 'data' && <DataSettings />}
           </div>
         </div>
       </PageContainer>

@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { UserRole, TicketStatus, TicketRecord, MajorIncidentRecord, WatcherNotification } from '../types/app';
 import Avatar from './ui/Avatar';
 import ThemeToggle from './ThemeToggle';
+import BrandLogo from './BrandLogo';
 
 interface SidebarProps {
   activeTab: string;
@@ -87,14 +88,20 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
       <div className={`flex items-center border-b border-border-subtle ${collapsed ? 'justify-center p-4' : 'p-4 gap-3'}`}>
         {!collapsed ? (
           <>
-            <div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3 shrink-0">4C</div>
+            <BrandLogo
+              imgClassName="w-9 h-9 object-contain shrink-0"
+              fallback={<div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3 shrink-0">4C</div>}
+            />
             <div className="min-w-0 flex-1">
               <span className="text-sm font-bold text-text-primary tracking-tight block truncate">4CoreFin</span>
               <span className="text-caption text-text-muted block truncate">Operations Portal</span>
             </div>
           </>
         ) : (
-          <div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3">4C</div>
+          <BrandLogo
+            imgClassName="w-9 h-9 object-contain"
+            fallback={<div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3">4C</div>}
+          />
         )}
       </div>
 

@@ -35,6 +35,7 @@ const PUBLIC_KEYS = [
   'branding.logo_light',
   'branding.logo_dark',
   'branding.favicon',
+  'branding.hero_image',
   'branding.org_name',
   'theme.primary',
   'theme.secondary',
@@ -80,7 +81,7 @@ export async function setSetting(key: string, value: any, updatedBy?: string): P
   const { error } = await supabase
     .from('system_settings')
     .upsert({ key, value, updated_by: updatedBy || null, updated_at: new Date().toISOString() }, { onConflict: 'key' });
-  if (error) console.error('setSetting error:', error.message);
+  if (error) throw new Error(`setSetting error: ${error.message}`);
 }
 
 export async function setSettings(settings: Record<string, any>, updatedBy?: string): Promise<void> {
@@ -91,5 +92,5 @@ export async function setSettings(settings: Record<string, any>, updatedBy?: str
     updated_at: new Date().toISOString(),
   }));
   const { error } = await supabase.from('system_settings').upsert(rows, { onConflict: 'key' });
-  if (error) console.error('setSettings error:', error.message);
+  if (error) throw new Error(`setSettings error: ${error.message}`);
 }

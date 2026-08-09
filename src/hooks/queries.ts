@@ -100,15 +100,6 @@ export function useSubmitFeedback(options?: UseMutationOptions<TicketRecord, Err
   });
 }
 
-export function useTicketTransitions(id: string, options?: UseQueryOptions<any[]>) {
-  return useQuery({
-    queryKey: queryKeys.tickets.transitions(id),
-    queryFn: () => api.getTicketTransitions(id),
-    enabled: !!id,
-    ...options,
-  });
-}
-
 export function useTransitionTicket(options?: UseMutationOptions<TicketRecord, Error, { id: string; status: string }>) {
   const queryClient = useQueryClient();
   return useMutation({
@@ -124,7 +115,7 @@ export function useTransitionTicket(options?: UseMutationOptions<TicketRecord, E
 /**
  * Comment hooks
  */
-export function useComments(ticketId?: string, options?: UseQueryOptions<CommentRecord[]>) {
+export function useComments(ticketId: string, options?: UseQueryOptions<CommentRecord[]>) {
   return useQuery({
     queryKey: queryKeys.comments.all(),
     queryFn: () => api.listComments(ticketId),
@@ -339,6 +330,14 @@ export function useBusinessUnits(options?: UseQueryOptions<string[]>) {
   return useQuery({
     queryKey: queryKeys.config.businessUnits(),
     queryFn: () => api.getConfig('businessUnits', []),
+    ...options,
+  });
+}
+
+export function usePaymentChannels(options?: UseQueryOptions<string[]>) {
+  return useQuery({
+    queryKey: queryKeys.config.paymentChannels(),
+    queryFn: () => api.getConfig('paymentChannels', []),
     ...options,
   });
 }

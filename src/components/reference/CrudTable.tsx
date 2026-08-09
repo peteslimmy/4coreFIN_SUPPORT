@@ -12,6 +12,28 @@ import ConfirmModal from '../ui/ConfirmModal';
 import EmptyState from '../ui/EmptyState';
 import { useApp } from '../../context/AppContext';
 
+/**
+ * Map a row to the payload actually sent to the server. Handles kind-specific
+ * transforms (e.g. users store a single `name` column although the form edits
+ * first/last name separately, and categories may carry an optional SLA).
+ */
+function toSubmitPayload(kind: ReferenceKindDef, item: Record<string, unknown>, editing: boolean): Record<string, unknown> {
+  const payload = { ...item };
+  if (kind.kind === 'users') {
+    const first = String(payload.firstName ?? '').trim();
+    const last = String(payload.lastName ?? '').trim();
+    payload.name = [first, last].filter(Boolean).join(' ');
+    delete payload.firstName;
+    delete payload.lastName;
+  }
+  if (kind.kind === 'categories' && payload.slaHours !== undefined && payload.slaHours !== '') {
+    payload.slaHours = Number(payload.slaHours);
+  } else if (kind.kind === 'categories') {
+    delete payload.slaHours;
+  }
+  return payload;
+}
+
 interface CrudTableProps {
   kind: ReferenceKindDef;
 }
@@ -29,8 +51,30 @@ function defaultValues(def: ReferenceKindDef): Record<string, unknown> {
   return values;
 }
 
+const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
+
+/**
+ * Keep SLA rules in lockstep with a category's default SLA: when a category is
+ * saved with an slaHours value, upsert an sla_rule for that category across all
+ * priorities (creating missing rules, updating existing ones to the new value).
+ * Called after the category itself has been persisted.
+ */
+async function syncCategorySla(category: string, slaHours: number): Promise<void> {
+  const existing = (await api.listReference('slaRules')) as Array<Record<string, unknown>>;
+  const catRules = existing.filter((r) => String(r.category ?? '') === category);
+  const present = new Set(catRules.map((r) => String(r.priority ?? '')));
+  for (const r of catRules) {
+    await syncReferenceUpdate('slaRules', String(r.id), { ...r, durationHours: slaHours });
+  }
+  for (const p of PRIORITIES) {
+    if (!present.has(p)) {
+      await syncReferenceCreate('slaRules', { category, priority: p, durationHours: slaHours });
+    }
+  }
+}
+
 export default function CrudTable({ kind }: CrudTableProps) {
-  const { showToast, currentRole } = useApp();
+  const { showToast, currentRole, setBusinessUnits, setBusinessUnitCodes, setProviders, setPaymentChannels, setCategories } = useApp();
   const [items, setItems] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,12 +92,23 @@ export default function CrudTable({ kind }: CrudTableProps) {
     try {
       const rows = await api.listReference(kind.kind);
       setItems(rows);
+      if (kind.kind === 'businessUnits') {
+        const units = (rows as Array<Record<string, unknown>>).map((u) => String(u.name ?? ''));
+        setBusinessUnits(units);
+        setBusinessUnitCodes(Object.fromEntries((rows as Array<Record<string, unknown>>).map((u) => [String(u.name ?? ''), String(u.code ?? '')])));
+      } else if (kind.kind === 'paymentChannels') {
+        setPaymentChannels(rows.map((v) => String(v)));
+      } else if (kind.kind === 'providers') {
+        setProviders(rows.map((v) => String(v)));
+      } else if (kind.kind === 'categories') {
+        setCategories(rows as Array<Record<string, unknown>>);
+      }
     } catch (e) {
       setError((e as Error).message || 'Failed to load');
     } finally {
       setLoading(false);
     }
-  }, [kind.kind]);
+  }, [kind.kind, setBusinessUnits, setBusinessUnitCodes, setPaymentChannels, setProviders, setCategories]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount fetch
@@ -82,7 +137,15 @@ export default function CrudTable({ kind }: CrudTableProps) {
       setForm({ open: true, editingId: String(item), values: { value: String(item) } });
       return;
     }
-    setForm({ open: true, editingId: kind.idOf(item), values: { ...(item as Record<string, unknown>) } });
+    const row = item as Record<string, unknown>;
+    let values: Record<string, unknown> = { ...row };
+    if (kind.kind === 'users') {
+      const full = String(row.name ?? row.firstName ?? '').trim();
+      const parts = full.split(/\s+/);
+      values = { ...row, firstName: row.firstName ?? (parts[0] || ''), lastName: row.lastName ?? (parts.slice(1).join(' ') || '') };
+      delete values.name;
+    }
+    setForm({ open: true, editingId: kind.idOf(item), values });
   };
 
   const validate = (): string | null => {
@@ -119,7 +182,7 @@ export default function CrudTable({ kind }: CrudTableProps) {
           showToast(`${kind.label} created.`, 'success');
         }
       } else {
-        const payload = { ...form.values };
+        const payload = toSubmitPayload(kind, { ...form.values }, !!form.editingId);
         if (!form.editingId) {
           for (const f of kind.fields) {
             if (f.type === 'number') payload[f.key] = Number(payload[f.key]);
@@ -134,6 +197,14 @@ export default function CrudTable({ kind }: CrudTableProps) {
         } else {
           await syncReferenceCreate(kind.kind, payload);
           showToast(`${kind.label} created.`, 'success');
+        }
+        if (kind.kind === 'categories' && payload.slaHours && Number(payload.slaHours) > 0) {
+          try {
+            await syncCategorySla(String(payload.name), Number(payload.slaHours));
+          } catch {
+            // Category saved but SLA sync failed — surface a gentle hint.
+            showToast('Category saved, but SLA sync failed.', 'warning');
+          }
         }
       }
       setForm({ open: false, editingId: null, values: defaultValues(kind) });

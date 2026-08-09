@@ -142,6 +142,13 @@ export async function upsertTicket(ticket: any) {
 
 // ─── Comments ──────────────────────────────────────────────────────────
 
+/** Normalize a comment row's seenBy to always be an array (JSONB may hold a
+ * string literal like "[]" from older seeds). */
+function normalizeComment(comment: Record<string, any>): Record<string, any> {
+  const seenBy = comment.seenBy;
+  return { ...comment, seenBy: Array.isArray(seenBy) ? seenBy : [] };
+}
+
 export async function listComments(ticketIds?: string[], user?: AuthUser) {
   let query = supabase.from('comments').select('*').order('timestamp', { ascending: false });
   if (ticketIds && ticketIds.length > 0) {
@@ -153,7 +160,7 @@ export async function listComments(ticketIds?: string[], user?: AuthUser) {
   }
   const { data, error } = await query;
   if (error || !data) return [];
-  return data.map(toCamel);
+  return data.map((c) => normalizeComment(toCamel(c)));
 }
 
 export async function insertComment(comment: any) {
@@ -196,7 +203,7 @@ export async function getScopedComment(id: string, user: AuthUser): Promise<any 
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
-  const comment = toCamel(data);
+  const comment = normalizeComment(toCamel(data));
   if (!comment.ticketId) return null;
   const ticket = await getScopedTicket(comment.ticketId, user);
   if (!ticket) return null;
@@ -889,8 +896,15 @@ export async function updateConfigItem(key: string, id: string, patch: any): Pro
   if (!target) throw new Error(`Not found: ${id}`);
   const next = items.map((x) => {
     if (configItemId(x) !== id) return x;
-    if (typeof x === 'string') return String(patch);
-    return { ...x, ...patch, id: x.id ?? id };
+    if (typeof x === 'string') {
+      // Legacy string row upgraded to an object patch (e.g. BU now carries a code).
+      if (typeof patch === 'object' && patch !== null) return { ...patch, name: patch.name ?? String(x), id: x };
+      return String(patch);
+    }
+    const merged = { ...x, ...patch };
+    if (x.id || patch?.id) merged.id = x.id || patch.id;
+    else if (!merged.name) merged.id = id;
+    return merged;
   });
   await setConfig(key, next);
   return next;

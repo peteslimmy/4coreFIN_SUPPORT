@@ -437,7 +437,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="xl" className="space-y-6">
+      <PageContainer maxWidth="full" className="space-y-6">
         <PageHeader
           title="Major Incidents Command Center"
           subtitle="Coordinate response for systemic payments outages, auto-link recurring issues, and alert stakeholders"
