@@ -56,7 +56,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
           <Textarea
             value={escalationReason}
             onChange={(e) => { setEscalationReason(e.target.value); clearError('escalationReason'); }}
-            placeholder="e.g. Customer has been waiting 6+ hours with no response from provider..."
+            placeholder="e.g. Customer has been waiting 6+ hours with no response from partner..."
             rows={4}
             error={formErrors.escalationReason}
           />

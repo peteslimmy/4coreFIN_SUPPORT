@@ -3,7 +3,7 @@ import { TicketStatus, TicketPriority, type TicketRecord, type AuditLog } from '
 import {
   isAtRisk,
   getMttrHours,
-  computeProviderMetrics,
+  computePartnerMetrics,
   computeAtRiskExposure,
   computeRiskRegister,
   riskLevelFor,
@@ -25,7 +25,7 @@ function makeTicket(partial: Partial<TicketRecord>): TicketRecord {
     customerName: 'Test Customer',
     customerEmail: 'test@example.com',
     businessUnit: 'POSSAP',
-    provider: 'Parkway',
+    partner: 'Parkway',
     category: 'Payment Dispute',
     priority: TicketPriority.MEDIUM,
     status: TicketStatus.INVESTIGATE,
@@ -73,13 +73,13 @@ describe('isAtRisk', () => {
   });
 });
 
-describe('computeProviderMetrics', () => {
-  it('computes sla, real mttr, reopen and satisfaction per provider', () => {
+describe('computePartnerMetrics', () => {
+  it('computes sla, real mttr, reopen and satisfaction per partner', () => {
     const tickets = [
-      makeTicket({ provider: 'Parkway', status: TicketStatus.CLOSED, isEscalated: false, feedbackScore: 5, createdAt: new Date(now - 2 * DAY).toISOString(), rcaDetails: { resolvedAt: new Date(now - 1.5 * DAY).toISOString(), rootCause: '', contributingFactors: '', correctiveActions: '', preventiveActions: '', preventiveOwner: '', preventiveDueDate: '' } }),
-      makeTicket({ provider: 'Parkway', status: TicketStatus.ASSIGNED, isEscalated: true, feedbackScore: null }),
+      makeTicket({ partner: 'Parkway', status: TicketStatus.CLOSED, isEscalated: false, feedbackScore: 5, createdAt: new Date(now - 2 * DAY).toISOString(), rcaDetails: { resolvedAt: new Date(now - 1.5 * DAY).toISOString(), rootCause: '', contributingFactors: '', correctiveActions: '', preventiveActions: '', preventiveOwner: '', preventiveDueDate: '' } }),
+      makeTicket({ partner: 'Parkway', status: TicketStatus.ASSIGNED, isEscalated: true, feedbackScore: null }),
     ];
-    const rows = computeProviderMetrics(tickets, ['Parkway']);
+    const rows = computePartnerMetrics(tickets, ['Parkway']);
     expect(rows).toHaveLength(1);
     const row = rows[0];
     expect(row.sla).toBe(50);
@@ -89,8 +89,8 @@ describe('computeProviderMetrics', () => {
   });
 
   it('falls back to a heuristic when no real MTTR exists', () => {
-    const tickets = [makeTicket({ provider: 'Adyen', status: TicketStatus.ASSIGNED, isEscalated: true })];
-    const rows = computeProviderMetrics(tickets, ['Adyen']);
+    const tickets = [makeTicket({ partner: 'Adyen', status: TicketStatus.ASSIGNED, isEscalated: true })];
+    const rows = computePartnerMetrics(tickets, ['Adyen']);
     expect(rows[0].mttr).toBeGreaterThan(0);
   });
 });
@@ -173,19 +173,19 @@ describe('computeHealthScore', () => {
 });
 
 describe('generateExecutiveInsights', () => {
-  it('surfaces breaches, critical backlog and weak providers', () => {
+  it('surfaces breaches, critical backlog and weak partners', () => {
     const tickets = [
-      makeTicket({ id: 'A', isEscalated: true, status: TicketStatus.ASSIGNED, priority: TicketPriority.CRITICAL, provider: 'Parkway' }),
+      makeTicket({ id: 'A', isEscalated: true, status: TicketStatus.ASSIGNED, priority: TicketPriority.CRITICAL, partner: 'Parkway' }),
       makeTicket({ id: 'B', status: TicketStatus.ASSIGNED, priority: TicketPriority.CRITICAL }),
     ];
-    const insights = generateExecutiveInsights({ tickets, providers: ['Parkway'], deltas: { createdDelta: 10, exposureDelta: 5, breachDelta: 20, closedDelta: -5 } });
+    const insights = generateExecutiveInsights({ tickets, partners: ['Parkway'], deltas: { createdDelta: 10, exposureDelta: 5, breachDelta: 20, closedDelta: -5 } });
     expect(insights.some(i => i.title === 'Active SLA breaches')).toBe(true);
     expect(insights.some(i => i.title === 'Critical priority backlog')).toBe(true);
   });
 
   it('returns nominal insight when all clear', () => {
     const tickets = [makeTicket({ status: TicketStatus.CLOSED, isEscalated: false })];
-    const insights = generateExecutiveInsights({ tickets, providers: ['Parkway'], deltas: { createdDelta: 0, exposureDelta: 0, breachDelta: 0, closedDelta: 0 } });
+    const insights = generateExecutiveInsights({ tickets, partners: ['Parkway'], deltas: { createdDelta: 0, exposureDelta: 0, breachDelta: 0, closedDelta: 0 } });
     expect(insights[0].type).toBe('info');
   });
 });

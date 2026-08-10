@@ -27,12 +27,12 @@ function RouteLoadingFallback() {
 const KnowledgeBaseTab = lazy(() => import('./components/KnowledgeBaseTab'));
 const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
 const WatcherNotificationsPage = lazy(() => import('./pages/WatcherNotificationsPage'));
-const PartnerPortalPage = lazy(() => import('./pages/PartnerPortalPage'));
+const CustomerPortalPage = lazy(() => import('./pages/CustomerPortalPage'));
 const ExecutiveDashboardPage = lazy(() => import('./pages/ExecutiveDashboardPage'));
 const MajorIncidentsPage = lazy(() => import('./pages/MajorIncidentsPage'));
 const TicketWorkspacePage = lazy(() => import('./pages/TicketWorkspacePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
-const ProviderPortalPage = lazy(() => import('./pages/ProviderPortalPage'));
+const PartnerPortalPage = lazy(() => import('./pages/PartnerPortalPage'));
 const CustomersPage = lazy(() => import('./pages/CustomersPage'));
 const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const ReferenceDataPage = lazy(() => import('./pages/ReferenceDataPage'));
@@ -80,7 +80,7 @@ export default function App() {
     });
   };
 
-  const handleDeclareMajorIncident = (formData: { name: string; description: string; provider: string; category: string; severity: string; initialNotification: string }) => {
+  const handleDeclareMajorIncident = (formData: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => {
     const data = formData;
     if (!data.name.trim() || !data.description.trim()) {
       showToast('Please provide a name and description for the Major Incident.', 'error');
@@ -91,14 +91,14 @@ export default function App() {
       id: miId,
       name: data.name,
       description: data.description,
-      provider: data.provider,
+      partner: data.partner,
       category: data.category,
       severity: data.severity,
       active: true,
       ticketCount: 1,
       createdAt: new Date().toISOString(),
       status: 'INVESTIGATING',
-      timeline: [{ id: 'tl-' + Date.now(), timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole === UserRole.PROVIDER ? 'Provider' : 'BU Support', message: `Major Incident declared. Severity set to ${data.severity}. System monitors deployed.` }],
+      timeline: [{ id: 'tl-' + Date.now(), timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole === UserRole.PARTNER ? 'Partner' : 'BU Support', message: `Major Incident declared. Severity set to ${data.severity}. System monitors deployed.` }],
       notifications: [{ id: 'not-' + Date.now(), timestamp: new Date().toISOString(), channel: data.initialNotification, recipient: data.initialNotification === 'Slack/Teams Webhook' ? '#ops-severity-1-war-room' : 'executive-alerts@company.com', subject: `CRITICAL OUTAGE WARNING: ${data.name}`, status: 'SENT' }],
       pir: { rootCauseSummary: '', timelineSummary: '', impactSummary: '', preventiveOwner: '', preventiveDueDate: '', draft: true, lastUpdated: new Date().toISOString(), lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName }
     };
@@ -156,25 +156,25 @@ export default function App() {
     return <ChangePasswordRequiredPage />;
   }
 
-  const effectiveTab = currentRole === UserRole.PARTNER ? 'partner_portal' : activeTab;
+  const effectiveTab = currentRole === UserRole.CUSTOMER ? 'customer_portal' : activeTab;
 
   // Role-based tab access guard
   const ROLE_TABS: Partial<Record<UserRole, string[]>> = {
     [UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings'],
-    [UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'partner_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-    [UserRole.PROVIDER]: ['provider_portal', 'tickets', 'kb', 'profile_settings'],
-    [UserRole.PARTNER]: ['partner_portal', 'kb', 'profile_settings'],
-    [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'partner_portal', 'provider_portal', 'profile_settings'],
+    [UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
+    [UserRole.PARTNER]: ['partner_portal', 'tickets', 'kb', 'profile_settings'],
+    [UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
+    [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'partner_portal', 'profile_settings'],
   };
   const permissionTabs: string[] = [];
-  if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'partner_portal');
+  if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
   if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
   if (can('customers:manage')) permissionTabs.push('customers');
   if (can('executive:dashboard')) permissionTabs.push('dashboard');
   if (can('audit:view')) permissionTabs.push('audit_logs');
   if (can('notifications:view')) permissionTabs.push('watcher_notifications');
   if (can('admin:config') || can('admin:access') || can('admin:users')) permissionTabs.push('admin_settings', 'reference_data');
-  if (can('provider:rca') || can('tickets:view')) permissionTabs.push('provider_portal');
+  if (can('partner:rca') || can('tickets:view')) permissionTabs.push('partner_portal');
   permissionTabs.push('kb', 'profile_settings');
   const allowedTabs = ROLE_TABS[currentRole] || permissionTabs || ['profile_settings'];
   const safeTab = allowedTabs.includes(effectiveTab) ? effectiveTab : allowedTabs[0];
@@ -190,7 +190,7 @@ export default function App() {
       </a>
 
       {/* Top Bar */}
-      {currentRole !== UserRole.PARTNER && (
+      {currentRole !== UserRole.CUSTOMER && (
       <div className="bg-surface-card border-b border-border-subtle px-4 lg:px-6 py-2 flex items-center justify-between z-50 shrink-0 gap-2">
         <div className="flex items-center gap-2 shrink-0">
           <button
@@ -300,9 +300,9 @@ export default function App() {
           {safeTab === 'tickets' && (
             <TicketWorkspacePage handleDeclareMajorIncident={handleDeclareMajorIncident} />
           )}
-          {safeTab === 'partner_portal' && <PartnerPortalPage />}
+          {safeTab === 'customer_portal' && <CustomerPortalPage />}
           {safeTab === 'dashboard' && <ExecutiveDashboardPage />}
-          {safeTab === 'provider_portal' && <ProviderPortalPage />}
+          {safeTab === 'partner_portal' && <PartnerPortalPage />}
           {safeTab === 'customers' && <CustomersPage />}
           {safeTab === 'audit_logs' && (
             <AuditLogsPage auditLogs={auditLogs} showToast={showToast} searchQuery={searchQuery} />

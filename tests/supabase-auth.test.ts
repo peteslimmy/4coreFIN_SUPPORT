@@ -128,7 +128,7 @@ describe('Supabase Auth admin provisioning', () => {
     const res = await fetch(`${base}/users`, {
       method: 'POST',
       headers: { ...authedHeaders(session, csrf), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Provisioned', email: 'new@beta.com', role: 'PROVIDER', bu: 'BETA', password: 'password123' }),
+      body: JSON.stringify({ name: 'Provisioned', email: 'new@beta.com', role: 'PARTNER', bu: 'BETA', password: 'password123' }),
     });
     expect(res.status).toBe(201);
     const { data } = await supabase.from('users').select('*').eq('email', 'new@beta.com');

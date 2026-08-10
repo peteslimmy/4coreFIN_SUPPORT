@@ -167,7 +167,7 @@ export default function TicketActivitySection({
 
           const renderBubble = (c: CommentRecord, isReply: boolean) => {
             const isMine = c.author === currentUser.firstName + " " + currentUser.lastName;
-            const isExternal = c.role === "Customer" || c.role === "Partner";
+            const isExternal = c.role === "Customer";
             const initials = c.author.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
             return (
               <div className={`flex ${isMine ? "justify-end" : "justify-start"} ${isReply ? "ml-5" : ""}`}>

@@ -13,11 +13,11 @@ import Modal from '../components/ui/Modal';
 interface MajorIncidentsPageProps {
   selectedMajorIncidentId: string | null;
   setSelectedMajorIncidentId: (id: string | null) => void;
-  handleDeclareMajorIncident: (formData: { name: string; description: string; provider: string; category: string; severity: string; initialNotification: string }) => void;
+  handleDeclareMajorIncident: (formData: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => void;
 }
 
 function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentId, handleDeclareMajorIncident }: MajorIncidentsPageProps) {
-  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, providers, currentRole, showToast, logAuditAction, saveToStorage, notifyWatchers, comments, auditLogs, currentUser } = useApp();
+  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, partners, currentRole, showToast, logAuditAction, saveToStorage, notifyWatchers, comments, auditLogs, currentUser } = useApp();
 
   const [miTimelineText, setMiTimelineText] = useState('');
   const [showDeclareMajorModal, setShowDeclareMajorModal] = useState(false);
@@ -28,7 +28,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
   const [pirFormErrors, setPirFormErrors] = useState<Record<string, string>>({});
   const [declareFormErrors, setDeclareFormErrors] = useState<Record<string, string>>({});
   const [newMajorIncidentForm, setNewMajorIncidentForm] = useState({
-    name: '', description: '', provider: 'Parkway',
+    name: '', description: '', partner: 'Parkway',
     category: 'Duplicate Debit', severity: 'CRITICAL',
     initialNotification: 'Slack/Teams Webhook'
   });
@@ -103,7 +103,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
           id: 'tl-' + Date.now(),
           timestamp: new Date().toISOString(),
           author: currentUser.firstName + ' ' + currentUser.lastName,
-          role: currentRole === UserRole.PROVIDER ? 'Provider' : 'BU Support',
+          role: currentRole === UserRole.PARTNER ? 'Partner' : 'BU Support',
           message: messageText
         };
         return { ...mi, timeline: [...mi.timeline, newEntry] };
@@ -241,8 +241,8 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="bg-surface p-2.5 rounded border border-border">
-                  <span className="text-overline text-text-muted font-bold uppercase block">Provider Partner</span>
-                  <span className="font-bold text-text-primary mt-0.5 block">{m.provider}</span>
+                  <span className="text-overline text-text-muted font-bold uppercase block">Affected Partner</span>
+                  <span className="font-bold text-text-primary mt-0.5 block">{m.partner}</span>
                 </div>
                 <div className="bg-surface p-2.5 rounded border border-border">
                   <span className="text-overline text-text-muted font-bold uppercase block">Severity Category</span>
@@ -443,7 +443,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
           subtitle="Coordinate response for systemic payments outages, auto-link recurring issues, and alert stakeholders"
           breadcrumbs={[{ label: 'Home' }, { label: 'Operations' }, { label: 'Major Incidents' }]}
           actions={
-            <button onClick={() => { setNewMajorIncidentForm({ name: '', description: '', provider: 'Parkway', category: 'Duplicate Debit', severity: 'CRITICAL', initialNotification: 'Slack/Teams Webhook' }); setShowDeclareMajorModal(true); }}
+            <button onClick={() => { setNewMajorIncidentForm({ name: '', description: '', partner: 'Parkway', category: 'Duplicate Debit', severity: 'CRITICAL', initialNotification: 'Slack/Teams Webhook' }); setShowDeclareMajorModal(true); }}
               className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow cursor-pointer">
               <AlertTriangle className="w-4 h-4" /> Declare Major Incident
             </button>
@@ -472,9 +472,9 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
               {declareFormErrors.name && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.name}</p>}
             </div>
             <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Affected Payment Provider</label>
-              <select value={newMajorIncidentForm.provider} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, provider: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary">
-                {providers.map(p => <option key={p} value={p}>{p}</option>)}
+              <label className="block text-xs font-medium text-text-secondary mb-1">Affected Payment Partner</label>
+              <select value={newMajorIncidentForm.partner} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, partner: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary">
+                {partners.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
             </div>
             <div>
@@ -525,7 +525,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
                     <p className="text-xs text-text-secondary line-clamp-2 italic">"{m.description || 'No initial findings provided.'}"</p>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-overline text-text-secondary font-semibold bg-surface p-2 rounded">
-                    <div><span className="text-text-muted block uppercase text-overline">Vendor</span><span className="text-text-primary font-bold">{m.provider}</span></div>
+                    <div><span className="text-text-muted block uppercase text-overline">Vendor</span><span className="text-text-primary font-bold">{m.partner}</span></div>
                     <div><span className="text-text-muted block uppercase text-overline">Severity</span><span className="text-error font-bold">{m.severity}</span></div>
                   </div>
                 </div>

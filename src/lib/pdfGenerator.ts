@@ -92,7 +92,7 @@ function drawGauge(doc: jsPDF, cx: number, cy: number, r: number, pct: number, s
 
 export function downloadExecutivePdfReport(
   tickets: TicketRecord[],
-  providers: string[],
+  partners: string[],
   businessUnits: string[],
   auditLogs?: AuditLog[]
 ) {
@@ -111,7 +111,7 @@ export function downloadExecutivePdfReport(
   const csatAvg = rated.length > 0 ? rated.reduce((s, t) => s + (t.feedbackScore || 0), 0) / rated.length : 0;
   const health = computeHealthScore(fcr, rft, slaPercent, csatAvg);
   const trendData = computeTrendData(tickets, 14, now);
-  const exposureByProvider = computeExposureBy(tickets, 'provider');
+  const exposureByPartner = computeExposureBy(tickets, 'partner');
   const exposureByBu = computeExposureBy(tickets, 'businessUnit');
   const exposureByCategory = computeExposureBy(tickets, 'category');
   const riskRegister = computeRiskRegister(tickets, now).slice(0, 12);
@@ -201,7 +201,7 @@ export function downloadExecutivePdfReport(
   doc.setTextColor(255, 255, 255);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(8);
-  doc.text('PROVIDER', 18, startY + 5.5);
+  doc.text('PARTNER', 18, startY + 5.5);
   doc.text('TOTAL CASES', 55, startY + 5.5);
   doc.text('SLA ADHERENCE', 85, startY + 5.5);
   doc.text('MTTR (HRS)', 125, startY + 5.5);
@@ -210,17 +210,17 @@ export function downloadExecutivePdfReport(
   doc.setFont('helvetica', 'normal');
   doc.setFontSize(8.5);
 
-  providers.forEach((p, idx) => {
-    const providerTickets = tickets.filter(t => t.provider === p);
-    const total = providerTickets.length;
-    const withinSla = providerTickets.filter(t => !t.isEscalated).length;
-    const providerSla = total > 0 ? (withinSla / total) * 100 : 100;
-    const activeCases = providerTickets.filter(t => t.status !== TicketStatus.CLOSED).length;
-    const mttrValues = providerTickets
+  partners.forEach((p, idx) => {
+    const partnerTickets = tickets.filter(t => t.partner === p);
+    const total = partnerTickets.length;
+    const withinSla = partnerTickets.filter(t => !t.isEscalated).length;
+    const partnerSla = total > 0 ? (withinSla / total) * 100 : 100;
+    const activeCases = partnerTickets.filter(t => t.status !== TicketStatus.CLOSED).length;
+    const mttrValues = partnerTickets
       .map(t => (t.rcaDetails?.resolvedAt ? (new Date(t.rcaDetails.resolvedAt).getTime() - new Date(t.createdAt).getTime()) / 3600000 : null))
       .filter((v): v is number => v !== null);
     const mttr = mttrValues.length > 0 ? (mttrValues.reduce((s, n) => s + n, 0) / mttrValues.length).toFixed(1) : '—';
-    const ratedT = providerTickets.filter(t => t.feedbackScore !== null && t.feedbackScore !== undefined);
+    const ratedT = partnerTickets.filter(t => t.feedbackScore !== null && t.feedbackScore !== undefined);
     const avgSatisfaction = ratedT.length > 0 ? (ratedT.reduce((s, t) => s + (t.feedbackScore || 0), 0) / ratedT.length).toFixed(1) : '—';
 
     if (idx % 2 === 1) {
@@ -232,10 +232,10 @@ export function downloadExecutivePdfReport(
     doc.text(p, 18, startY + 5.5);
     doc.setFont('helvetica', 'normal');
     doc.text(`${total} (${activeCases} active)`, 55, startY + 5.5);
-    if (providerSla >= 95) doc.setTextColor(22, 163, 74);
-    else if (providerSla >= 90) doc.setTextColor(217, 119, 6);
+    if (partnerSla >= 95) doc.setTextColor(22, 163, 74);
+    else if (partnerSla >= 90) doc.setTextColor(217, 119, 6);
     else doc.setTextColor(220, 38, 38);
-    doc.text(`${providerSla.toFixed(1)}%`, 85, startY + 5.5);
+    doc.text(`${partnerSla.toFixed(1)}%`, 85, startY + 5.5);
     doc.setTextColor(15, 23, 42);
     doc.text(`${mttr}`, 125, startY + 5.5);
     doc.text(`${avgSatisfaction}`, 155, startY + 5.5);
@@ -304,9 +304,9 @@ export function downloadExecutivePdfReport(
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('By Provider', 15, startY);
-  drawBarChart(doc, 15, startY + 4, 120, 7, exposureByProvider.map(e => ({ label: e.name, value: e.value, color: [59, 130, 246] })), moneyFmt);
-  startY += 6 + exposureByProvider.length * 7 + 8;
+  doc.text('By Partner', 15, startY);
+  drawBarChart(doc, 15, startY + 4, 120, 7, exposureByPartner.map(e => ({ label: e.name, value: e.value, color: [59, 130, 246] })), moneyFmt);
+  startY += 6 + exposureByPartner.length * 7 + 8;
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
@@ -352,7 +352,7 @@ export function downloadExecutivePdfReport(
     doc.setFont('helvetica', 'normal');
     doc.text(r.customerName, 42, startY + 4);
     doc.setTextColor(100, 116, 139);
-    doc.text(r.provider, 80, startY + 4);
+    doc.text(r.partner, 80, startY + 4);
     doc.text(r.category, 110, startY + 4);
     doc.setTextColor(r.isEscalated ? 220 : 71, r.isEscalated ? 38 : 85, r.isEscalated ? 38 : 105);
     doc.text(`₦${Math.round(r.amount).toLocaleString()}`, 145, startY + 4);

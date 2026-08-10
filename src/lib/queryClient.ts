@@ -53,7 +53,7 @@ export const queryKeys = {
   config: {
     businessUnits: () => ['config', 'businessUnits'] as const,
     paymentChannels: () => ['config', 'paymentChannels'] as const,
-    providers: () => ['config', 'providers'] as const,
+    partners: () => ['config', 'partners'] as const,
     categories: () => ['config', 'categories'] as const,
     slaRules: () => ['config', 'slaRules'] as const,
     holidays: () => ['config', 'holidays'] as const,

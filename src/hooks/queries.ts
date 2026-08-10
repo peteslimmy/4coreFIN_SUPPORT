@@ -342,10 +342,10 @@ export function usePaymentChannels(options?: UseQueryOptions<string[]>) {
   });
 }
 
-export function useProviders(options?: UseQueryOptions<string[]>) {
+export function usePartners(options?: UseQueryOptions<string[]>) {
   return useQuery({
-    queryKey: queryKeys.config.providers(),
-    queryFn: () => api.getConfig('providers', []),
+    queryKey: queryKeys.config.partners(),
+    queryFn: () => api.getConfig('partners', []),
     ...options,
   });
 }

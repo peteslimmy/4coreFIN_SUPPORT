@@ -23,10 +23,10 @@ function seedStore(): TableStore {
     users: [
       { id: 'usr-a', name: 'Alice Alpha', email: 'alice@alpha.com', password_hash: pass, role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
       { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: pass, role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA },
-      { id: 'usr-prov', name: 'Rep', email: 'rep@provider.com', password_hash: pass, role: 'PROVIDER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
+      { id: 'usr-prov', name: 'Rep', email: 'rep@provider.com', password_hash: pass, role: 'PARTNER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
     ],
     tickets: [
-      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, provider: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
+      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
     ],
     comments: [],
     evidence: [],
@@ -93,7 +93,7 @@ describe('Reference data — access control', () => {
     expect(res.status).toBe(401);
   });
 
-  it('rejects non-admin (PROVIDER lacks admin:config)', async () => {
+  it('rejects non-admin (PARTNER lacks admin:config)', async () => {
     const s = await login('rep@provider.com');
     const res = await fetch(`${base}/reference/businessUnits`, { headers: authedHeaders(s, false) });
     expect(res.status).toBe(403);
@@ -310,14 +310,14 @@ describe('Reference data — unknown kind & audits', () => {
 
   it('writes a config create to the audit ledger', async () => {
     const s = await login('admin@4core.com');
-    await fetch(`${base}/reference/providers`, {
+    await fetch(`${base}/reference/partners`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
       body: JSON.stringify('Stripe'),
     });
     const { data } = await supabase.from('audit_logs').select('*');
     const actions = (data as any[]).map((a) => a.action);
-    expect(actions).toContain('REFERENCE_PROVIDERS_CREATED');
+    expect(actions).toContain('REFERENCE_PARTNERS_CREATED');
   });
 });
 

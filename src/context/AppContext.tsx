@@ -78,8 +78,8 @@ export interface AppContextType {
   setBusinessUnits: Dispatch<SetStateAction<string[]>>;
   businessUnitCodes: Record<string, string>;
   setBusinessUnitCodes: Dispatch<SetStateAction<Record<string, string>>>;
-  providers: string[];
-  setProviders: Dispatch<SetStateAction<string[]>>;
+  partners: string[];
+  setPartners: Dispatch<SetStateAction<string[]>>;
   paymentChannels: string[];
   setPaymentChannels: Dispatch<SetStateAction<string[]>>;
   categories: CategoryRecord[];
@@ -136,7 +136,7 @@ interface LatestState {
   customers: CustomerRecord[];
   businessUnits: string[];
   businessUnitCodes: Record<string, string>;
-  providers: string[];
+  partners: string[];
   paymentChannels: string[];
   categories: CategoryRecord[];
   evidence: FileEvidence[];
@@ -159,7 +159,7 @@ interface PersistedState {
   customers?: CustomerRecord[];
   businessUnits?: string[];
   businessUnitCodes?: Record<string, string>;
-  providers?: string[];
+  partners?: string[];
   paymentChannels?: string[];
   categories?: CategoryRecord[];
   evidence?: FileEvidence[];
@@ -183,7 +183,7 @@ async function persistToDexie(state: PersistedState): Promise<void> {
 if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies.map(s => ({ id: s }))));
       if (state.customers) writes.push(db.customers.bulkPut(state.customers));
       if (state.businessUnits) writes.push(db.businessUnits.bulkPut(state.businessUnits.map(s => ({ id: s }))));
-      if (state.providers) writes.push(db.providers.bulkPut(state.providers.map(s => ({ id: s }))));
+      if (state.partners) writes.push(db.partners.bulkPut(state.partners.map(s => ({ id: s }))));
       if (state.paymentChannels) writes.push(db.paymentChannels.bulkPut(state.paymentChannels.map(s => ({ id: s }))));
      if (state.categories) writes.push(db.categories.bulkPut(state.categories));
      if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence));
@@ -218,7 +218,7 @@ function seedQueryCacheFromBootstrap(data: BootstrapData): void {
   set(queryKeys.config.kbArticles(), data.kbArticles);
   set(queryKeys.config.savedReplies(), data.savedReplies);
   set(queryKeys.config.businessUnits(), data.businessUnits);
-  set(queryKeys.config.providers(), data.providers);
+  set(queryKeys.config.partners(), data.partners);
   set(queryKeys.config.categories(), data.categories);
   set(queryKeys.config.formConfigs(), data.buFormConfigs);
   set(queryKeys.config.roles(), getRoles(data.roles));
@@ -244,7 +244,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     users: admin.users, slaRules: admin.slaRules, holidays: admin.holidays,
     ticketTemplates: admin.ticketTemplates, kbArticles: config.kbArticles,
     savedReplies: config.savedReplies, customers: config.customers,
-    businessUnits: admin.businessUnits, providers: admin.providers,
+    businessUnits: admin.businessUnits, partners: admin.partners,
     businessUnitCodes: admin.businessUnitCodes, paymentChannels: admin.paymentChannels,
     categories: admin.categories, evidence: [], buFormConfigs: config.buFormConfigs,
     roles: config.roles,
@@ -271,7 +271,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     wn?: WatcherNotification[], uList?: UserRecord[], sRules?: SlaRule[],
     hList?: HolidayRecord[], tTemplates?: TicketTemplate[], kArticles?: KbArticle[],
     sReplies?: string[], cList?: CustomerRecord[],
-    buList?: string[], provList?: string[], catList?: CategoryRecord[],
+    buList?: string[], partList?: string[], catList?: CategoryRecord[],
     eList?: FileEvidence[], fConfigs?: BuFormConfig[], rList?: RoleDefinition[],
   ) => {
     const latest = latestStateRef.current;
@@ -293,7 +293,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_customers', JSON.stringify(cList !== undefined ? cList : latest.customers));
     localStorage.setItem('4c_business_units', JSON.stringify(buList !== undefined ? buList : latest.businessUnits));
     localStorage.setItem('4c_business_unit_codes', JSON.stringify(latest.businessUnitCodes));
-    localStorage.setItem('4c_providers', JSON.stringify(provList !== undefined ? provList : latest.providers));
+    localStorage.setItem('4c_partners', JSON.stringify(partList !== undefined ? partList : latest.partners));
     localStorage.setItem('4c_payment_channels', JSON.stringify(latest.paymentChannels));
     localStorage.setItem('4c_categories', JSON.stringify(catList !== undefined ? catList : latest.categories));
     localStorage.setItem('4c_evidence', JSON.stringify(eList !== undefined ? eList : latest.evidence));
@@ -315,7 +315,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       savedReplies: sReplies !== undefined ? sReplies : latest.savedReplies,
       customers: cList !== undefined ? cList : latest.customers,
       businessUnits: buList !== undefined ? buList : latest.businessUnits,
-      providers: provList !== undefined ? provList : latest.providers,
+      partners: partList !== undefined ? partList : latest.partners,
       paymentChannels: latest.paymentChannels,
       categories: catList !== undefined ? catList : latest.categories,
       evidence: eList !== undefined ? eList : latest.evidence,
@@ -346,7 +346,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       customers: config.customers,
       businessUnits: admin.businessUnits,
       businessUnitCodes: admin.businessUnitCodes,
-      providers: admin.providers,
+      partners: admin.partners,
       paymentChannels: admin.paymentChannels,
       categories: admin.categories,
       evidence: ticket.evidence,
@@ -377,7 +377,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (data.savedReplies) config.setSavedReplies(data.savedReplies);
     if (data.businessUnits) admin.setBusinessUnits(data.businessUnits);
     if (data.businessUnitCodes) admin.setBusinessUnitCodes(data.businessUnitCodes);
-    if (data.providers) admin.setProviders(data.providers);
+    if (data.partners) admin.setPartners(data.partners);
     if (data.paymentChannels) admin.setPaymentChannels(data.paymentChannels);
     if (data.categories) admin.setCategories(data.categories);
     if (data.buFormConfigs) config.setBuFormConfigs(data.buFormConfigs);
@@ -400,7 +400,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_customers', JSON.stringify(data.customers || []));
     localStorage.setItem('4c_business_units', JSON.stringify(data.businessUnits || []));
     localStorage.setItem('4c_business_unit_codes', JSON.stringify(data.businessUnitCodes || {}));
-    localStorage.setItem('4c_providers', JSON.stringify(data.providers || []));
+    localStorage.setItem('4c_partners', JSON.stringify(data.partners || []));
     localStorage.setItem('4c_payment_channels', JSON.stringify(data.paymentChannels || []));
     localStorage.setItem('4c_categories', JSON.stringify(data.categories || []));
     localStorage.setItem('4c_bu_form_configs', JSON.stringify(data.buFormConfigs || []));
@@ -420,7 +420,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       savedReplies: data.savedReplies,
       customers: data.customers,
       businessUnits: data.businessUnits,
-      providers: data.providers,
+      partners: data.partners,
       paymentChannels: data.paymentChannels,
       categories: data.categories,
       evidence: data.evidence,
@@ -440,18 +440,18 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (role === UserRole.BU_SUPPORT) {
       u = { firstName: 'Sarah', lastName: 'Jenkins', email: 's.jenkins@customer.com', bu: 'POSSAP', phone: '+1-555-0101' };
       shell.setActiveTab('tickets');
-    } else if (role === UserRole.PROVIDER) {
-      u = { firstName: 'Marcus', lastName: 'Lee', email: 'm.lee@provider.com', bu: 'Parkway', phone: '+1-555-0202' };
-      shell.setActiveTab('tickets');
+    } else if (role === UserRole.PARTNER) {
+      u = { firstName: 'Marcus', lastName: 'Lee', email: 'm.lee@partner.com', bu: 'Parkway', phone: '+1-555-0202' };
+      shell.setActiveTab('partner_portal');
     } else if (role === UserRole.EXECUTIVE) {
       u = { firstName: 'Elena', lastName: 'Rostova', email: 'e.rostova@exec.com', bu: 'CORPORATE', phone: '+1-555-0303' };
       shell.setActiveTab('dashboard');
     } else if (role === UserRole.SUPER_ADMIN) {
       u = { firstName: 'Super', lastName: 'Administrator', email: 'admin@4core.com', bu: 'ALL', phone: '+1-555-0404' };
       shell.setActiveTab('reference_data');
-    } else if (role === UserRole.PARTNER) {
+    } else if (role === UserRole.CUSTOMER) {
       u = { firstName: 'Chidinma', lastName: 'Okafor', email: 'chidinma@example.com', bu: 'POSSAP', phone: '+234-801-234-5678' };
-      shell.setActiveTab('partner_portal');
+      shell.setActiveTab('customer_portal');
     } else {
       shell.setActiveTab('tickets');
     }
@@ -495,6 +495,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
         shell.setActiveTab('reference_data');
       } else if (user.role === UserRole.PARTNER) {
         shell.setActiveTab('partner_portal');
+      } else if (user.role === UserRole.CUSTOMER) {
+        shell.setActiveTab('customer_portal');
       } else {
         shell.setActiveTab('tickets');
       }
@@ -615,7 +617,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
   // Persist state to localStorage whenever these values change
   useEffect(() => {
     saveToStorage();
-  }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.businessUnitCodes, admin.providers, admin.paymentChannels, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
+  }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.businessUnitCodes, admin.partners, admin.paymentChannels, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
 
   const appContextValue: AppContextType = {
     isLoading: shell.isLoading,
@@ -659,8 +661,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setBusinessUnits: admin.setBusinessUnits,
     businessUnitCodes: admin.businessUnitCodes,
     setBusinessUnitCodes: admin.setBusinessUnitCodes,
-    providers: admin.providers,
-    setProviders: admin.setProviders,
+    partners: admin.partners,
+    setPartners: admin.setPartners,
     paymentChannels: admin.paymentChannels,
     setPaymentChannels: admin.setPaymentChannels,
     categories: admin.categories,

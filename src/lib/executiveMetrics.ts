@@ -3,8 +3,8 @@ import { TicketStatus, TicketPriority, type TicketRecord, type AuditLog, type Ma
 const HOUR = 3600000;
 const DAY = 24 * HOUR;
 
-export interface ProviderMetricRow {
-  provider: string;
+export interface PartnerMetricRow {
+  partner: string;
   sla: number;
   active: number;
   closed: number;
@@ -37,7 +37,7 @@ export interface CompliancePoint {
 export interface RiskRow {
   id: string;
   customerName: string;
-  provider: string;
+  partner: string;
   businessUnit: string;
   category: string;
   priority: TicketPriority;
@@ -112,9 +112,9 @@ export function computeSlaPercent(tickets: TicketRecord[], list?: TicketRecord[]
   return (total - escalated) / total * 100;
 }
 
-export function computeProviderMetrics(tickets: TicketRecord[], providers: string[]): ProviderMetricRow[] {
-  return providers.map(p => {
-    const pt = tickets.filter(t => t.provider === p);
+export function computePartnerMetrics(tickets: TicketRecord[], partners: string[]): PartnerMetricRow[] {
+  return partners.map(p => {
+    const pt = tickets.filter(t => t.partner === p);
     const total = pt.length;
     const active = pt.filter(t => t.status !== TicketStatus.CLOSED).length;
     const closedTickets = pt.filter(t => t.status === TicketStatus.CLOSED);
@@ -135,19 +135,19 @@ export function computeProviderMetrics(tickets: TicketRecord[], providers: strin
     if (sla < 90) status = 'Action Plan';
     else if (sla < 95) status = 'Passing';
 
-    return { provider: p, sla, active, closed, total, mttr, reopen, satisfaction, status };
+    return { partner: p, sla, active, closed, total, mttr, reopen, satisfaction, status };
   });
 }
 
-export function computeProviderResolutionQuality(tickets: TicketRecord[], providers: string[]) {
+export function computePartnerResolutionQuality(tickets: TicketRecord[], partners: string[]) {
   const closedTickets = tickets.filter(t => t.status === TicketStatus.CLOSED);
-  return providers.map(p => {
-    const ptClosed = closedTickets.filter(t => t.provider === p);
+  return partners.map(p => {
+    const ptClosed = closedTickets.filter(t => t.partner === p);
     const accepted = ptClosed.filter(t => !t.isEscalated).length;
     const rejected = ptClosed.filter(t => t.isEscalated).length;
     const total = ptClosed.length;
     const rate = total > 0 ? accepted / total * 100 : 0;
-    return { provider: p, accepted, rejected, total, rate };
+    return { partner: p, accepted, rejected, total, rate };
   });
 }
 
@@ -227,7 +227,7 @@ export function computeAtRiskExposure(tickets: TicketRecord[], now: number): num
     .reduce((s, t) => s + t.amount, 0);
 }
 
-export function computeExposureBy(tickets: TicketRecord[], key: 'provider' | 'businessUnit' | 'category' | 'priority') {
+export function computeExposureBy(tickets: TicketRecord[], key: 'partner' | 'businessUnit' | 'category' | 'priority') {
   const active = tickets.filter(t => t.status !== TicketStatus.CLOSED);
   const groups = [...new Set(active.map(t => t[key]))];
   return groups.map(g => ({
@@ -271,7 +271,7 @@ export function computeRiskRegister(tickets: TicketRecord[], now: number): RiskR
       return {
         id: t.id,
         customerName: t.customerName,
-        provider: t.provider,
+        partner: t.partner,
         businessUnit: t.businessUnit,
         category: t.category,
         priority: t.priority,
@@ -380,10 +380,10 @@ export function computePeriodDeltas(tickets: TicketRecord[], now: number, period
 
 export function generateExecutiveInsights(input: {
   tickets: TicketRecord[];
-  providers: string[];
+  partners: string[];
   deltas: PeriodDeltas;
 }): ExecutiveInsight[] {
-  const { tickets, providers, deltas } = input;
+  const { tickets, partners, deltas } = input;
   const insights: ExecutiveInsight[] = [];
   const active = tickets.filter(t => t.status !== TicketStatus.CLOSED);
   const breached = tickets.filter(t => t.isEscalated && t.status !== TicketStatus.CLOSED);
@@ -394,7 +394,7 @@ export function generateExecutiveInsights(input: {
     insights.push({
       type: 'error',
       title: 'Active SLA breaches',
-      message: `${breached.length} ticket(s) breached SLA across ${[...new Set(breached.map(t => t.provider))].join(', ')}.`,
+      message: `${breached.length} ticket(s) breached SLA across ${[...new Set(breached.map(t => t.partner))].join(', ')}.`,
       action: 'Open risk register',
     });
   }
@@ -406,15 +406,15 @@ export function generateExecutiveInsights(input: {
       action: 'Review risk register',
     });
   }
-  const weakProviders = providers
-    .map(p => ({ provider: p, sla: computeSlaPercent(tickets, tickets.filter(t => t.provider === p)) }))
+  const weakPartners = partners
+    .map(p => ({ partner: p, sla: computeSlaPercent(tickets, tickets.filter(t => t.partner === p)) }))
     .filter(x => x.sla < 95);
-  if (weakProviders.length > 0) {
+  if (weakPartners.length > 0) {
     insights.push({
       type: 'warning',
-      title: 'Provider SLA below target',
-      message: `${weakProviders.map(x => `${x.provider} (${x.sla.toFixed(1)}%)`).join(', ')} below the 95% SLA target.`,
-      action: 'View provider scorecard',
+      title: 'Partner SLA below target',
+      message: `${weakPartners.map(x => `${x.partner} (${x.sla.toFixed(1)}%)`).join(', ')} below the 95% SLA target.`,
+      action: 'View partner scorecard',
     });
   }
   if (highValue.length > 0) {
@@ -455,13 +455,13 @@ export function generateExecutiveInsights(input: {
   return insights;
 }
 
-export function buildTrendMatrix(tickets: TicketRecord[], providers: string[], businessUnits: string[], metric: 'INCIDENTS' | 'BREACHES') {
+export function buildTrendMatrix(tickets: TicketRecord[], partners: string[], businessUnits: string[], metric: 'INCIDENTS' | 'BREACHES') {
   return businessUnits.flatMap(bu => {
     const buTickets = tickets.filter(t => t.businessUnit === bu);
-    return providers.map(p => {
-      const pt = buTickets.filter(t => t.provider === p);
+    return partners.map(p => {
+      const pt = buTickets.filter(t => t.partner === p);
       const value = metric === 'BREACHES' ? pt.filter(t => t.isEscalated).length : pt.length;
-      return { bu, provider: p, value };
+      return { bu, partner: p, value };
     });
   });
 }

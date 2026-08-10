@@ -25,7 +25,7 @@ import SliderForm from '../components/ui/SliderForm';
 
 interface NewTicketForm {
   category: string; priority: string;
-  transactionId: string; amount: string; provider: string;
+  transactionId: string; amount: string; partner: string;
   description: string; terminalId: string;
   bankName: string; nipSessionId: string;
   requiresAmount: 'yes' | 'no';
@@ -35,7 +35,7 @@ const defaultNewTicket: NewTicketForm = {
   priority: TicketPriority.HIGH,
   transactionId: '',
   amount: '',
-  provider: 'Parkway',
+  partner: 'Parkway',
   description: '',
   terminalId: '',
   bankName: 'Undefined',
@@ -45,7 +45,7 @@ const defaultNewTicket: NewTicketForm = {
 
 export default function CustomerPortalPage() {
   const {
-    isLoading, ticketTemplates, providers, categories, currentUser, showToast,
+    isLoading, ticketTemplates, partners, categories, currentUser, showToast,
     tickets, setTickets, comments, setAuditLogs, saveToStorage,
     setActiveTicketId, setActiveTab, slaRules, holidays, currentRole, auditLogs,
     setEvidence, evidence, buFormConfigs, setComments, paymentChannels
@@ -177,7 +177,7 @@ export default function CustomerPortalPage() {
       customerName: currentUser.firstName + ' ' + currentUser.lastName,
       customerEmail: currentUser.email,
       businessUnit: currentUser.bu,
-      provider: newTicket.provider,
+      partner: newTicket.partner,
       category: newTicket.category,
       priority: newTicket.priority,
       status: TicketStatus.ASSIGNED,
@@ -188,12 +188,12 @@ export default function CustomerPortalPage() {
       slaDeadline: deadline,
       isEscalated: false,
       escalationCount: 0,
-      assignedAgentId: `${newTicket.provider} Provider Team`,
+      assignedAgentId: `${newTicket.partner} Partner Team`,
       majorIncidentId: null,
       feedbackScore: null,
       feedbackComment: null,
       watchers: [],
-      submittedBy: 'PARTNER',
+      submittedBy: 'CUSTOMER',
       bankName: txBank || 'Undefined',
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined
     };
@@ -390,7 +390,7 @@ export default function CustomerPortalPage() {
                       priority: tmpl.priority,
                       transactionId: 'TXN_' + Math.floor(Math.random() * 1000000000000),
                       amount: tmpl.amount || '',
-                      provider: tmpl.provider,
+                      partner: tmpl.partner,
                       description: tmpl.ticketDescription,
                       terminalId: 'TERM_9042',
                       bankName: 'Undefined',
@@ -421,11 +421,11 @@ export default function CustomerPortalPage() {
               {
                 label: 'Details',
                 title: 'Incident Details',
-                subtitle: 'Select the provider and issue category.',
+                subtitle: 'Select the partner and issue category.',
                 content: (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input label="Mapped Business Unit (Auto-detected)" value={currentUser.bu} disabled />
-                    <Select label="Payment Provider" value={newTicket.provider} onChange={(e) => setNewTicket(prev => ({ ...prev, provider: e.target.value }))} options={providers.map(p => ({ value: p, label: p }))} />
+                    <Select label="Payment Partner" value={newTicket.partner} onChange={(e) => setNewTicket(prev => ({ ...prev, partner: e.target.value }))} options={partners.map(p => ({ value: p, label: p }))} />
                     <Select label="Issue Category" value={newTicket.category} onChange={(e) => setNewTicket(prev => ({ ...prev, category: e.target.value }))} options={categories.map(c => ({ value: c.name, label: c.name }))} />
                   </div>
                 ),
@@ -610,7 +610,7 @@ export default function CustomerPortalPage() {
                         </span>
                         <span className="flex items-center gap-1">
                           <CheckCircle className="w-3.5 h-3.5" />
-                          {ticket.provider}
+                          {ticket.partner}
                         </span>
                       </div>
 

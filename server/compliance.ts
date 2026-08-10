@@ -90,7 +90,7 @@ export type AuthUser = {
 
 /**
  * Apply structural PII masking based on role.
- * SUPER_ADMIN / BU_SUPPORT / EXECUTIVE see more; PROVIDER / others get masked fields.
+ * SUPER_ADMIN / BU_SUPPORT / EXECUTIVE see more; PARTNER / CUSTOMER / others get masked fields.
  * Unmasking is audited separately via explicit unmask endpoint.
  */
 export function applyTicketMasking<T extends Record<string, any>>(ticket: T, user: AuthUser, unmasked = false): T {

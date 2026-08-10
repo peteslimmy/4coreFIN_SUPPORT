@@ -51,7 +51,7 @@ function formatHours(h: number): string {
 }
 
 export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter }: RiskComplianceTabProps) {
-  const { tickets, providers, businessUnits, auditLogs, majorIncidents, showToast } = useApp();
+  const { tickets, partners, businessUnits, auditLogs, majorIncidents, showToast } = useApp();
   const [heatMapMetric, setHeatMapMetric] = useState<'INCIDENTS' | 'BREACHES'>('INCIDENTS');
   const [riskSort, setRiskSort] = useState<{ field: string; asc: boolean }>({ field: 'riskScore', asc: false });
   // eslint-disable-next-line react-hooks/purity
@@ -78,7 +78,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
   const atRiskExposure = useMemo(() => computeAtRiskExposure(tickets, now), [tickets, now]);
   const auditHealth = useMemo(() => computeAuditHealth(auditLogs), [auditLogs]);
   const incidents = useMemo(() => computeIncidentImpact(majorIncidents, tickets), [majorIncidents, tickets]);
-  const heatmap = useMemo(() => buildTrendMatrix(tickets, providers, businessUnits, heatMapMetric), [tickets, providers, businessUnits, heatMapMetric]);
+  const heatmap = useMemo(() => buildTrendMatrix(tickets, partners, businessUnits, heatMapMetric), [tickets, partners, businessUnits, heatMapMetric]);
   const agents = useMemo(() => computeAgentPerformance(tickets), [tickets]);
 
   const auditActionData = useMemo(() => Object.entries(auditHealth.byAction).map(([name, value]) => ({ name, value })), [auditHealth.byAction]);
@@ -93,8 +93,8 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
   const heatColor = (v: number) => `rgba(59, 130, 246, ${0.08 + (v / heatMax) * 0.85})`;
 
   const exportRiskCsv = () => {
-    const headers = ['Ticket', 'Customer', 'Provider', 'Business Unit', 'Category', 'Priority', 'Status', 'Amount', 'Age', 'SLA Remaining', 'Risk Score'];
-    const rows = riskRegister.map(r => [r.id, r.customerName, r.provider, r.businessUnit, r.category, r.priority, r.status, r.amount, formatHours(r.ageHours), formatHours(r.slaRemainingHours), r.riskScore]);
+    const headers = ['Ticket', 'Customer', 'Partner', 'Business Unit', 'Category', 'Priority', 'Status', 'Amount', 'Age', 'SLA Remaining', 'Risk Score'];
+    const rows = riskRegister.map(r => [r.id, r.customerName, r.partner, r.businessUnit, r.category, r.priority, r.status, r.amount, formatHours(r.ageHours), formatHours(r.slaRemainingHours), r.riskScore]);
     const csv = "data:text/csv;charset=utf-8," + [headers, ...rows].map(r => r.join(',')).join('\n');
     const link = document.createElement("a");
     link.href = encodeURI(csv);
@@ -111,7 +111,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
       subtitle: t.customerName,
       context: 'risk',
       rows: [
-        { label: 'Provider', value: t.provider },
+        { label: 'Partner', value: t.partner },
         { label: 'Business Unit', value: t.businessUnit },
         { label: 'Category', value: t.category },
         { label: 'Priority', value: t.priority },
@@ -128,7 +128,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
   const riskTableColumns = [
     { key: 'id', header: 'Ticket', sortable: true, render: (r: RiskRow) => <span className="font-mono font-bold text-text-primary">{r.id}</span> },
     { key: 'customerName', header: 'Customer', sortable: true, render: (r: RiskRow) => <span className="text-text-secondary">{r.customerName}</span> },
-    { key: 'provider', header: 'Provider', sortable: true, render: (r: RiskRow) => <span>{r.provider}</span> },
+    { key: 'partner', header: 'Partner', sortable: true, render: (r: RiskRow) => <span>{r.partner}</span> },
     { key: 'priority', header: 'Priority', sortable: true, render: (r: RiskRow) => (
       <span className={`font-mono text-caption font-bold ${r.priority === 'CRITICAL' ? 'text-error' : r.priority === 'HIGH' ? 'text-warning' : 'text-text-muted'}`}>{r.priority}</span>
     )},
@@ -341,7 +341,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
                   <div key={incident.id} className="flex items-start justify-between gap-3 px-3 py-2.5 rounded-lg bg-surface border border-border-subtle">
                     <div className="min-w-0">
                       <p className="text-body-sm font-semibold text-text-primary truncate">{incident.name}</p>
-                      <p className="text-[11px] text-text-muted truncate">{incident.provider} · {incident.category}</p>
+                      <p className="text-[11px] text-text-muted truncate">{incident.partner} · {incident.category}</p>
                     </div>
                     <div className="text-right shrink-0">
                       <span className={`inline-flex px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${incident.active ? 'bg-error/10 text-error' : 'bg-success/10 text-success'}`}>{incident.status}</span>
@@ -395,11 +395,11 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
         </div>
       </div>
 
-      {/* BU × Provider heatmap */}
+      {/* BU × Partner heatmap */}
       <div className="bg-surface-elevated rounded-xl border border-border-subtle p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide flex items-center gap-2">
-            <UsersIcon className="w-4 h-4 text-primary" /> Business Unit × Provider Heatmap
+            <UsersIcon className="w-4 h-4 text-primary" /> Business Unit × Partner Heatmap
           </h3>
           <div className="flex gap-1">
             {(['INCIDENTS', 'BREACHES'] as const).map(m => (
@@ -414,14 +414,14 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
           </div>
         </div>
         <div className="overflow-x-auto">
-          <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${providers.length}, minmax(64px, 1fr))` }}>
+          <div className="grid gap-1" style={{ gridTemplateColumns: `auto repeat(${partners.length}, minmax(64px, 1fr))` }}>
             <div />
-            {providers.map(p => <div key={p} className="text-[10px] font-semibold text-text-muted text-center pb-1 truncate">{p}</div>)}
+            {partners.map(p => <div key={p} className="text-[10px] font-semibold text-text-muted text-center pb-1 truncate">{p}</div>)}
             {businessUnits.map(bu => (
               <>
                 <div key={`label-${bu}`} className="text-[10px] font-medium text-text-secondary pr-2 truncate">{bu}</div>
-                {providers.map(p => {
-                  const cell = heatmap.find(h => h.bu === bu && h.provider === p);
+                {partners.map(p => {
+                  const cell = heatmap.find(h => h.bu === bu && h.partner === p);
                   const v = cell?.value ?? 0;
                   return (
                     <button
@@ -432,7 +432,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
                         context: 'risk',
                         rows: [
                           { label: 'Business Unit', value: bu },
-                          { label: 'Provider', value: p },
+                          { label: 'Partner', value: p },
                           { label: heatMapMetric, value: `${v}` },
                         ],
                       })}

@@ -4,8 +4,6 @@ import { useState } from 'react';
 import { UserRole, TicketStatus, TicketRecord, MajorIncidentRecord, WatcherNotification } from '../types/app';
 import Avatar from './ui/Avatar';
 import ThemeToggle from './ThemeToggle';
-import BrandLogo from './BrandLogo';
-
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
@@ -47,7 +45,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
   const activeTicketsCount = (() => {
     let scoped = tickets;
     if (currentRole !== UserRole.SUPER_ADMIN && currentRole !== UserRole.EXECUTIVE) {
-      scoped = currentRole === UserRole.PROVIDER
+      scoped = currentRole === UserRole.PARTNER
         ? tickets.filter(t => t.assignedAgentId?.toLowerCase().includes(currentUser.bu.toLowerCase()))
         : tickets.filter(t => t.businessUnit === currentUser.bu);
     }
@@ -64,8 +62,8 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
     { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
     { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
     { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.SUPER_ADMIN], section: 'Operations' },
-    { id: 'partner_portal', label: 'Submit Complaint', icon: Plus, roles: [UserRole.PARTNER, UserRole.BU_SUPPORT, UserRole.SUPER_ADMIN], section: 'Complaints' },
-    { id: 'provider_portal', label: 'Provider Portal', icon: ClipboardList, roles: [UserRole.PROVIDER], section: 'Provider Desk' },
+    { id: 'customer_portal', label: 'Submit Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.SUPER_ADMIN], section: 'Complaints' },
+    { id: 'partner_portal', label: 'Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Partner Desk' },
     { id: 'profile_settings', label: 'Profile & Security', icon: User, section: 'Account' },
   ];
 
@@ -85,26 +83,6 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
 
   return (
     <>
-      <div className={`flex items-center border-b border-border-subtle ${collapsed ? 'justify-center p-4' : 'p-4 gap-3'}`}>
-        {!collapsed ? (
-          <>
-            <BrandLogo
-              imgClassName="w-9 h-9 object-contain shrink-0"
-              fallback={<div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3 shrink-0">4C</div>}
-            />
-            <div className="min-w-0 flex-1">
-              <span className="text-sm font-bold text-text-primary tracking-tight block truncate">4CoreFin</span>
-              <span className="text-caption text-text-muted block truncate">Operations Portal</span>
-            </div>
-          </>
-        ) : (
-          <BrandLogo
-            imgClassName="w-9 h-9 object-contain"
-            fallback={<div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm shadow-3">4C</div>}
-          />
-        )}
-      </div>
-
       <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'px-2 py-3'} space-y-1`}>
         {Object.entries(groupedItems).map(([section, items]) => (
           <div key={section}>
@@ -243,14 +221,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, currentR
             transition={{ duration: 0.2, ease: 'easeInOut' }}
             className="fixed inset-y-0 left-0 w-72 bg-surface-sidebar z-50 lg:hidden flex flex-col shadow-modal"
           >
-            <div className="flex items-center justify-between p-4 border-b border-border-subtle">
-              <div className="flex items-center gap-3">
-                <div className="w-9 h-9 bg-accent rounded-lg flex items-center justify-center font-bold text-white text-sm">4C</div>
-                <div>
-                  <span className="text-sm font-bold text-text-primary tracking-tight block">4CoreFin</span>
-                  <span className="text-caption text-text-muted block">Operations Portal</span>
-                </div>
-              </div>
+            <div className="flex items-center justify-end p-4 border-b border-border-subtle">
               <button onClick={onMobileClose} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-surface-card transition-colors">
                 <X className="w-5 h-5" />
               </button>

@@ -29,15 +29,14 @@ function KnowledgeBaseTab({
   const [selectedArticleId, setSelectedArticleId] = useState<string>(articles[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>('ALL');
-  const [providerFilter, setProviderFilter] = useState<string>('ALL');
-
+  const [partnerFilter, setPartnerFilter] = useState<string>('ALL');
   // Article Form State for Create/Edit
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingArticleId, setEditingArticleId] = useState<string | null>(null);
   const [formState, setFormState] = useState<Omit<KbArticle, 'id' | 'lastUpdated'>>({
     title: '',
     category: 'Playbook',
-    provider: 'General',
+    partner: 'General',
     content: '',
     tags: []
   });
@@ -56,9 +55,9 @@ function KnowledgeBaseTab({
       art.tags.some(t => t.toLowerCase().includes(q));
     
     const matchesCategory = categoryFilter === 'ALL' || art.category === categoryFilter;
-    const matchesProvider = providerFilter === 'ALL' || art.provider === providerFilter;
+    const matchesPartner = partnerFilter === 'ALL' || art.partner === partnerFilter;
 
-    return matchesSearch && matchesCategory && matchesProvider;
+    return matchesSearch && matchesCategory && matchesPartner;
   });
 
   const activeArticle = articles.find(art => art.id === selectedArticleId) || filteredArticles[0];
@@ -83,7 +82,7 @@ function KnowledgeBaseTab({
               ...art, 
               title: formState.title, 
               category: formState.category, 
-              provider: formState.provider, 
+              partner: formState.partner, 
               content: formState.content, 
               tags: tagsArray,
               lastUpdated: new Date().toISOString().split('T')[0]
@@ -97,7 +96,7 @@ function KnowledgeBaseTab({
         id: 'kb-' + Date.now(),
         title: formState.title,
         category: formState.category,
-        provider: formState.provider,
+        partner: formState.partner,
         content: formState.content,
         tags: tagsArray,
         lastUpdated: new Date().toISOString().split('T')[0]
@@ -109,7 +108,7 @@ function KnowledgeBaseTab({
 
     setIsFormOpen(false);
     setKbFormErrors({});
-    setFormState({ title: '', category: 'Playbook', provider: 'General', content: '', tags: [] });
+    setFormState({ title: '', category: 'Playbook', partner: 'General', content: '', tags: [] });
     setTagInput('');
   };
 
@@ -118,7 +117,7 @@ function KnowledgeBaseTab({
     setFormState({
       title: art.title,
       category: art.category,
-      provider: art.provider,
+      partner: art.partner,
       content: art.content,
       tags: art.tags
     });
@@ -158,8 +157,8 @@ function KnowledgeBaseTab({
     { value: 'Known Issue', label: 'Known Issue' },
   ];
 
-  const providerOptions = [
-    { value: 'ALL', label: 'All Gateways' },
+  const partnerOptions = [
+    { value: 'ALL', label: 'All Partners' },
     { value: 'Parkway', label: 'Parkway' },
     { value: 'PayPal', label: 'PayPal' },
     { value: 'Adyen', label: 'Adyen' },
@@ -173,7 +172,7 @@ function KnowledgeBaseTab({
     { value: 'Known Issue', label: 'Known Issue (Gateway Fluctuation Logging)' },
   ];
 
-  const formProviderOptions = [
+  const formPartnerOptions = [
     { value: 'General', label: 'General (Cross-Gateway)' },
     { value: 'Parkway', label: 'Parkway' },
     { value: 'PayPal', label: 'PayPal' },
@@ -191,13 +190,13 @@ function KnowledgeBaseTab({
             <BookOpen className="w-5 h-5 text-accent" />
             Corporate Knowledge & Resolution Repository
           </h3>
-          <p className="text-xs text-text-muted">Complaint playbooks, known provider issues, and approved mitigation paths</p>
+          <p className="text-xs text-text-muted">Complaint playbooks, known partner issues, and approved mitigation paths</p>
         </div>
         {['SUPER_ADMIN', 'BU_SUPPORT'].includes(currentRole) && (
           <Button
             onClick={() => {
               setEditingArticleId(null);
-              setFormState({ title: '', category: 'Playbook', provider: 'General', content: '', tags: [] });
+              setFormState({ title: '', category: 'Playbook', partner: 'General', content: '', tags: [] });
               setTagInput('');
               setIsFormOpen(true);
             }}
@@ -239,10 +238,10 @@ function KnowledgeBaseTab({
                 options={categoryOptions}
               />
               <Select
-                label="Provider"
-                value={providerFilter}
-                onChange={(e) => setProviderFilter(e.target.value)}
-                options={providerOptions}
+                label="Partner"
+                value={partnerFilter}
+                onChange={(e) => setPartnerFilter(e.target.value)}
+                options={partnerOptions}
               />
             </div>
           </div>
@@ -276,7 +275,7 @@ function KnowledgeBaseTab({
                     <h4 className="font-bold text-xs text-text-primary leading-snug line-clamp-2">{art.title}</h4>
                     <div className="flex items-center gap-1.5 mt-2">
                       <span className="text-xs bg-surface-hover text-text-secondary font-bold font-mono px-1.5 py-0.5 rounded">
-                        {art.provider}
+                        {art.partner}
                       </span>
                       <p className="text-xs text-text-muted font-medium truncate flex-1">
                         {art.tags.join(', ')}
@@ -330,9 +329,9 @@ function KnowledgeBaseTab({
                   />
                   <Select
                     label="Target Payment Partner"
-                    value={formState.provider}
-                    onChange={(e) => setFormState(prev => ({ ...prev, provider: e.target.value }))}
-                    options={formProviderOptions}
+                    value={formState.partner}
+                    onChange={(e) => setFormState(prev => ({ ...prev, partner: e.target.value }))}
+                    options={formPartnerOptions}
                   />
                 </div>
 
@@ -370,7 +369,7 @@ function KnowledgeBaseTab({
                     {activeArticle.category}
                   </Badge>
                   <span className="text-xs bg-surface-hover text-text-secondary px-2 py-0.5 rounded font-bold font-mono">
-                    Provider: {activeArticle.provider}
+                    Partner: {activeArticle.partner}
                   </span>
                 </div>
                 

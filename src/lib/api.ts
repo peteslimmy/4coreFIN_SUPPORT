@@ -35,7 +35,7 @@ export interface BootstrapData {
   businessUnits?: string[];
   businessUnitCodes?: Record<string, string>;
   paymentChannels?: string[];
-  providers?: string[];
+  partners?: string[];
   categories?: CategoryRecord[];
   buFormConfigs?: BuFormConfig[];
   roles?: RoleDefinition[];

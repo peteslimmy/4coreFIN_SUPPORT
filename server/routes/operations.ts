@@ -49,7 +49,7 @@ export function createOperationsRouter(): Router {
       data.ticketTemplates = await listJsonTable('ticket_templates');
       data.kbArticles = await listJsonTable('kb_articles');
       data.savedReplies = await getConfig('savedReplies', []);
-      data.providers = await getConfig('providers', []);
+      data.partners = await getConfig('partners', []);
       data.categories = await getConfig('categories', []);
       data.buFormConfigs = await getConfig('buFormConfigs', []);
       data.notificationConfigs = await getConfig('notificationConfigs', []);
@@ -123,7 +123,7 @@ export function createOperationsRouter(): Router {
     res.json(row);
   });
 
-  router.post('/major-incidents', requireAuth, requirePermission('major-incidents:manage'), validateBody(z.object({ id: z.string().optional(), name: z.string().optional(), description: z.string().optional(), provider: z.string().optional(), category: z.string().optional(), severity: z.string().optional(), active: z.boolean().optional(), ticketCount: z.number().optional(), createdAt: z.string().optional(), status: z.string().optional(), timeline: z.array(z.unknown()).optional(), notifications: z.array(z.unknown()).optional(), pir: z.record(z.string(), z.unknown()).optional() })), async (req: AuthedRequest, res: Response) => {
+  router.post('/major-incidents', requireAuth, requirePermission('major-incidents:manage'), validateBody(z.object({ id: z.string().optional(), name: z.string().optional(), description: z.string().optional(), partner: z.string().optional(), category: z.string().optional(), severity: z.string().optional(), active: z.boolean().optional(), ticketCount: z.number().optional(), createdAt: z.string().optional(), status: z.string().optional(), timeline: z.array(z.unknown()).optional(), notifications: z.array(z.unknown()).optional(), pir: z.record(z.string(), z.unknown()).optional() })), async (req: AuthedRequest, res: Response) => {
     const mi = req.body;
     if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'EXECUTIVE' && req.user!.bu !== 'ALL') {
       mi.tenantId = req.user!.tenantId || 'tnt-global';

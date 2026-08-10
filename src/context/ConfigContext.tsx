@@ -42,7 +42,7 @@ export function ConfigProvider({ children, value }: { children: ReactNode; value
 export function useConfigDomain(): ConfigDomain {
   const [kbArticles, setKbArticles] = useState<KbArticle[]>([]);
   const [savedReplies, setSavedReplies] = useState<string[]>([
-    "We have identified a gateway communication timeout on our provider end. Initiating reconciliation check.",
+    "We have identified a gateway communication timeout on our partner end. Initiating reconciliation check.",
     "The transaction settlement delay has been resolved. Funds should reflect within 24-48 hours.",
     "This charge has been flagged as a duplicate. We are initiating an automated reversal via API."
   ]);

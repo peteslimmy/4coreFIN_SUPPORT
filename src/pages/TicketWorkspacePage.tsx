@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Ticket } from 'lucide-react';
 
 import PageTransition from '../components/layout/PageTransition';
@@ -17,7 +17,7 @@ import EscalationModals from './ticket-workspace/EscalationModals';
 import NewTicketModal, { type NewTicketFormState } from './ticket-workspace/NewTicketModal';
 
 interface TicketWorkspacePageProps {
-  handleDeclareMajorIncident: (formData?: { name: string; description: string; provider: string; category: string; severity: string; initialNotification: string }) => void;
+  handleDeclareMajorIncident: (formData?: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => void;
 }
 
 function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePageProps) {
@@ -57,7 +57,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const [, setShowMobileActivity] = useState(false);
   const [directMessageText, setDirectMessageText] = useState('');
   const [showNewTicketPanel, setShowNewTicketPanel] = useState(false);
-  const [newTicketForm, setNewTicketForm] = useState<NewTicketFormState>({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, provider: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
+  const [newTicketForm, setNewTicketForm] = useState<NewTicketFormState>({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
   const [newTicketErrors, setNewTicketErrors] = useState<Record<string, string>>({});
   const [now, setNow] = useState(() => Date.now());
 
@@ -165,7 +165,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
 
   const handleDeclareMajorIncidentWrapper = () => {
     if (!activeTicket) return;
-    handleDeclareMajorIncident({ name: activeTicket.id, description: activeTicket.description || '', provider: activeTicket.provider || '', category: activeTicket.category || '', severity: activeTicket.priority || '', initialNotification: '' });
+    handleDeclareMajorIncident({ name: activeTicket.id, description: activeTicket.description || '', partner: activeTicket.partner || '', category: activeTicket.category || '', severity: activeTicket.priority || '', initialNotification: '' });
   };
 
   const handleSendComment = (e: React.FormEvent) => {
@@ -272,7 +272,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   e.preventDefault();
   handleCreateTicket(newTicketForm);
   setShowNewTicketPanel(false);
-  setNewTicketForm({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, provider: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
+  setNewTicketForm({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
   setNewTicketErrors({});
 };
 

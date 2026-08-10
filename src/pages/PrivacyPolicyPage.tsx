@@ -130,7 +130,7 @@ export default function PrivacyPolicyPage() {
 
                   <section>
                     <h2 className="text-xl font-bold text-text-primary mb-3">2. Description of Service</h2>
-                    <p>4CoreFinSupport provides a payment operations support platform for managing incident tickets, evidence, customer communications, and compliance reporting for financial institutions and payment providers.</p>
+                    <p>4CoreFinSupport provides a payment operations support platform for managing incident tickets, evidence, customer communications, and compliance reporting for financial institutions and payment partners.</p>
                   </section>
 
                   <section>

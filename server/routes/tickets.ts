@@ -55,7 +55,7 @@ export function createTicketsRouter(): Router {
     res.json(ticket);
   });
 
-  router.post('/tickets', requireAuth, requirePermission('tickets:create'), validateBody(z.object({ id: z.string().optional(), customerName: z.string().optional(), customerEmail: z.string().optional(), customerPhone: z.string().optional(), customerLastName: z.string().optional(), customerId: z.string().optional(), businessUnit: z.string().optional(), provider: z.string().optional(), category: z.string().optional(), priority: z.enum(['LOW','MEDIUM','HIGH','CRITICAL']).optional(), status: z.enum(['RECEIPT','ASSIGNED','INVESTIGATE','RESOLVED','CLOSED']).optional(), amount: z.number().optional(), transactionId: z.string().optional(), cardPan: z.string().optional(), description: z.string().optional(), bankName: z.string().optional(), slaDeadline: z.string().optional(), assignedAgentId: z.string().optional(), majorIncidentId: z.string().nullable().optional(), watchers: z.array(z.string()).optional(), submittedBy: z.enum(['BU_SUPPORT','PARTNER']).optional(), submittedByName: z.string().optional(), submittedByPhone: z.string().optional(), rootCause: z.string().optional(), correctiveAction: z.string().optional(), rcaDetails: z.record(z.string(), z.unknown()).optional(), customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(), duplicateOf: z.string().nullable().optional() }).passthrough()), async (req: AuthedRequest, res: Response) => {
+  router.post('/tickets', requireAuth, requirePermission('tickets:create'), validateBody(z.object({ id: z.string().optional(), customerName: z.string().optional(), customerEmail: z.string().optional(), customerPhone: z.string().optional(), customerLastName: z.string().optional(), customerId: z.string().optional(), businessUnit: z.string().optional(), partner: z.string().optional(), category: z.string().optional(), priority: z.enum(['LOW','MEDIUM','HIGH','CRITICAL']).optional(), status: z.enum(['RECEIPT','ASSIGNED','INVESTIGATE','RESOLVED','CLOSED']).optional(), amount: z.number().optional(), transactionId: z.string().optional(), cardPan: z.string().optional(), description: z.string().optional(), bankName: z.string().optional(), slaDeadline: z.string().optional(), assignedAgentId: z.string().optional(), majorIncidentId: z.string().nullable().optional(), watchers: z.array(z.string()).optional(), submittedBy: z.enum(['BU_SUPPORT','PARTNER']).optional(), submittedByName: z.string().optional(), submittedByPhone: z.string().optional(), rootCause: z.string().optional(), correctiveAction: z.string().optional(), rcaDetails: z.record(z.string(), z.unknown()).optional(), customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(), duplicateOf: z.string().nullable().optional() }).passthrough()), async (req: AuthedRequest, res: Response) => {
     const ticket = req.body;
     if (req.user!.role !== 'SUPER_ADMIN' && req.user!.role !== 'EXECUTIVE' && req.user!.bu !== 'ALL') {
       if (tenantIdForBu(ticket.businessUnit) !== (req.user!.tenantId || '')) {
@@ -72,7 +72,7 @@ export function createTicketsRouter(): Router {
     res.status(201).json(entry);
   });
 
-  router.patch('/tickets/:id', requireAuth, requirePermission('tickets:edit'), validateBody(z.object({ status: z.enum(['RECEIPT','ASSIGNED','INVESTIGATE','RESOLVED','CLOSED']).optional(), priority: z.enum(['LOW','MEDIUM','HIGH','CRITICAL']).optional(), category: z.string().optional(), description: z.string().optional(), amount: z.number().optional(), transactionId: z.string().optional(), provider: z.string().optional(), businessUnit: z.string().optional(), customerName: z.string().optional(), customerEmail: z.string().optional(), customerPhone: z.string().optional(), assignedAgentId: z.string().optional(), rootCause: z.string().optional(), correctiveAction: z.string().optional(), rcaDetails: z.record(z.string(), z.unknown()).optional(), isEscalated: z.boolean().optional(), escalationCount: z.number().optional(), bankName: z.string().optional(), watchers: z.array(z.string()).optional(), feedbackScore: z.number().nullable().optional(), feedbackComment: z.string().nullable().optional(), isDeleted: z.boolean().optional(), customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(), duplicateOf: z.string().optional() }).passthrough()), async (req: AuthedRequest, res: Response) => {
+  router.patch('/tickets/:id', requireAuth, requirePermission('tickets:edit'), validateBody(z.object({ status: z.enum(['RECEIPT','ASSIGNED','INVESTIGATE','RESOLVED','CLOSED']).optional(), priority: z.enum(['LOW','MEDIUM','HIGH','CRITICAL']).optional(), category: z.string().optional(), description: z.string().optional(), amount: z.number().optional(), transactionId: z.string().optional(), partner: z.string().optional(), businessUnit: z.string().optional(), customerName: z.string().optional(), customerEmail: z.string().optional(), customerPhone: z.string().optional(), assignedAgentId: z.string().optional(), rootCause: z.string().optional(), correctiveAction: z.string().optional(), rcaDetails: z.record(z.string(), z.unknown()).optional(), isEscalated: z.boolean().optional(), escalationCount: z.number().optional(), bankName: z.string().optional(), watchers: z.array(z.string()).optional(), feedbackScore: z.number().nullable().optional(), feedbackComment: z.string().nullable().optional(), isDeleted: z.boolean().optional(), customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(), duplicateOf: z.string().optional() }).passthrough()), async (req: AuthedRequest, res: Response) => {
     const existing = await getScopedTicket(req.params.id, req.user!);
     if (!existing) return res.status(404).json({ error: 'Ticket not found' });
 
@@ -114,7 +114,7 @@ export function createTicketsRouter(): Router {
     res.json(updated);
   });
 
-  // Narrow feedback write for self-service portals. PARTNER / portal users do
+  // Narrow feedback write for self-service portals. CUSTOMER / portal users do
   // NOT hold tickets:edit, so this is a dedicated low-risk endpoint that only
   // mutates feedbackScore / feedbackComment on tickets the caller may view and
   // owns or is BU-scoped to.
@@ -124,7 +124,7 @@ export function createTicketsRouter(): Router {
 
     const roles = getRoles(await getConfig<RoleDefinition[]>('roles', []));
     const canEdit = hasPermissionForRoleId(roles, req.user!.role, 'tickets:edit');
-    const isOwnBu = req.user!.role === 'PARTNER' && existing.businessUnit === req.user!.bu;
+    const isOwnBu = req.user!.role === 'CUSTOMER' && existing.businessUnit === req.user!.bu;
     if (!canEdit && !isOwnBu) {
       return res.status(403).json({ error: 'Feedback can only be submitted on your own business unit tickets' });
     }

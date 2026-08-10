@@ -29,7 +29,7 @@ export default function ReferenceDataPage() {
       <PageContainer maxWidth="full">
         <PageHeader
           title="Reference Data"
-          subtitle="Manage business units, providers, categories, SLA rules, templates, and other configuration lists used across the platform"
+          subtitle="Manage business units, partners, categories, SLA rules, templates, and other configuration lists used across the platform"
           breadcrumbs={[{ label: 'Home' }, { label: 'Administration' }, { label: 'Reference Data' }]}
         />
 
@@ -48,7 +48,7 @@ export default function ReferenceDataPage() {
                 >
                   {k.kind === 'businessUnits' && <Database className="w-4 h-4" />}
                   {k.kind === 'paymentChannels' && <Database className="w-4 h-4" />}
-                  {k.kind === 'providers' && <Database className="w-4 h-4" />}
+                  {k.kind === 'partners' && <Database className="w-4 h-4" />}
                   {k.kind === 'categories' && <Database className="w-4 h-4" />}
                   {k.kind === 'slaRules' && <Database className="w-4 h-4" />}
                   {k.kind === 'holidays' && <Database className="w-4 h-4" />}

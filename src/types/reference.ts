@@ -11,7 +11,7 @@ export interface EscalationRule {
 
 /**
  * Schema that drives the generic reference-data CRUD UI. Each managed kind
- * (businessUnits, providers, categories, …) is described here so the UI can
+ * (businessUnits, partners, categories, …) is described here so the UI can
  * render a table + form without bespoke per-kind components.
  */
 export interface ReferenceFieldDef {
@@ -31,7 +31,7 @@ export interface ReferenceKindDef {
   kind: string;
   label: string;
   labelPlural: string;
-  /** True when each row is a bare string (businessUnits, providers, savedReplies). */
+  /** True when each row is a bare string (businessUnits, partners, savedReplies). */
   stringItems: boolean;
   description: string;
   fields: ReferenceFieldDef[];
@@ -47,7 +47,7 @@ export interface ReferenceKindDef {
 export const ESCALATION_RULES_SEED: EscalationRule[] = [
   { id: 'esc-1', condition: 'SLA deadline breached', level: 'Level 1 - BU Support', target: 'BU Support Team', action: 'Flag CRITICAL and notify ticket watchers' },
   { id: 'esc-2', condition: 'Manual escalation by BU Support', level: 'Level 2 - Super Admin', target: 'Super Admin', action: 'Escalate to CRITICAL priority with audit record' },
-  { id: 'esc-3', condition: 'No provider response within 6 hours', level: 'Level 3 - Executive', target: 'Executive Office', action: 'Trigger Major Incident review' },
+  { id: 'esc-3', condition: 'No partner response within 6 hours', level: 'Level 3 - Executive', target: 'Executive Office', action: 'Trigger Major Incident review' },
 ];
 
 function text(key: string, label: string, opts: Partial<ReferenceFieldDef> = {}): ReferenceFieldDef {
@@ -97,7 +97,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
     idOf: str,
   },
   {
-    kind: 'providers',
+    kind: 'partners',
     label: 'Payment Partner',
     labelPlural: 'Payment Partners',
     stringItems: true,
@@ -170,7 +170,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       text('name', 'Template Name', { required: true }),
       text('category', 'Category', { required: true }),
       { key: 'priority', label: 'Priority', type: 'select', required: true, options: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
-      text('provider', 'Provider'),
+      text('partner', 'Partner'),
       text('amount', 'Amount'),
       text('ticketDescription', 'Description', { type: 'textarea' }),
     ],
@@ -178,7 +178,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       { key: 'name', header: 'Name' },
       { key: 'category', header: 'Category' },
       { key: 'priority', header: 'Priority' },
-      { key: 'provider', header: 'Provider' },
+      { key: 'partner', header: 'Partner' },
     ],
     idOf: (i) => String(field(i, 'id') ?? ''),
   },
@@ -245,7 +245,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
         label: 'Role',
         type: 'select',
         required: true,
-        options: ['SUPER_ADMIN', 'BU_SUPPORT', 'EXECUTIVE', 'PROVIDER', 'PARTNER'],
+        options: ['SUPER_ADMIN', 'BU_SUPPORT', 'EXECUTIVE', 'PARTNER', 'CUSTOMER'],
       },
       text('bu', 'Business Unit', { required: true, placeholder: 'e.g. POSSAP' }),
       text('phone', 'Phone'),

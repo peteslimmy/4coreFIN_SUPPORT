@@ -55,8 +55,8 @@ export async function exportPdf(title: string, headers: string[], rows: string[]
 }
 
 export function exportTicketsToCsv(tickets: TicketRecord[]) {
-  exportCsv('tickets', ['ID', 'Customer', 'Provider', 'Category', 'Status', 'Priority', 'Amount', 'Created', 'SLA Deadline'], tickets.map(t => [
-    t.id, t.customerName, t.provider, t.category,
+  exportCsv('tickets', ['ID', 'Customer', 'Partner', 'Category', 'Status', 'Priority', 'Amount', 'Created', 'SLA Deadline'], tickets.map(t => [
+    t.id, t.customerName, t.partner, t.category,
     t.status, t.priority, String(t.amount || ''), new Date(t.createdAt).toLocaleDateString(),
     t.slaDeadline ? new Date(t.slaDeadline).toLocaleDateString() : '',
   ]));

@@ -11,7 +11,7 @@ import PageTransition from '../components/layout/PageTransition';
 
 const HIGHLIGHTS = [
   'Real-time incident ticketing & SLA tracking',
-  'Major incident war rooms & provider portal',
+  'Major incident war rooms & partner portal',
   'Full audit trails & executive compliance reporting',
 ];
 

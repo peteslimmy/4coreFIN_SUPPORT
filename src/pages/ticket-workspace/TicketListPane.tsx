@@ -51,7 +51,7 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                             t.customerName.toLowerCase().includes(q) ||
                             t.customerEmail.toLowerCase().includes(q) ||
                             t.category.toLowerCase().includes(q) ||
-                            t.provider.toLowerCase().includes(q) ||
+                            t.partner.toLowerCase().includes(q) ||
                             t.description.toLowerCase().includes(q);
       const matchesPriority = priorityFilter === 'ALL' || t.priority === priorityFilter;
       const matchesStatus = statusFilter === 'ALL' || t.status === statusFilter;

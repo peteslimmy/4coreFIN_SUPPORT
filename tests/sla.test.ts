@@ -24,7 +24,7 @@ describe('Compliance', () => {
     const entry1 = { id: '1', timestamp: '2026-01-01', ticketId: 'T1', actor: 'Alice', role: 'BU_SUPPORT', action: 'CREATE', details: 'Created ticket', previousHash: '', hash: '' };
     const h1 = await computeAuditHash(entry1);
     entry1.hash = h1;
-    const entry2 = { id: '2', timestamp: '2026-01-02', ticketId: 'T1', actor: 'Bob', role: 'PROVIDER', action: 'UPDATE', details: 'Updated', previousHash: h1, hash: '' };
+    const entry2 = { id: '2', timestamp: '2026-01-02', ticketId: 'T1', actor: 'Bob', role: 'PARTNER', action: 'UPDATE', details: 'Updated', previousHash: h1, hash: '' };
     entry2.hash = await computeAuditHash(entry2);
     const result = await verifyAuditChain([entry1, entry2]);
     expect(result.valid).toBe(true);

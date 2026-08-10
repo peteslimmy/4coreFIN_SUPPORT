@@ -24,11 +24,11 @@ function seedStore(): TableStore {
     users: [
       { id: 'usr-a', name: 'Alice Alpha', email: 'alice@alpha.com', password_hash: pass, role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
       { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: pass, role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA },
-      { id: 'usr-provider', name: 'Paystack Rep', email: 'rep@paystack.com', password_hash: pass, role: 'PROVIDER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
+      { id: 'usr-provider', name: 'Paystack Rep', email: 'rep@paystack.com', password_hash: pass, role: 'PARTNER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
     ],
     tickets: [
-      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, provider: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
-      { id: 'tkt-b1', business_unit: 'BETA', tenant_id: BETA, provider: 'Flutterwave', category: 'Technical Issue', issue_type: 'Technical Issue', priority: 'MEDIUM', status: 'RECEIPT', is_deleted: false, created_at: '2026-07-02T00:00:00Z', sla_deadline: '2026-07-12T00:00:00Z', customer_name: 'Bayo', customer_email: 'bayo@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 0, transaction_id: 'TX2', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
+      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
+      { id: 'tkt-b1', business_unit: 'BETA', tenant_id: BETA, partner: 'Flutterwave', category: 'Technical Issue', issue_type: 'Technical Issue', priority: 'MEDIUM', status: 'RECEIPT', is_deleted: false, created_at: '2026-07-02T00:00:00Z', sla_deadline: '2026-07-12T00:00:00Z', customer_name: 'Bayo', customer_email: 'bayo@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 0, transaction_id: 'TX2', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
     ],
     comments: [
       { id: 'cmt-a1', ticket_id: 'tkt-a1', tenant_id: ALPHA, author: 'Alice Alpha', role: 'BU_SUPPORT', message: 'hello', timestamp: '2026-07-01T00:00:00Z', is_internal: false, seen: false, parent_comment_id: null, seen_by: [] },
@@ -118,7 +118,7 @@ describe('Tenant isolation — tickets', () => {
     expect(tickets.map((t) => t.id).sort()).toEqual(['tkt-a1', 'tkt-b1']);
   });
 
-  it('returns only matching provider tickets for PROVIDER', async () => {
+  it('returns only matching partner tickets for PARTNER', async () => {
     const s = await login('rep@paystack.com');
     const res = await fetch(`${base}/tickets`, { headers: authedHeaders(s, false) });
     expect(res.status).toBe(200);
@@ -425,7 +425,7 @@ describe('Permission-gated writes', () => {
       ...seedStore(),
       users: [
         ...seedStore().users,
-        { id: 'usr-partner', name: 'Partner Bob', email: 'partner@alpha.com', password_hash: pass, role: 'PARTNER', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
+        { id: 'usr-partner', name: 'Customer Bob', email: 'partner@alpha.com', password_hash: pass, role: 'CUSTOMER', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
       ],
     });
     Object.assign(supabase, store);
@@ -573,16 +573,16 @@ describe('Duplicate-marking gate on PATCH /tickets/:id', () => {
 });
 
 describe('Narrow feedback endpoint for self-service portals', () => {
-  function partnerUser(bu: string, email: string) {
+  function customerUser(bu: string, email: string) {
     const pass = hashPassword(PASSWORD);
     return createFakeSupabase({
       ...seedStore(),
-      users: [...seedStore().users, { id: `usr-${bu}`, name: `Partner ${bu}`, email, password_hash: pass, role: 'PARTNER', bu, phone: '', tenant_id: bu === 'ALPHA' ? ALPHA : BETA }],
+      users: [...seedStore().users, { id: `usr-${bu}`, name: `Customer ${bu}`, email, password_hash: pass, role: 'CUSTOMER', bu, phone: '', tenant_id: bu === 'ALPHA' ? ALPHA : BETA }],
     });
   }
 
-  it('allows a PARTNER to submit feedback on their own BU ticket', async () => {
-    Object.assign(supabase, partnerUser('ALPHA', 'partner@alpha.com'));
+  it('allows a CUSTOMER to submit feedback on their own BU ticket', async () => {
+    Object.assign(supabase, customerUser('ALPHA', 'partner@alpha.com'));
     const res = await fetch(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -603,8 +603,8 @@ describe('Narrow feedback endpoint for self-service portals', () => {
     expect((data as any[]).find((t) => t.id === 'tkt-a1').feedback_score).toBe(4);
   });
 
-  it('rejects feedback from a PARTNER on another BU ticket', async () => {
-    Object.assign(supabase, partnerUser('BETA', 'partner@beta.com'));
+  it('rejects feedback from a CUSTOMER on another BU ticket', async () => {
+    Object.assign(supabase, customerUser('BETA', 'partner@beta.com'));
     const res = await fetch(`${base}/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

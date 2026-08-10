@@ -16,7 +16,7 @@ function openTicket(slaDeadline: string) {
     id: 'tkt-sla',
     business_unit: 'ALPHA',
     tenant_id: ALPHA,
-    provider: 'Paystack',
+    partner: 'Paystack',
     category: 'Payment Dispute',
     issue_type: 'Payment Dispute',
     priority: 'HIGH',

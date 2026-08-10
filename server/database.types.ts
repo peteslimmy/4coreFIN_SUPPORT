@@ -41,7 +41,7 @@ export interface Database {
           customer_last_name: string;
           customer_id: string | null;
           business_unit: string;
-          provider: string;
+          partner: string;
           category: string;
           issue_type: string;
           priority: string;
@@ -75,7 +75,7 @@ export interface Database {
           customer_last_name?: string;
           customer_id?: string | null;
           business_unit: string;
-          provider: string;
+          partner: string;
           category: string;
           issue_type: string;
           priority: string;
@@ -181,7 +181,7 @@ export interface Database {
           id: string;
           name: string;
           description: string;
-          provider: string;
+          partner: string;
           category: string;
           severity: string;
           active: boolean;
@@ -196,7 +196,7 @@ export interface Database {
           id: string;
           name: string;
           description?: string;
-          provider?: string;
+          partner?: string;
           category?: string;
           severity?: string;
           active?: boolean;
@@ -272,7 +272,7 @@ export interface Database {
           category: string;
           issue_type: string;
           priority: string;
-          provider: string;
+          partner: string;
           amount: string;
           ticket_description: string;
         };
@@ -283,7 +283,7 @@ export interface Database {
           category: string;
           issue_type: string;
           priority?: string;
-          provider?: string;
+          partner?: string;
           amount?: string;
           ticket_description?: string;
         };
@@ -294,7 +294,7 @@ export interface Database {
           id: string;
           title: string;
           category: string;
-          provider: string;
+          partner: string;
           content: string;
           tags: Json;
           last_updated: string;
@@ -303,7 +303,7 @@ export interface Database {
           id: string;
           title: string;
           category: string;
-          provider?: string;
+          partner?: string;
           content?: string;
           tags?: Json;
           last_updated?: string;

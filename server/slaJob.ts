@@ -57,7 +57,7 @@ export async function runSlaCheck() {
       for (const w of t.watchers || []) {
         if (w) recipients.add(w);
       }
-      if (t.assignedAgentId) recipients.add(`${(t.provider || 'ops').toLowerCase()}-ops@4core.local`);
+      if (t.assignedAgentId) recipients.add(`${(t.partner || 'ops').toLowerCase()}-ops@4core.local`);
 
       if (hoursLeft < 0 && !t.isEscalated) {
         for (const recipient of recipients) {

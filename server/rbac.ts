@@ -19,7 +19,7 @@ export type Permission =
   | 'audit:verify'
   | 'reports:view'
   | 'executive:dashboard'
-  | 'provider:rca'
+  | 'partner:rca'
   | 'admin:config'
   | 'admin:users'
   | 'admin:forms'
@@ -72,16 +72,16 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     ],
   },
   {
-    id: 'PROVIDER',
-    name: 'Provider',
+    id: 'PARTNER',
+    name: 'Payment Partner',
     description: 'Handles assigned tickets and submits root cause analyses.',
     isSystem: true,
     buScoped: true,
-    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'provider:rca'],
+    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'partner:rca'],
   },
   {
-    id: 'PARTNER',
-    name: 'Partner',
+    id: 'CUSTOMER',
+    name: 'Customer',
     description: 'Files complaints on behalf of their business unit and tracks own tickets.',
     isSystem: true,
     buScoped: true,

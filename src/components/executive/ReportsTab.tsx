@@ -8,9 +8,8 @@ import Button from '../ui/Button';
 import { exportTicketsToCsv } from '../../lib/exportUtils';
 import { formatCurrencyCompact } from '../../lib/utils';
 import {
-  computeProviderMetrics,
-  computeExposureBy,
-  computeRiskRegister,
+  computePartnerMetrics,
+  computeExposureBy,  computeRiskRegister,
   computeAuditHealth,
   computeIncidentImpact,
   computeAgentPerformance,
@@ -46,19 +45,19 @@ interface ReportCard {
 }
 
 export default function ReportsTab() {
-  const { tickets, providers, businessUnits, auditLogs, majorIncidents, showToast } = useApp();
+  const { tickets, partners, businessUnits, auditLogs, majorIncidents, showToast } = useApp();
   // eslint-disable-next-line react-hooks/purity
   const now = Date.now();
 
   const exportPdf = useCallback(async (msg: string) => {
     try {
       const { downloadExecutivePdfReport } = await import('../../lib/pdfGenerator');
-      downloadExecutivePdfReport(tickets, providers, businessUnits, auditLogs);
+      downloadExecutivePdfReport(tickets, partners, businessUnits, auditLogs);
       showToast(msg, 'success');
     } catch {
       showToast('PDF export failed.', 'error');
     }
-  }, [tickets, providers, businessUnits, auditLogs, showToast]);
+  }, [tickets, partners, businessUnits, auditLogs, showToast]);
 
   const data = useMemo(() => {
     const active = tickets.filter(t => t.status !== TicketStatus.CLOSED);
@@ -70,8 +69,8 @@ export default function ReportsTab() {
     const sla = computeSlaPercent(tickets);
     const rated = tickets.filter(t => t.feedbackScore !== null && t.feedbackScore !== undefined);
     const csat = rated.length > 0 ? rated.reduce((s, t) => s + (t.feedbackScore || 0), 0) / rated.length : 0;
-    const providerMetrics = computeProviderMetrics(tickets, providers);
-    const exposureByProvider = computeExposureBy(tickets, 'provider');
+    const partnerMetrics = computePartnerMetrics(tickets, partners);
+    const exposureByPartner = computeExposureBy(tickets, 'partner');
     const exposureByBu = computeExposureBy(tickets, 'businessUnit');
     const exposureByCategory = computeExposureBy(tickets, 'category');
     const riskRegister = computeRiskRegister(tickets, now);
@@ -82,31 +81,31 @@ export default function ReportsTab() {
     const deltas = computePeriodDeltas(tickets, now, 7);
     const atRiskExposure = computeAtRiskExposure(tickets, now);
     const health = computeHealthScore(fcr, rft, sla, csat);
-    const insights = generateExecutiveInsights({ tickets, providers, deltas });
+    const insights = generateExecutiveInsights({ tickets, partners, deltas });
     const totalExposure = active.reduce((s, t) => s + t.amount, 0);
 
     const exposureHeaders = ['Group', 'Exposure', 'Open Tickets'];
-    const providerHeaders = ['Provider', 'SLA %', 'Active', 'Closed', 'MTTR (h)', 'Reopen %', 'CSAT'];
-    const riskHeaders = ['Ticket', 'Customer', 'Provider', 'Business Unit', 'Priority', 'Amount', 'Risk Score'];
+    const partnerHeaders = ['Partner', 'SLA %', 'Active', 'Closed', 'MTTR (h)', 'Reopen %', 'CSAT'];
+    const riskHeaders = ['Ticket', 'Customer', 'Partner', 'Business Unit', 'Priority', 'Amount', 'Risk Score'];
     const agentHeaders = ['Agent', 'Active', 'Closed', 'Resolved', 'Escalated', 'SLA %', 'CSAT'];
     const customerHeaders = ['Customer', 'Tickets', 'Open', 'Closed', 'Exposure'];
 
     return {
       active, closed, resolved, escalated, fcr, rft, sla, csat, totalExposure, atRiskExposure, health,
-      providerMetrics, exposureByProvider, exposureByBu, exposureByCategory, riskRegister,
+      partnerMetrics, exposureByPartner, exposureByBu, exposureByCategory, riskRegister,
       auditHealth, incidents, agents, customers, deltas, insights,
       exporter: {
-        exposure: (key: 'provider' | 'businessUnit' | 'category') => {
-          const rows = key === 'provider' ? exposureByProvider : key === 'businessUnit' ? exposureByBu : exposureByCategory;
+        exposure: (key: 'partner' | 'businessUnit' | 'category') => {
+          const rows = key === 'partner' ? exposureByPartner : key === 'businessUnit' ? exposureByBu : exposureByCategory;
           downloadCsv(`exposure_by_${key}.csv`, exposureHeaders, rows.map(r => [r.name, r.value, r.count]));
         },
-        providers: () => downloadCsv('vendor_scorecard.csv', providerHeaders, providerMetrics.map(r => [r.provider, r.sla.toFixed(1), r.active, r.closed, r.mttr, r.reopen, r.satisfaction])),
-        risk: () => downloadCsv('risk_register.csv', riskHeaders, riskRegister.map(r => [r.id, r.customerName, r.provider, r.businessUnit, r.priority, r.amount, r.riskScore])),
+        partners: () => downloadCsv('partner_scorecard.csv', partnerHeaders, partnerMetrics.map(r => [r.partner, r.sla.toFixed(1), r.active, r.closed, r.mttr, r.reopen, r.satisfaction])),
+        risk: () => downloadCsv('risk_register.csv', riskHeaders, riskRegister.map(r => [r.id, r.customerName, r.partner, r.businessUnit, r.priority, r.amount, r.riskScore])),
         agents: () => downloadCsv('agent_performance.csv', agentHeaders, agents.map(a => [a.agent, a.active, a.closed, a.resolved, a.escalated, a.slaPercent.toFixed(1), a.satisfaction])),
         customers: () => downloadCsv('customer_impact.csv', customerHeaders, customers.map(c => [c.customer, c.count, c.open, c.closed, c.exposure])),
       },
     };
-  }, [tickets, providers, auditLogs, majorIncidents, now]);
+  }, [tickets, partners, auditLogs, majorIncidents, now]);
 
   const reports: ReportCard[] = useMemo(() => [
     {
@@ -126,21 +125,21 @@ export default function ReportsTab() {
       id: 'exposure',
       icon: <Wallet className="w-5 h-5" />,
       title: 'Financial Exposure Report',
-      description: 'Open dispute value split by provider, business unit and category with at-risk exposure.',
+      description: 'Open dispute value split by partner, business unit and category with at-risk exposure.',
       stats: [
         { label: 'Total Exposure', value: formatCurrencyCompact(data.totalExposure) },
         { label: 'At Risk', value: formatCurrencyCompact(data.atRiskExposure) },
         { label: 'Open', value: `${data.active.length}` },
       ],
-      onExport: () => { data.exporter.exposure('provider'); showToast('Exposure by provider exported.', 'success'); },
+      onExport: () => { data.exporter.exposure('partner'); showToast('Exposure by partner exported.', 'success'); },
     },
     {
       id: 'vendor',
       icon: <Handshake className="w-5 h-5" />,
-      title: 'Provider / Vendor Scorecard',
-      description: 'SLA %, MTTR, reopen ratio and CSAT ranked per provider.',
-      stats: data.providerMetrics.map(p => ({ label: p.provider, value: `${p.sla.toFixed(0)}%` })),
-      onExport: () => { data.exporter.providers(); showToast('Vendor scorecard exported.', 'success'); },
+      title: 'Partner / Vendor Scorecard',
+      description: 'SLA %, MTTR, reopen ratio and CSAT ranked per partner.',
+      stats: data.partnerMetrics.map(p => ({ label: p.partner, value: `${p.sla.toFixed(0)}%` })),
+      onExport: () => { data.exporter.partners(); showToast('Partner scorecard exported.', 'success'); },
     },
     {
       id: 'throughput',
@@ -164,7 +163,7 @@ export default function ReportsTab() {
         { label: 'Linked Tickets', value: `${data.incidents.reduce((s, i) => s + i.linkedTickets.length, 0)}` },
         { label: 'Total MI', value: `${majorIncidents.length}` },
       ],
-      onExport: () => { downloadCsv('major_incidents.csv', ['Incident', 'Provider', 'Severity', 'Status', 'Linked Tickets'], data.incidents.map(i => [i.incident.name, i.incident.provider, i.incident.severity, i.incident.status, i.linkedTickets.length])); showToast('Incident report exported.', 'success'); },
+      onExport: () => { downloadCsv('major_incidents.csv', ['Incident', 'Partner', 'Severity', 'Status', 'Linked Tickets'], data.incidents.map(i => [i.incident.name, i.incident.partner, i.incident.severity, i.incident.status, i.linkedTickets.length])); showToast('Incident report exported.', 'success'); },
     },
     {
       id: 'audit',
@@ -210,7 +209,7 @@ export default function ReportsTab() {
       id: 'briefing',
       icon: <Sparkles className="w-5 h-5" />,
       title: 'Executive Briefing & Insights',
-      description: 'Rule-based narrative of risks, provider performance and period momentum.',
+      description: 'Rule-based narrative of risks, partner performance and period momentum.',
       stats: [
         { label: 'Insights', value: `${data.insights.length}` },
         { label: 'Critical Alerts', value: `${data.insights.filter(i => i.type === 'error').length}` },

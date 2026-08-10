@@ -90,7 +90,13 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
         }
       }
     };
-    load('4c_tickets', setTickets);
+    load('4c_tickets', (parsed: TicketRecord[]) => {
+      setTickets(parsed.map(t => ({
+        ...t,
+        partner: (t as TicketRecord & { provider?: string }).provider ?? (t as TicketRecord & { partner?: string }).partner ?? '',
+        submittedBy: (t as { submittedBy?: string }).submittedBy === 'PARTNER' ? 'CUSTOMER' : ((t as { submittedBy?: string }).submittedBy as 'BU_SUPPORT' | 'CUSTOMER' | undefined || 'BU_SUPPORT'),
+      })));
+    });
     load('4c_comments', setComments);
     load('4c_audit', setAuditLogs);
     load('4c_major_incidents', setMajorIncidents);
@@ -225,13 +231,13 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     if (currentRole === UserRole.SUPER_ADMIN || currentRole === UserRole.EXECUTIVE) {
       return source;
     }
-  if (currentRole === UserRole.PROVIDER) {
+  if (currentRole === UserRole.PARTNER) {
     const bu = currentUser.bu.toLowerCase();
     return source.filter(t => {
-      const provider = t.provider.toLowerCase();
+      const partner = t.partner.toLowerCase();
       const agent = t.assignedAgentId?.toLowerCase() || '';
       return (
-        provider === bu ||
+        partner === bu ||
         agent === bu ||
         agent.startsWith(bu + ' ')
       );
@@ -262,7 +268,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       customerLastName: ticketData.customerLastName,
       customerId: ticketData.customerId,
       businessUnit: ticketData.businessUnit || currentUser.bu,
-      provider: ticketData.provider || 'Parkway',
+      partner: ticketData.partner || 'Parkway',
       category: ticketData.category || 'Failed Payment',
       priority: (ticketData.priority as TicketPriority) || TicketPriority.HIGH,
       status: TicketStatus.ASSIGNED,
@@ -273,7 +279,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       slaDeadline: deadlineDate.toISOString(),
       isEscalated: false,
       escalationCount: 0,
-      assignedAgentId: `${ticketData.provider || 'Parkway'} Provider Team`,
+      assignedAgentId: `${ticketData.partner || 'Parkway'} Partner Team`,
       majorIncidentId: null,
       feedbackScore: null,
       feedbackComment: null,

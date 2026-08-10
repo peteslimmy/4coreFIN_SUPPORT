@@ -17,7 +17,7 @@ export class AppDB extends Dexie {
   roles!: Dexie.Table<any, string>;
   savedReplies!: Dexie.Table<any, string>;
   businessUnits!: Dexie.Table<any, string>;
-  providers!: Dexie.Table<any, string>;
+  partners!: Dexie.Table<any, string>;
   paymentChannels!: Dexie.Table<any, string>;
   categories!: Dexie.Table<any, string>;
   notificationConfigs!: Dexie.Table<any, string>;
@@ -61,6 +61,36 @@ export class AppDB extends Dexie {
     });
     this.version(2).stores({
       paymentChannels: 'id',
+    });
+    this.version(3).stores({
+      tickets: 'id, businessUnit, status, priority, createdAt, tenantId',
+      comments: 'id, ticketId, timestamp',
+      auditLogs: 'id, timestamp, ticketId',
+      majorIncidents: 'id, createdAt, status',
+      watcherNotifications: 'id, recipient, timestamp',
+      users: 'id, email, role, bu',
+      slaRules: 'id, category, priority',
+      holidays: 'id, date',
+      ticketTemplates: 'id, category',
+      kbArticles: 'id, category, partner',
+      customers: 'id, email, businessUnit',
+      evidence: 'id, ticketId, uploadedAt',
+      buFormConfigs: 'id, bu',
+      roles: 'id',
+      savedReplies: 'id',
+      businessUnits: 'id',
+      partners: 'id',
+      categories: 'id',
+      notificationConfigs: 'id',
+      escalationRules: 'id',
+      settings: 'key',
+      queryCache: 'key',
+      offlineMutations: 'id',
+    }).upgrade(async (tx) => {
+      await tx.table('providers').toCollection().each(async (row: any) => {
+        await tx.table('partners').put(row);
+      });
+      await tx.table('providers').clear();
     });
   }
 }

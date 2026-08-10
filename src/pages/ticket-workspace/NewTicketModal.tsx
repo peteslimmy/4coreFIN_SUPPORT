@@ -10,7 +10,7 @@ import { useApp } from '../../context/AppContext';
 
 export interface NewTicketFormState {
   customerName: string; customerEmail: string; customerPhone: string; customerId?: string;
-  provider: string; category: string; priority: TicketPriority;
+  partner: string; category: string; priority: TicketPriority;
   amount: string; transactionId: string; description: string;
 }
 
@@ -25,7 +25,7 @@ interface NewTicketModalProps {
 }
 
 export default function NewTicketModal({ isOpen, onClose, form, setForm, errors, setErrors, onSubmit }: NewTicketModalProps) {
-  const { providers, categories, customers } = useApp();
+  const { partners, categories, customers } = useApp();
   const [customerQuery, setCustomerQuery] = useState('');
   const [pickerOpen, setPickerOpen] = useState(false);
 
@@ -127,11 +127,11 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <Select
-            label="Provider"
-            value={form.provider}
-            onChange={(e) => setForm(prev => ({ ...prev, provider: e.target.value }))}
-            options={providers.map(p => ({ value: p, label: p }))}
-            placeholder="Select provider"
+            label="Partner"
+            value={form.partner}
+            onChange={(e) => setForm(prev => ({ ...prev, partner: e.target.value }))}
+            options={partners.map(p => ({ value: p, label: p }))}
+            placeholder="Select partner"
           />
           <Select
             label="Issue Category"

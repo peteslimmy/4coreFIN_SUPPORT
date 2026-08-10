@@ -116,7 +116,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
             <span className="flex items-center gap-1.5 text-xs text-text-muted min-w-0">
               <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
               <span className="truncate">
-                Owner: <strong className="font-semibold text-text-primary">{activeTicket.provider}</strong>
+                Owner: <strong className="font-semibold text-text-primary">{activeTicket.partner}</strong>
                 {activeTicket.assignedAgentId && <span className="text-text-muted"> · {activeTicket.assignedAgentId}</span>}
               </span>
             </span>
@@ -177,7 +177,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="bg-error/5 border-b border-error/15 px-5 py-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-error shrink-0" />
-                  <span className="text-xs font-bold text-error uppercase tracking-wider">{activeTicket.provider} Provider Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
+                  <span className="text-xs font-bold text-error uppercase tracking-wider">{activeTicket.partner} Partner Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
                 </div>
               </div>
             );
@@ -210,8 +210,8 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
                 <p className="text-body-sm font-semibold text-text-primary">{new Date(activeTicket.createdAt).toLocaleDateString()}</p>
               </div>
               <div>
-                <p className="text-caption text-text-muted font-medium mb-1">Provider</p>
-                <p className="text-body-sm font-semibold text-text-primary">{activeTicket.provider}</p>
+                <p className="text-caption text-text-muted font-medium mb-1">Partner</p>
+                <p className="text-body-sm font-semibold text-text-primary">{activeTicket.partner}</p>
               </div>
             </div>
             {activeTicket.customFields && Object.keys(activeTicket.customFields).length > 0 && (
@@ -255,7 +255,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
           onSendToEveryone={onSendToEveryone}
         />
 
-        {activeTicket.status !== TicketStatus.RESOLVED && activeTicket.status !== TicketStatus.CLOSED && currentRole === UserRole.PROVIDER && (
+        {activeTicket.status !== TicketStatus.RESOLVED && activeTicket.status !== TicketStatus.CLOSED && currentRole === UserRole.PARTNER && (
           <div className="space-y-6">
             {activeTicket.status === TicketStatus.RECEIPT ? (
               <div className="bg-surface-elevated rounded-xl p-6">
@@ -286,7 +286,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
                 </div>
                 <p className="text-xs text-text-muted leading-relaxed">Investigation is underway. Mark as resolved when findings are complete to proceed to the resolution declaration.</p>
                 <div className="flex justify-end">
-                  <button onClick={() => { setShowDeclareResolution(true); logAuditAction(activeTicket.id, 'PROVIDER_MARKED_RESOLVED', 'Provider marked investigation as resolved, proceeding to resolution declaration.'); }} className="px-5 py-2.5 bg-success hover:bg-success-dark text-white font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0 cursor-pointer"><CheckCircle className="w-4 h-4" /> Resolved</button>
+                  <button onClick={() => { setShowDeclareResolution(true); logAuditAction(activeTicket.id, 'PARTNER_MARKED_RESOLVED', 'Partner marked investigation as resolved, proceeding to resolution declaration.'); }} className="px-5 py-2.5 bg-success hover:bg-success-dark text-white font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0 cursor-pointer"><CheckCircle className="w-4 h-4" /> Resolved</button>
                 </div>
               </div>
             )}
@@ -345,7 +345,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
                     <button type="button" onClick={() => {
                       const content = [rcaForm.rootCause, rcaForm.contributingFactors, rcaForm.correctiveActions, rcaForm.preventiveActions].join('\n');
                       if (!content.trim()) { showToast('Fill in RCA first.', 'error'); return; }
-                      const newKb = { id: 'kb-' + Date.now(), title: `RCA: ${activeTicket.category}`, category: 'Resolution' as const, provider: activeTicket.provider, content, tags: ['rca-template', activeTicket.category, activeTicket.provider], lastUpdated: new Date().toISOString().split('T')[0] };
+                      const newKb = { id: 'kb-' + Date.now(), title: `RCA: ${activeTicket.category}`, category: 'Resolution' as const, partner: activeTicket.partner, content, tags: ['rca-template', activeTicket.category, activeTicket.partner], lastUpdated: new Date().toISOString().split('T')[0] };
                       setKbArticles(prev => [...prev, newKb]);
                       syncKbArticles([...kbArticles, newKb]);
                       showToast('Saved as template.', 'success');
@@ -363,7 +363,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="p-3 bg-accent rounded-lg text-white shrink-0"><UserCheck className="w-5 h-5" /></div>
               <div className="flex-1">
                 <h4 className="text-body-sm font-bold text-text-primary">Resolution Validation Required</h4>
-                <p className="text-xs text-text-muted mt-1 mb-4 leading-relaxed">Provider declared this resolved. Root Cause: <strong>{activeTicket.rootCause}</strong>. Validate and provide feedback.</p>
+                <p className="text-xs text-text-muted mt-1 mb-4 leading-relaxed">Partner declared this resolved. Root Cause: <strong>{activeTicket.rootCause}</strong>. Validate and provide feedback.</p>
                 <div className="space-y-3">
                   <div className="flex items-center gap-4">
                     <span className="text-xs font-semibold text-text-primary">Rating:</span>

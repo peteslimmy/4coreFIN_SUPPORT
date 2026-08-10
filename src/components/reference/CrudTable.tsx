@@ -74,7 +74,7 @@ async function syncCategorySla(category: string, slaHours: number): Promise<void
 }
 
 export default function CrudTable({ kind }: CrudTableProps) {
-  const { showToast, currentRole, setBusinessUnits, setBusinessUnitCodes, setProviders, setPaymentChannels, setCategories } = useApp();
+  const { showToast, currentRole, setBusinessUnits, setBusinessUnitCodes, setPartners, setPaymentChannels, setCategories } = useApp();
   const [items, setItems] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +98,8 @@ export default function CrudTable({ kind }: CrudTableProps) {
         setBusinessUnitCodes(Object.fromEntries((rows as Array<Record<string, unknown>>).map((u) => [String(u.name ?? ''), String(u.code ?? '')])));
       } else if (kind.kind === 'paymentChannels') {
         setPaymentChannels(rows.map((v) => String(v)));
-      } else if (kind.kind === 'providers') {
-        setProviders(rows.map((v) => String(v)));
+      } else if (kind.kind === 'partners') {
+        setPartners(rows.map((v) => String(v)));
       } else if (kind.kind === 'categories') {
         setCategories(rows as Array<Record<string, unknown>>);
       }
@@ -108,7 +108,7 @@ export default function CrudTable({ kind }: CrudTableProps) {
     } finally {
       setLoading(false);
     }
-  }, [kind.kind, setBusinessUnits, setBusinessUnitCodes, setPaymentChannels, setProviders, setCategories]);
+  }, [kind.kind, setBusinessUnits, setBusinessUnitCodes, setPaymentChannels, setPartners, setCategories]);
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount fetch

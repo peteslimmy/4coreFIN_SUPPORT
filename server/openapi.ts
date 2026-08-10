@@ -186,7 +186,7 @@ export const openApiSpec = {
                   customerPhone: { type: 'string' },
                   customerLastName: { type: 'string' },
                   businessUnit: { type: 'string' },
-                  provider: { type: 'string' },
+                  partner: { type: 'string' },
                   category: { type: 'string' },
                   priority: { type: 'string', enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
                   status: { type: 'string', enum: ['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED'] },
@@ -578,16 +578,16 @@ export const openApiSpec = {
         responses: { '200': { description: 'Business units updated' } },
       },
     },
-    '/providers': {
+    '/partners': {
       get: {
         tags: ['Config'],
-        summary: 'List providers',
-        responses: { '200': { description: 'Providers' } },
+        summary: 'List payment partners',
+        responses: { '200': { description: 'Payment partners' } },
       },
       put: {
         tags: ['Config'],
-        summary: 'Update providers',
-        responses: { '200': { description: 'Providers updated' } },
+        summary: 'Update payment partners',
+        responses: { '200': { description: 'Payment partners updated' } },
       },
     },
     '/categories': {

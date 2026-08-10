@@ -6,7 +6,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'comments:view', 'comments:create', 'comments:internal',
   'major-incidents:manage', 'customers:manage', 'notifications:view',
   'audit:view', 'audit:verify', 'reports:view', 'executive:dashboard',
-  'provider:rca', 'admin:config', 'admin:users', 'admin:forms', 'admin:access',
+  'partner:rca', 'admin:config', 'admin:users', 'admin:forms', 'admin:access',
   'admin:branding', 'admin:landing_page', 'admin:sla',
 ];
 
@@ -39,7 +39,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
     permissions: [
       { id: 'major-incidents:manage', label: 'Manage major incidents' },
       { id: 'customers:manage', label: 'Manage customers' },
-      { id: 'provider:rca', label: 'Submit root cause analysis' },
+      { id: 'partner:rca', label: 'Submit root cause analysis' },
     ],
   },
   {
@@ -100,16 +100,16 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     ],
   },
   {
-    id: 'PROVIDER',
-    name: 'Provider',
+    id: 'PARTNER',
+    name: 'Payment Partner',
     description: 'Handles assigned tickets and submits root cause analyses.',
     isSystem: true,
     buScoped: true,
-    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'provider:rca'],
+    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'partner:rca'],
   },
   {
-    id: 'PARTNER',
-    name: 'Partner',
+    id: 'CUSTOMER',
+    name: 'Customer',
     description: 'Files complaints on behalf of their business unit and tracks own tickets.',
     isSystem: true,
     buScoped: true,

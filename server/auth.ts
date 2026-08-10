@@ -438,21 +438,21 @@ export function requireRoles(...roles: string[]) {
   };
 }
 
-/** Scope tickets by tenant/provider for the authenticated user. */
+/** Scope tickets by tenant/partner for the authenticated user. */
 export function canAccessTicket(
   user: AuthUser,
-  ticket: { businessUnit?: string; business_unit?: string; provider?: string; assignedAgentId?: string }
+  ticket: { businessUnit?: string; business_unit?: string; partner?: string; provider?: string; assignedAgentId?: string }
 ): boolean {
   if (user.role === 'SUPER_ADMIN' || user.role === 'EXECUTIVE') return true;
   const bu = ticket.businessUnit || ticket.business_unit || '';
-  if (user.role === 'BU_SUPPORT' || user.role === 'PARTNER') {
+  if (user.role === 'BU_SUPPORT' || user.role === 'CUSTOMER') {
     return bu === user.bu || user.bu === 'ALL';
   }
-  if (user.role === 'PROVIDER') {
-    const provider = ticket.provider || '';
+  if (user.role === 'PARTNER') {
+    const partner = ticket.partner || ticket.provider || '';
     const agent = ticket.assignedAgentId || '';
     return (
-      provider.toLowerCase() === user.bu.toLowerCase() ||
+      partner.toLowerCase() === user.bu.toLowerCase() ||
       agent.toLowerCase() === user.bu.toLowerCase() ||
       agent.toLowerCase().startsWith(user.bu.toLowerCase() + ' ')
     );

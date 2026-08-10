@@ -9,7 +9,7 @@ import { broadcast } from './broadcast';
 /**
  * Return the tenant id that a user is restricted to, or null when the user
  * may read across all tenants (SUPER_ADMIN / EXECUTIVE / bu === 'ALL').
- * PROVIDER is scoped by provider name, not tenant (handled separately).
+ * PARTNER is scoped by partner name, not tenant (handled separately).
  */
 export function tenantScope(user: AuthUser): string | null {
   if (user.role === 'SUPER_ADMIN' || user.role === 'EXECUTIVE') return null;
@@ -17,8 +17,8 @@ export function tenantScope(user: AuthUser): string | null {
   return user.tenantId || '';
 }
 
-function isProvider(user: AuthUser): boolean {
-  return user.role === 'PROVIDER';
+function isPartner(user: AuthUser): boolean {
+  return user.role === 'PARTNER';
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -53,8 +53,8 @@ export async function listTickets(user: AuthUser, opts?: { includeDeleted?: bool
   const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
-    query = query.ilike('provider', user.bu);
+  } else if (isPartner(user)) {
+    query = query.ilike('partner', user.bu);
   }
   const { data, error } = await query;
   if (error || !data) return [];
@@ -79,8 +79,8 @@ export async function getScopedTicket(id: string, user: AuthUser): Promise<any |
   const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
-    query = query.ilike('provider', user.bu);
+  } else if (isPartner(user)) {
+    query = query.ilike('partner', user.bu);
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -105,7 +105,7 @@ export async function upsertTicket(ticket: any) {
     customerId: ticket.customerId || null,
     businessUnit: ticket.businessUnit,
     tenantId: ticket.tenantId || tenantIdForBu(ticket.businessUnit),
-    provider: ticket.provider,
+    partner: ticket.partner,
     category: ticket.category,
     issueType: ticket.category || '',
     priority: ticket.priority,
@@ -440,8 +440,8 @@ export async function listMajorIncidents(user?: AuthUser) {
     const tenantId = tenantScope(user);
     if (tenantId) {
       query = query.eq('tenant_id', tenantId);
-    } else if (isProvider(user)) {
-      query = query.ilike('provider', user.bu);
+    } else if (isPartner(user)) {
+      query = query.ilike('partner', user.bu);
     }
   }
   const { data, error } = await query;
@@ -449,26 +449,26 @@ export async function listMajorIncidents(user?: AuthUser) {
   return data.map(toCamel);
 }
 
-/** Resolve a major incident's tenant from a ticket sharing its provider. */
-async function majorIncidentTenantId(provider: string | undefined | null): Promise<string> {
-  if (!provider) return GLOBAL_TENANT_ID;
+/** Resolve a major incident's tenant from a ticket sharing its partner. */
+async function majorIncidentTenantId(partner: string | undefined | null): Promise<string> {
+  if (!partner) return GLOBAL_TENANT_ID;
   const { data } = await supabase
     .from('tickets')
     .select('tenant_id')
-    .ilike('provider', provider)
+    .ilike('partner', partner)
     .limit(1)
     .maybeSingle();
   return data?.tenant_id || GLOBAL_TENANT_ID;
 }
 
-/** Load a single major incident enforcing the user's scope (tenant or provider). */
+/** Load a single major incident enforcing the user's scope (tenant or partner). */
 export async function getScopedMajorIncident(id: string, user: AuthUser): Promise<any | null> {
   let query = supabase.from('major_incidents').select('*').eq('id', id);
   const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
-    query = query.ilike('provider', user.bu);
+  } else if (isPartner(user)) {
+    query = query.ilike('partner', user.bu);
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -476,13 +476,13 @@ export async function getScopedMajorIncident(id: string, user: AuthUser): Promis
 }
 
 export async function upsertMajorIncident(mi: any) {
-  const tenantId = mi.tenantId || (await majorIncidentTenantId(mi.provider));
+  const tenantId = mi.tenantId || (await majorIncidentTenantId(mi.partner));
   const row = toSnake({
     id: mi.id,
     tenantId,
     name: mi.name,
     description: mi.description || '',
-    provider: mi.provider || '',
+    partner: mi.partner || '',
     category: mi.category || '',
     severity: mi.severity || 'MEDIUM',
     active: !!mi.active,
@@ -505,7 +505,7 @@ export async function listCustomers(user: AuthUser) {
   const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
+  } else if (isPartner(user)) {
     query = query.eq('business_unit', user.bu);
   }
   const { data, error } = await query;
@@ -518,7 +518,7 @@ export async function listCustomers(user: AuthUser) {
     .eq('is_deleted', false);
   if (tenantId) {
     ticketQuery = ticketQuery.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
+  } else if (isPartner(user)) {
     ticketQuery = ticketQuery.eq('business_unit', user.bu);
   }
   const { data: tickets } = await ticketQuery;
@@ -564,13 +564,13 @@ export async function deleteCustomer(id: string) {
   if (error) throw new Error(`deleteCustomer failed: ${error.message}`);
 }
 
-/** Load a single customer enforcing the user's scope (tenant or provider). */
+/** Load a single customer enforcing the user's scope (tenant or partner). */
 export async function getScopedCustomer(id: string, user: AuthUser): Promise<any | null> {
   let query = supabase.from('customers').select('*').eq('id', id);
   const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
-  } else if (isProvider(user)) {
+  } else if (isPartner(user)) {
     query = query.eq('business_unit', user.bu);
   }
   const { data, error } = await query.single();
@@ -668,11 +668,11 @@ const tableMappers: Record<string, (row: any) => any> = {
   holidays: (r) => ({ id: r.id, name: r.name, date: r.date, country: r.country }),
   ticket_templates: (r) => ({
     id: r.id, name: r.name, description: r.description, category: r.category,
-    issueType: r.issue_type, priority: r.priority, provider: r.provider,
+    issueType: r.issue_type, priority: r.priority, partner: r.partner,
     amount: r.amount, ticketDescription: r.ticket_description,
   }),
   kb_articles: (r) => ({
-    id: r.id, title: r.title, category: r.category, provider: r.provider,
+    id: r.id, title: r.title, category: r.category, partner: r.partner,
     content: r.content, tags: r.tags, lastUpdated: r.last_updated,
   }),
 };
@@ -683,11 +683,11 @@ const tableInsertMappers: Record<string, (item: any) => any> = {
   ticket_templates: (i) => ({
     id: i.id, name: i.name, description: i.description || '', category: i.category,
     issue_type: i.issueType || i.issue_type, priority: i.priority || 'MEDIUM',
-    provider: i.provider || 'General', amount: i.amount || '',
+    partner: i.partner || 'General', amount: i.amount || '',
     ticket_description: i.ticketDescription || i.ticket_description || '',
   }),
   kb_articles: (i) => ({
-    id: i.id, title: i.title, category: i.category, provider: i.provider || 'General',
+    id: i.id, title: i.title, category: i.category, partner: i.partner || 'General',
     content: i.content || '', tags: i.tags || [], last_updated: i.lastUpdated || i.last_updated || '',
   }),
 };
@@ -829,11 +829,11 @@ export async function countTicketsByBu(bu: string): Promise<number> {
   return data.length;
 }
 
-export async function countTicketsByProvider(provider: string): Promise<number> {
+export async function countTicketsByPartner(partner: string): Promise<number> {
   const { data, error } = await supabase
     .from('tickets')
     .select('id')
-    .eq('provider', provider)
+    .eq('partner', partner)
     .eq('is_deleted', false);
   if (error || !data) return 0;
   return data.length;

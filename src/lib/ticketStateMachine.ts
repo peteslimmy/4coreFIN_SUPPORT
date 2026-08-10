@@ -66,7 +66,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'BEGIN_INVESTIGATION',
     label: 'Start Investigation',
     customerFacingLabel: 'In Review',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT, UserRole.PROVIDER],
+    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT, UserRole.PARTNER],
     canTransition: (t) => !!t.assignedAgentId,
   },
   {
@@ -75,7 +75,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'RESOLVE',
     label: 'Resolve',
     customerFacingLabel: 'Decision Made',
-    roles: [UserRole.SUPER_ADMIN, UserRole.PROVIDER],
+    roles: [UserRole.SUPER_ADMIN, UserRole.PARTNER],
     required: [
       (t) => !!t.rcaDetails?.rootCause && t.rcaDetails.rootCause.trim() !== '',
       (t) =>

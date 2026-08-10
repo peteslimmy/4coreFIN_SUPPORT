@@ -39,12 +39,16 @@ function runSql(query: string): Promise<any> {
 }
 
 async function fix() {
-  // Update CUSTOMER role to PARTNER
-  const r1 = await runSql("UPDATE users SET role = 'PARTNER' WHERE role = 'CUSTOMER'");
-  console.log('Update users:', r1.status, r1.status === 200 ? 'OK' : JSON.stringify(r1.data).substring(0, 100));
+  // Remap roles after the provider→partner rename.
+  // PROVIDER (old payment-partner role) → PARTNER.
+  // Old PARTNER (customer-style bu-scoped role) → CUSTOMER.
+  const r1 = await runSql("UPDATE users SET role = 'PARTNER' WHERE role = 'PROVIDER'");
+  console.log('Update users (PROVIDER->PARTNER):', r1.status, r1.status === 200 ? 'OK' : JSON.stringify(r1.data).substring(0, 100));
+  const r1b = await runSql("UPDATE users SET role = 'CUSTOMER' WHERE role = 'PARTNER'");
+  console.log('Update users (PARTNER->CUSTOMER):', r1b.status, r1b.status === 200 ? 'OK' : JSON.stringify(r1b.data).substring(0, 100));
 
   // Update submitted_by in tickets
-  const r2 = await runSql("UPDATE tickets SET submitted_by = 'PARTNER' WHERE submitted_by = 'CUSTOMER'");
+  const r2 = await runSql("UPDATE tickets SET submitted_by = 'PARTNER' WHERE submitted_by = 'PROVIDER'");
   console.log('Update tickets:', r2.status, r2.status === 200 ? 'OK' : JSON.stringify(r2.data).substring(0, 100));
 
   // Verify

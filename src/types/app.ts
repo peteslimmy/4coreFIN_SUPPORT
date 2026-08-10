@@ -15,10 +15,10 @@ export enum TicketPriority {
 
 export enum UserRole {
   BU_SUPPORT = 'BU_SUPPORT',
-  PROVIDER = 'PROVIDER',
+  PARTNER = 'PARTNER',
   EXECUTIVE = 'EXECUTIVE',
   SUPER_ADMIN = 'SUPER_ADMIN',
-  PARTNER = 'PARTNER'
+  CUSTOMER = 'CUSTOMER'
 }
 
 export interface TicketRecord {
@@ -29,7 +29,7 @@ export interface TicketRecord {
   customerLastName?: string;
   customerId?: string;
   businessUnit: string;
-  provider: string;
+  partner: string;
   category: string;
   priority: TicketPriority;
   status: TicketStatus;
@@ -49,7 +49,7 @@ export interface TicketRecord {
   correctiveAction?: string;
   watchers?: string[];
   isDeleted?: boolean;
-  submittedBy: 'BU_SUPPORT' | 'PARTNER';
+  submittedBy: 'BU_SUPPORT' | 'CUSTOMER';
   submittedByName?: string;
   submittedByPhone?: string;
   customFields?: Record<string, string | number | boolean>;
@@ -82,7 +82,7 @@ export interface MajorIncidentRecord {
   id: string;
   name: string;
   description: string;
-  provider: string;
+  partner: string;
   category: string;
   severity: string;
   active: boolean;

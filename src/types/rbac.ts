@@ -18,7 +18,7 @@ export type Permission =
   | 'audit:verify'
   | 'reports:view'
   | 'executive:dashboard'
-  | 'provider:rca'
+  | 'partner:rca'
   | 'admin:config'
   | 'admin:users'
   | 'admin:forms'

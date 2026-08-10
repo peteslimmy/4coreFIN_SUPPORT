@@ -15,7 +15,7 @@ const baseTicket = (over: Partial<TicketRecord> = {}): TicketRecord => ({
   customerName: 'Ada',
   customerEmail: 'ada@4core.com',
   businessUnit: 'General',
-  provider: 'Parkway',
+  partner: 'Parkway',
   category: 'Duplicate Debit',
   priority: 'MEDIUM' as TicketRecord['priority'],
   status: TicketStatus.RECEIPT,
@@ -87,31 +87,31 @@ describe('ticketStateMachine', () => {
     const unassigned = baseTicket({ status: TicketStatus.ASSIGNED, assignedAgentId: '' });
     const assigned = baseTicket({ status: TicketStatus.ASSIGNED, assignedAgentId: 'a-1' });
     expect(
-      getAvailableTransitions(unassigned, UserRole.PROVIDER).some(r => r.to === TicketStatus.INVESTIGATE)
+      getAvailableTransitions(unassigned, UserRole.PARTNER).some(r => r.to === TicketStatus.INVESTIGATE)
     ).toBe(false);
     expect(
-      getAvailableTransitions(assigned, UserRole.PROVIDER).some(r => r.to === TicketStatus.INVESTIGATE)
+      getAvailableTransitions(assigned, UserRole.PARTNER).some(r => r.to === TicketStatus.INVESTIGATE)
     ).toBe(true);
   });
 
   it('resolve is role-allowed but blocked by incomplete RCA', () => {
     const incomplete = baseTicket({ status: TicketStatus.INVESTIGATE });
-    // PROVIDER is permitted to resolve by role...
-    expect(canTransition(incomplete, TicketStatus.RESOLVED, UserRole.PROVIDER)).toBe(true);
+    // PARTNER is permitted to resolve by role...
+    expect(canTransition(incomplete, TicketStatus.RESOLVED, UserRole.PARTNER)).toBe(true);
     // ...but the data is incomplete, so applying it throws REQUIRES_FIELDS.
     expect(incomplete.rcaDetails).toBeFalsy();
-    expect(() => applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PROVIDER)).toThrow(
+    expect(() => applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PARTNER)).toThrow(
       TransitionError
     );
     try {
-      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PROVIDER);
+      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PARTNER);
     } catch (e) {
       expect((e as TransitionError).code).toBe('REQUIRES_FIELDS');
     }
 
     const complete = fullRcaTicket();
-    expect(canTransition(complete, TicketStatus.RESOLVED, UserRole.PROVIDER)).toBe(true);
-    const resolved = applyTransition(complete, TicketStatus.RESOLVED, UserRole.PROVIDER);
+    expect(canTransition(complete, TicketStatus.RESOLVED, UserRole.PARTNER)).toBe(true);
+    const resolved = applyTransition(complete, TicketStatus.RESOLVED, UserRole.PARTNER);
     expect(resolved.status).toBe(TicketStatus.RESOLVED);
     expect(resolved.rcaDetails?.resolvedAt).toBeTruthy();
   });
@@ -135,9 +135,9 @@ describe('ticketStateMachine', () => {
     ).toBe(TicketStatus.CLOSED);
   });
 
-  it('providers cannot close directly', () => {
+  it('partners cannot close directly', () => {
     const withFeedback = fullRcaTicket({ status: TicketStatus.RESOLVED, feedbackScore: 4 });
-    expect(canTransition(withFeedback, TicketStatus.CLOSED, UserRole.PROVIDER)).toBe(false);
+    expect(canTransition(withFeedback, TicketStatus.CLOSED, UserRole.PARTNER)).toBe(false);
   });
 
   it('reject-and-reopen escalates the ticket', () => {
@@ -184,10 +184,10 @@ describe('ticketStateMachine', () => {
   it('throws TransitionError (REQUIRES_FIELDS) when RCA is incomplete', () => {
     const incomplete = baseTicket({ status: TicketStatus.INVESTIGATE });
     expect(() =>
-      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PROVIDER)
+      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PARTNER)
     ).toThrow(TransitionError);
     try {
-      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PROVIDER);
+      applyTransition(incomplete, TicketStatus.RESOLVED, UserRole.PARTNER);
     } catch (e) {
       expect((e as TransitionError).code).toBe('REQUIRES_FIELDS');
     }

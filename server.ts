@@ -336,7 +336,7 @@ Analyze the incident. Map it to one of the available Categories and one of its c
 Ticket ID: ${ticketDetails.id}
 Category: ${ticketDetails.category}
 Sub-type: ${ticketDetails.issueType}
-Provider: ${ticketDetails.provider}
+Partner: ${ticketDetails.partner || ticketDetails.provider}
 Business Unit: ${ticketDetails.bu}
 Description: ${ticketDetails.description}
 

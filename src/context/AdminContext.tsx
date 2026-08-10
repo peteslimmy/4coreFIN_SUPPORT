@@ -14,8 +14,8 @@ export interface AdminDomain {
   setBusinessUnits: Dispatch<SetStateAction<string[]>>;
   businessUnitCodes: Record<string, string>;
   setBusinessUnitCodes: Dispatch<SetStateAction<Record<string, string>>>;
-  providers: string[];
-  setProviders: Dispatch<SetStateAction<string[]>>;
+  partners: string[];
+  setPartners: Dispatch<SetStateAction<string[]>>;
   paymentChannels: string[];
   setPaymentChannels: Dispatch<SetStateAction<string[]>>;
   categories: CategoryRecord[];
@@ -50,8 +50,8 @@ const [users, setUsers] = useState<UserRecord[]>([]);
     }
     return [];
   });
-  const [providers, setProviders] = useState<string[]>(() => {
-    const provRaw = localStorage.getItem('4c_providers');
+  const [partners, setPartners] = useState<string[]>(() => {
+    const provRaw = localStorage.getItem('4c_partners') ?? localStorage.getItem('4c_providers');
     if (provRaw !== null) {
       try {
         return JSON.parse(provRaw);
@@ -112,7 +112,7 @@ const [users, setUsers] = useState<UserRecord[]>([]);
     load('4c_holidays', setHolidays);
     load('4c_ticket_templates', setTicketTemplates);
     load('4c_business_units', setBusinessUnits);
-    load('4c_providers', setProviders);
+    load('4c_partners', setPartners);
     load('4c_payment_channels', setPaymentChannels);
     load('4c_categories', setCategories);
     load('4c_business_unit_codes', setBusinessUnitCodes);
@@ -125,7 +125,7 @@ const [users, setUsers] = useState<UserRecord[]>([]);
     ticketTemplates, setTicketTemplates,
     businessUnits, setBusinessUnits,
     businessUnitCodes, setBusinessUnitCodes,
-    providers, setProviders,
+    partners, setPartners,
     paymentChannels, setPaymentChannels,
     categories, setCategories,
   };

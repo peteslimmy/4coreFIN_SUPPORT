@@ -29,7 +29,7 @@ export interface TicketTemplate {
   description: string;
   category: string;
   priority: TicketPriority;
-  provider: string;
+  partner: string;
   amount: string;
   ticketDescription: string;
 }
@@ -38,7 +38,7 @@ export interface KbArticle {
   id: string;
   title: string;
   category: 'Playbook' | 'Resolution' | 'Known Issue';
-  provider: string; // 'Parkway' | 'PayPal' | 'Adyen' | 'Braintree' | 'General'
+  partner: string; // 'Parkway' | 'PayPal' | 'Adyen' | 'Braintree' | 'General'
   content: string;
   tags: string[];
   lastUpdated: string;

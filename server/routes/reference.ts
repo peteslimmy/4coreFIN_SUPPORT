@@ -22,7 +22,7 @@ import {
   updateConfigItem,
   removeConfigItem,
   countTicketsByBu,
-  countTicketsByProvider,
+  countTicketsByPartner,
   countTicketsByCategory,
   countUsersByBu,
   listUsersPublic,
@@ -70,13 +70,13 @@ const KINDS: Record<string, KindDef> = {
     schema: z.string().min(1).trim(),
     idOf: (i) => String(i),
   },
-  providers: {
+  partners: {
     storage: 'config',
     label: 'Payment Partner',
     schema: z.string().min(1).trim(),
     idOf: (i) => String(i),
     checkDelete: async (id) => {
-      const tickets = await countTicketsByProvider(id);
+      const tickets = await countTicketsByPartner(id);
       return tickets > 0 ? { referencedBy: { tickets } } : null;
     },
   },
@@ -150,7 +150,7 @@ const KINDS: Record<string, KindDef> = {
       category: z.string().min(1).trim(),
       issueType: z.string().optional(),
       priority: z.string().optional().default('MEDIUM'),
-      provider: z.string().optional().default('General'),
+      partner: z.string().optional().default('General'),
       amount: z.union([z.string(), z.number()]).optional().default(''),
       ticketDescription: z.string().optional().default(''),
     }),

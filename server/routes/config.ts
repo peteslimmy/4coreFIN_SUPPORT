@@ -10,7 +10,7 @@ import { getDefaultBuFormConfigs, mergeConfigs } from '../../src/lib/formConfigs
 import { businessUnitNames } from '../../src/lib/buCodes';
 
 const CONFIG_TABLES = ['sla_rules', 'holidays', 'ticket_templates', 'kb_articles'];
-const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'providers', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules'];
+const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'partners', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules'];
 
 export function createConfigRouter(): Router {
   const router = Router();
@@ -188,13 +188,13 @@ export function createConfigRouter(): Router {
     res.json(req.body);
   });
 
-  router.get('/providers', requireAuth, async (_req: AuthedRequest, res: Response) => {
-    const providers: any[] = await getConfig('providers', []);
-    res.json(providers);
+  router.get('/partners', requireAuth, async (_req: AuthedRequest, res: Response) => {
+    const partners: any[] = await getConfig('partners', []);
+    res.json(partners);
   });
 
-  router.put('/providers', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
-    await setConfig('providers', req.body);
+  router.put('/partners', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+    await setConfig('partners', req.body);
     res.json(req.body);
   });
 
