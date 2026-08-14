@@ -1,6 +1,13 @@
 export { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, getTicketStatusStep, normalizeStatus } from './ticketStateMachine';
 
 /**
+ * Merge class names conditionally using clsx.
+ */
+export function cn(...classes: (string | undefined | false)[]): string {
+  return classes.filter(Boolean).join(' ');
+}
+
+/**
  * Format a number as Nigerian Naira currency.
  * @param amount - The amount in Naira (e.g., 1250000)
  * @returns Formatted string like "₦1,250,000.00"

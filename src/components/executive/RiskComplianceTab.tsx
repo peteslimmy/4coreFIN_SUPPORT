@@ -93,7 +93,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
   const heatColor = (v: number) => `rgba(59, 130, 246, ${0.08 + (v / heatMax) * 0.85})`;
 
   const exportRiskCsv = () => {
-    const headers = ['Ticket', 'Customer', 'Partner', 'Business Unit', 'Category', 'Priority', 'Status', 'Amount', 'Age', 'SLA Remaining', 'Risk Score'];
+    const headers = ['Ticket', 'Customer', 'Payment Partner', 'Business Unit', 'Category', 'Priority', 'Status', 'Amount', 'Age', 'SLA Remaining', 'Risk Score'];
     const rows = riskRegister.map(r => [r.id, r.customerName, r.partner, r.businessUnit, r.category, r.priority, r.status, r.amount, formatHours(r.ageHours), formatHours(r.slaRemainingHours), r.riskScore]);
     const csv = "data:text/csv;charset=utf-8," + [headers, ...rows].map(r => r.join(',')).join('\n');
     const link = document.createElement("a");
@@ -111,7 +111,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
       subtitle: t.customerName,
       context: 'risk',
       rows: [
-        { label: 'Partner', value: t.partner },
+        { label: 'Payment Partner', value: t.partner },
         { label: 'Business Unit', value: t.businessUnit },
         { label: 'Category', value: t.category },
         { label: 'Priority', value: t.priority },
@@ -128,7 +128,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
   const riskTableColumns = [
     { key: 'id', header: 'Ticket', sortable: true, render: (r: RiskRow) => <span className="font-mono font-bold text-text-primary">{r.id}</span> },
     { key: 'customerName', header: 'Customer', sortable: true, render: (r: RiskRow) => <span className="text-text-secondary">{r.customerName}</span> },
-    { key: 'partner', header: 'Partner', sortable: true, render: (r: RiskRow) => <span>{r.partner}</span> },
+    { key: 'partner', header: 'Payment Partner', sortable: true, render: (r: RiskRow) => <span>{r.partner}</span> },
     { key: 'priority', header: 'Priority', sortable: true, render: (r: RiskRow) => (
       <span className={`font-mono text-caption font-bold ${r.priority === 'CRITICAL' ? 'text-error' : r.priority === 'HIGH' ? 'text-warning' : 'text-text-muted'}`}>{r.priority}</span>
     )},
@@ -395,11 +395,11 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
         </div>
       </div>
 
-      {/* BU × Partner heatmap */}
+      {/* BU × Payment Partner heatmap */}
       <div className="bg-surface-elevated rounded-xl border border-border-subtle p-5 shadow-sm">
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide flex items-center gap-2">
-            <UsersIcon className="w-4 h-4 text-primary" /> Business Unit × Partner Heatmap
+            <UsersIcon className="w-4 h-4 text-primary" /> Business Unit × Payment Partner Heatmap
           </h3>
           <div className="flex gap-1">
             {(['INCIDENTS', 'BREACHES'] as const).map(m => (
@@ -432,7 +432,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
                         context: 'risk',
                         rows: [
                           { label: 'Business Unit', value: bu },
-                          { label: 'Partner', value: p },
+                          { label: 'Payment Partner', value: p },
                           { label: heatMapMetric, value: `${v}` },
                         ],
                       })}

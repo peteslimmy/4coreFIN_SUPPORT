@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, CategoryRecord } from '../types/admin';
 
 export interface AdminDomain {
@@ -118,7 +118,7 @@ const [users, setUsers] = useState<UserRecord[]>([]);
     load('4c_business_unit_codes', setBusinessUnitCodes);
   }, []);
 
-  const value: AdminDomain = {
+  const value: AdminDomain = useMemo(() => ({
     users, setUsers,
     slaRules, setSlaRules,
     holidays, setHolidays,
@@ -128,7 +128,7 @@ const [users, setUsers] = useState<UserRecord[]>([]);
     partners, setPartners,
     paymentChannels, setPaymentChannels,
     categories, setCategories,
-  };
+  }), [users, slaRules, holidays, ticketTemplates, businessUnits, businessUnitCodes, partners, paymentChannels, categories]);
 
   return value;
 }

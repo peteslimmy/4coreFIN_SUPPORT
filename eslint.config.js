@@ -33,6 +33,7 @@ export default tseslint.config(
             'AppShellContext', 'useAppShell', 'useAppShellDomain', 'defaultUser',
             'TicketContext', 'useTicketContext', 'useTicketDomain',
             'ToastContext', 'useToast',
+            'UiContext', 'useUi',
           ],
         },
       ],

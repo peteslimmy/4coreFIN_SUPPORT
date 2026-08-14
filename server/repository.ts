@@ -14,11 +14,17 @@ import { broadcast } from './broadcast';
 export function tenantScope(user: AuthUser): string | null {
   if (user.role === 'SUPER_ADMIN' || user.role === 'EXECUTIVE') return null;
   if (user.bu === 'ALL') return null;
+  if (isPartner(user)) return null;
   return user.tenantId || '';
 }
 
 function isPartner(user: AuthUser): boolean {
   return user.role === 'PARTNER';
+}
+
+/** The payment-partner name for an account, from the partner column or legacy `bu`. */
+export function partnerNameFor(user: AuthUser): string {
+  return (user.partner || user.bu || '').toLowerCase();
 }
 
 // ─── Helpers ───────────────────────────────────────────────────────────
@@ -54,7 +60,7 @@ export async function listTickets(user: AuthUser, opts?: { includeDeleted?: bool
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', user.bu);
+    query = query.ilike('partner', partnerNameFor(user));
   }
   const { data, error } = await query;
   if (error || !data) return [];
@@ -80,7 +86,7 @@ export async function getScopedTicket(id: string, user: AuthUser): Promise<any |
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', user.bu);
+    query = query.ilike('partner', partnerNameFor(user));
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -96,6 +102,7 @@ export async function getTicket(id: string, user: AuthUser, unmask = false): Pro
 }
 
 export async function upsertTicket(ticket: any) {
+  const tenantId = ticket.tenantId || (await ensureTenantForBu(ticket.businessUnit));
   const row = toSnake({
     id: ticket.id,
     customerName: ticket.customerName || '',
@@ -104,8 +111,8 @@ export async function upsertTicket(ticket: any) {
     customerLastName: ticket.customerLastName || '',
     customerId: ticket.customerId || null,
     businessUnit: ticket.businessUnit,
-    tenantId: ticket.tenantId || tenantIdForBu(ticket.businessUnit),
-    partner: ticket.partner,
+    tenantId,
+    partner: ticket.partner || '',
     category: ticket.category,
     issueType: ticket.category || '',
     priority: ticket.priority,
@@ -441,7 +448,7 @@ export async function listMajorIncidents(user?: AuthUser) {
     if (tenantId) {
       query = query.eq('tenant_id', tenantId);
     } else if (isPartner(user)) {
-      query = query.ilike('partner', user.bu);
+      query = query.ilike('partner', partnerNameFor(user));
     }
   }
   const { data, error } = await query;
@@ -468,7 +475,7 @@ export async function getScopedMajorIncident(id: string, user: AuthUser): Promis
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', user.bu);
+    query = query.ilike('partner', partnerNameFor(user));
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -718,17 +725,31 @@ export async function replaceJsonTable(table: string, items: any[]) {
 
 // ─── Users ─────────────────────────────────────────────────────────────
 
+export async function ensureTenantForBu(bu: string | undefined | null): Promise<string> {
+  const tenantId = tenantIdForBu(bu);
+  if (tenantId === GLOBAL_TENANT_ID) return tenantId;
+  const name = String(bu ?? '').trim().toUpperCase() || tenantId;
+  const { error } = await supabase
+    .from('tenants')
+    .upsert({ id: tenantId, name, business_units: [String(bu ?? '').trim()] }, { onConflict: 'id' });
+  if (error) throw new Error(`ensureTenantForBu failed: ${error.message}`);
+  return tenantId;
+}
+
 export async function listUsersPublic() {
-  const { data, error } = await supabase.from('users').select('id, name, email, role, bu, phone, tenant_id').order('name');
+  const { data, error } = await supabase.from('users').select('id, name, email, role, bu, partner, account_type, phone, tenant_id, is_active').order('name');
   if (error || !data) return [];
   return data.map((u) => ({
     id: u.id,
     name: u.name,
     email: u.email,
     role: u.role,
-    bu: u.bu,
+    bu: u.bu || '',
+    partner: u.partner || '',
+    accountType: u.account_type || (u.role === 'PARTNER' ? 'PARTNER' : 'BU'),
     phone: u.phone || '',
     tenantId: u.tenant_id || '',
+    isActive: u.is_active !== false,
   }));
 }
 
@@ -738,22 +759,31 @@ export async function upsertUser(user: {
   email?: string;
   role?: string;
   bu?: string;
+  partner?: string;
+  accountType?: string;
   phone?: string;
   passwordHash?: string;
   authUserId?: string | null;
   tenantId?: string;
   mustChangePassword?: boolean;
+  isActive?: boolean;
+  activationToken?: string;
+  activatedAt?: string;
 }) {
   const row: any = { id: user.id };
   if (user.name !== undefined) row.name = user.name;
   if (user.email !== undefined) row.email = user.email;
   if (user.role !== undefined) row.role = user.role;
   if (user.bu !== undefined) row.bu = user.bu;
+  if (user.partner !== undefined) row.partner = user.partner;
+  if (user.accountType !== undefined) row.account_type = user.accountType;
   if (user.phone !== undefined) row.phone = user.phone;
   if (user.tenantId !== undefined) {
     row.tenant_id = user.tenantId;
+  } else if (user.accountType === 'PARTNER') {
+    row.tenant_id = GLOBAL_TENANT_ID;
   } else if (user.bu !== undefined) {
-    row.tenant_id = tenantIdForBu(user.bu);
+    row.tenant_id = await ensureTenantForBu(user.bu);
   }
   if (user.passwordHash) {
     row.password_hash = user.passwordHash;
@@ -764,8 +794,17 @@ export async function upsertUser(user: {
   if (user.mustChangePassword !== undefined) {
     row.must_change_password = user.mustChangePassword;
   }
+  if (user.isActive !== undefined) {
+    row.is_active = user.isActive;
+  }
+  if (user.activationToken !== undefined) {
+    row.activation_token = user.activationToken;
+  }
+  if (user.activatedAt !== undefined) {
+    row.activated_at = user.activatedAt;
+  }
 
-  const isCompleteCreate = Boolean(user.name && user.email && user.role && user.bu && user.passwordHash);
+  const isCompleteCreate = Boolean(user.name && user.email && user.role && user.passwordHash && (user.bu || user.partner));
   if (isCompleteCreate) {
     // Create or full update: insert path also carries auth_user_id. Only used
     // when every NOT NULL column is present; partial updates of existing users
@@ -856,6 +895,25 @@ export async function countUsersByBu(bu: string): Promise<number> {
     .eq('bu', bu);
   if (error || !data) return 0;
   return data.length;
+}
+
+export async function countActiveTicketsByCategoryAndPriority(category: string, priority: string): Promise<number> {
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('id')
+    .eq('category', category)
+    .eq('priority', priority)
+    .eq('is_deleted', false);
+  if (error || !data) return 0;
+  return data.length;
+}
+
+export async function categoryExists(name: string): Promise<boolean> {
+  const items = await listConfigItems('categories', []);
+  return items.some((c: any) => {
+    const catName = typeof c === 'string' ? c : c?.name;
+    return String(catName ?? '').trim().toLowerCase() === name.trim().toLowerCase();
+  });
 }
 
 // ─── Reference data: app_config list manipulation ─────────────────────

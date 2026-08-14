@@ -20,6 +20,8 @@ import type {
 } from '../types/admin';
 import type { BuFormConfig } from '../types/forms';
 import type { Permission, RoleDefinition } from '../types/rbac';
+import type { EscalationRule } from '../types/reference';
+import type { NotificationConfig } from '../context/ConfigContext';
 
 /**
  * Auth hooks
@@ -35,7 +37,7 @@ export function useAuthMe(options?: UseQueryOptions<{ user: UserRecord & { name?
 /**
  * Ticket hooks
  */
-export function useTickets(filters?: Record<string, any>, options?: UseQueryOptions<TicketRecord[]>) {
+export function useTickets(filters?: Record<string, unknown>, options?: UseQueryOptions<TicketRecord[]>) {
   return useQuery({
     queryKey: queryKeys.tickets.all(filters),
     queryFn: () => api.listTickets(filters),
@@ -141,7 +143,7 @@ export function useCreateComment(options?: UseMutationOptions<CommentRecord, Err
 /**
  * Major Incident hooks
  */
-export function useMajorIncidents(filters?: Record<string, any>, options?: UseQueryOptions<MajorIncidentRecord[]>) {
+export function useMajorIncidents(filters?: Record<string, unknown>, options?: UseQueryOptions<MajorIncidentRecord[]>) {
   return useQuery({
     queryKey: queryKeys.majorIncidents.all(filters),
     queryFn: () => api.listMajorIncidents(filters),
@@ -185,7 +187,7 @@ export function useUpdateMajorIncident(options?: UseMutationOptions<MajorInciden
 /**
  * Customer hooks
  */
-export function useCustomers(filters?: Record<string, any>, options?: UseQueryOptions<CustomerRecord[]>) {
+export function useCustomers(filters?: Record<string, unknown>, options?: UseQueryOptions<CustomerRecord[]>) {
   return useQuery({
     queryKey: queryKeys.customers.all(filters),
     queryFn: () => api.listCustomers(filters),
@@ -414,23 +416,23 @@ export function useSavedReplies(options?: UseQueryOptions<string[]>) {
   });
 }
 
-export function useNotificationConfigs(options?: UseQueryOptions<any[]>) {
+export function useNotificationConfigs(options?: UseQueryOptions<NotificationConfig[]>) {
   return useQuery({
     queryKey: queryKeys.config.notificationConfigs(),
-    queryFn: () => api.getConfig('notificationConfigs', []),
+    queryFn: () => api.getConfig<NotificationConfig[]>('notificationConfigs', []),
     ...options,
   });
 }
 
-export function useEscalationRules(options?: UseQueryOptions<any[]>) {
+export function useEscalationRules(options?: UseQueryOptions<EscalationRule[]>) {
   return useQuery({
     queryKey: queryKeys.config.escalationRules(),
-    queryFn: () => api.getConfig('escalationRules', []),
+    queryFn: () => api.getConfig<EscalationRule[]>('escalationRules', []),
     ...options,
   });
 }
 
-export function useSettings(options?: UseQueryOptions<Record<string, any>>) {
+export function useSettings(options?: UseQueryOptions<Record<string, unknown>>) {
   return useQuery({
     queryKey: queryKeys.config.settings(),
     queryFn: () => api.getConfig('settings', {}),
@@ -477,28 +479,28 @@ export function useDeleteEvidence(options?: UseMutationOptions<void, Error, stri
 /**
  * AI hooks
  */
-export function useGeminiClassify(options?: UseMutationOptions<any, Error, { description: string; categories: any }>) {
+export function useGeminiClassify(options?: UseMutationOptions<unknown, Error, { description: string; categories: unknown }>) {
   return useMutation({
     mutationFn: ({ description, categories }) => api.geminiClassify(description, categories),
     ...options,
   });
 }
 
-export function useGeminiRca(options?: UseMutationOptions<any, Error, { ticketDetails: any }>) {
+export function useGeminiRca(options?: UseMutationOptions<unknown, Error, { ticketDetails: unknown }>) {
   return useMutation({
     mutationFn: ({ ticketDetails }) => api.geminiRca(ticketDetails),
     ...options,
   });
 }
 
-export function useGeminiChat(options?: UseMutationOptions<any, Error, { message: string; history: any[] }>) {
+export function useGeminiChat(options?: UseMutationOptions<unknown, Error, { message: string; history: unknown[] }>) {
   return useMutation({
     mutationFn: ({ message, history }) => api.geminiChat(message, history),
     ...options,
   });
 }
 
-export function useGeminiAnalyze(options?: UseMutationOptions<any, Error, any>) {
+export function useGeminiAnalyze(options?: UseMutationOptions<unknown, Error, unknown>) {
   return useMutation({
     mutationFn: (body) => api.geminiAnalyze(body),
     ...options,
@@ -508,13 +510,13 @@ export function useGeminiAnalyze(options?: UseMutationOptions<any, Error, any>) 
 /**
  * RBAC hooks
  */
-export function usePermissions(role: string): Permission[] {
+export function usePermissions(_role: string): Permission[] {
   // This would typically come from a query or context
   // For now, return empty array - implement based on your RBAC system
   return [];
 }
 
-export function useHasPermission(permission: Permission, role?: string): boolean {
+export function useHasPermission(_permission: Permission, _role?: string): boolean {
   // Implement based on your RBAC system
   return true;
 }
@@ -525,7 +527,7 @@ export function useHasPermission(permission: Permission, role?: string): boolean
 export function useUpdateConfig(key: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (value: any) => api.putConfig(key, value),
+    mutationFn: (value: unknown) => api.putConfig(key, value),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: queryKeys.config[key as keyof typeof queryKeys.config]?.() || ['config', key] });
     },

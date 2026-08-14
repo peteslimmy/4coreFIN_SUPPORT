@@ -270,7 +270,7 @@ describe('Config dispatcher — tables and keys share one route', () => {
 });
 
 describe('Bootstrap route', () => {
-  it('returns tenant-scoped data for a BU_SUPPORT user and excludes admin-only users', async () => {
+  it('returns tenant-scoped data for a BU_SUPPORT user', async () => {
     const s = await login('alice@alpha.com');
     const res = await fetch(`${base}/bootstrap`, { headers: authedHeaders(s, false) });
     expect(res.status).toBe(200);
@@ -278,7 +278,8 @@ describe('Bootstrap route', () => {
     expect(body.tickets.map((t: any) => t.id).sort()).toEqual(['tkt-a1']);
     expect(body.comments.map((c: any) => c.id)).toEqual(['cmt-a1']);
     expect(body.evidence.map((e: any) => e.id)).toEqual(['ev-a1']);
-    expect(body.users).toBeUndefined();
+    expect(Array.isArray(body.users)).toBe(true);
+    expect(body.users.map((u: any) => u.id).sort()).toEqual(['usr-a', 'usr-admin', 'usr-provider']);
     expect(Array.isArray(body.slaRules)).toBe(true);
     expect(Array.isArray(body.businessUnits)).toBe(true);
     expect(Array.isArray(body.roles)).toBe(true);
@@ -377,7 +378,7 @@ describe('Self-registration removal', () => {
     const res = await fetch(`${base}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'New Partner', email: 'new.partner@alpha.com', role: 'SUPER_ADMIN', bu: 'ALPHA', password: 'password123' }),
+      body: JSON.stringify({ name: 'New Payment Partner', email: 'new.partner@alpha.com', role: 'SUPER_ADMIN', bu: 'ALPHA', password: 'password123' }),
     });
     expect(res.status).toBe(404);
   });

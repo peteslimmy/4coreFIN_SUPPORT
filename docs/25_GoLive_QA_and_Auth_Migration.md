@@ -9,7 +9,7 @@ Status: CODE COMPLETE — Supabase Auth is the sole authentication provider. Mig
   - `POST /auth/register` → `supabase.auth.admin.createUser` (self-service PARTNER only), storing the Supabase user id in `users.auth_user_id`.
   - `server.ts:validateEnv()` **refuses to boot** production with `AUTH_PROVIDER=local`.
   - Legacy bcrypt path remains only as a password-hash carrier for the local `users.password_hash` column; it is never the source of truth for an authentication decision.
-- **Committed secrets removed.** `scripts/archive/runMigration*.ts` and `server/fixPartnerRole.ts` no longer contain hardcoded service-role JWTs or project refs; they require `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` and exit if absent.
+- **Committed secrets removed.** `server/runMigration.ts` and `server/fixPartnerRole.ts` no longer contain hardcoded service-role JWTs or project refs; they require `SUPABASE_URL`/`SUPABASE_SERVICE_KEY` and exit if absent.
 - **Forced password change.** Users with `must_change_password=true` are gated by `requireAuth` middleware (returns `403 { code: 'PASSWORD_CHANGE_REQUIRED' }`). Only `/auth/change-password`, `/auth/verify-password`, `/auth/me`, `/auth/logout` are allowed until the password is changed.
 
 ## 2. Database migrations applied live
@@ -70,7 +70,7 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
   ```sql
   select count(*) as users, count(auth_user_id) as linked from users;
   ```
-- [ ] Rotate the Supabase **service role key** (Dashboard → Settings → API). The key previously committed to `scripts/archive/*` and `server/fixPartnerRole.ts` must be treated as compromised and revoked.
+- [ ] Rotate the Supabase **service role key** (Dashboard → Settings → API). The key previously committed to `server/runMigration.ts` and `server/fixPartnerRole.ts` must be treated as compromised and revoked.
 - [ ] Update `.env` / secret manager with the new `SUPABASE_SERVICE_KEY`, `SUPABASE_URL`, `JWT_SECRET`, and `AUTH_PROVIDER=supabase`.
 
 ## 6. Supabase Auth console hardening (MANUAL, recommended before GA)
@@ -90,7 +90,7 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
 ## 7. Go-live QA gates
 
 ### Functional (F)
-- [ ] F-01 Login via Supabase Auth for each role (SUPER_ADMIN, EXECUTIVE, BU_SUPPORT, PARTNER, PROVIDER).
+- [ ] F-01 Login via Supabase Auth for each role (SUPER_ADMIN, EXECUTIVE, BU_SUPPORT, PARTNER, CUSTOMER).
 - [ ] F-02 Login with wrong password → 401; locked-out account → correct error.
 - [ ] F-03 Registration (PARTNER) → creates `auth.users` + `users.auth_user_id` + correct BU/tenant.
 - [ ] F-04 Session persists across refresh; logout clears both cookies.
@@ -122,6 +122,6 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
 
 ## 8. GO / NO-GO
 
-**GO** when: all F-*, SEC-*, OPS-* above pass; **241 tests green**; `npm run lint`, `tsc --noEmit`, `npm run build` clean; service key rotated; zero dev accounts; production uses Supabase Auth only; forced-password-change gate verified; `peteslimmy@gmail.com` SUPER_ADMIN login confirmed.
+**GO** when: all F-*, SEC-*, OPS-* above pass; **249 tests green**; `npm run lint`, `tsc --noEmit`, `npm run build` clean; service key rotated; zero dev accounts; production uses Supabase Auth only; forced-password-change gate verified; `peteslimmy@gmail.com` SUPER_ADMIN login confirmed.
 
 **NO-GO** if any: seeded dev account present, `AUTH_PROVIDER=local` in prod, old service key unrotated, any F-01/SEC-02/SEC-03 failure, or audit chain breaks.

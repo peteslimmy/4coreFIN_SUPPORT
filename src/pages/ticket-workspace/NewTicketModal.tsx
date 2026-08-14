@@ -96,7 +96,7 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
             label="Customer Name"
             required
             value={form.customerName}
-            onChange={(e) => { setForm(prev => ({ ...prev, customerName: e.target.value })); setErrors(prev => ({ ...prev, customerName: '' })); }}
+            onChange={(e) => { setForm(prev => ({ ...prev, customerName: e.target.value, customerId: undefined })); setErrors(prev => ({ ...prev, customerName: '' })); }}
             placeholder="e.g. John Doe"
             error={errors.customerName}
           />
@@ -112,7 +112,7 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
           <Input
             label="Phone"
             value={form.customerPhone}
-            onChange={(e) => setForm(prev => ({ ...prev, customerPhone: e.target.value }))}
+            onChange={(e) => setForm(prev => ({ ...prev, customerPhone: e.target.value, customerId: undefined }))}
             placeholder="+234..."
           />
           <Input

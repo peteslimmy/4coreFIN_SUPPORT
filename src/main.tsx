@@ -17,21 +17,33 @@ function ThemeBootstrap() {
   return null;
 }
 
+export { ThemeBootstrap };
+
+
 // Replay queued offline mutations against the API in order.
-async function replayOfflineMutation(type: string, payload: any): Promise<unknown> {
+async function replayOfflineMutation(type: string, payload: Record<string, unknown>): Promise<unknown> {
   switch (type) {
     case 'ticket:create':
       return api.createTicket(payload);
     case 'ticket:update':
-      return api.updateTicket(payload.id, payload.patch);
+      {
+        const { id, patch } = payload as { id: string; patch: unknown };
+        return api.updateTicket(id, patch);
+      }
     case 'ticket:transition':
-      return api.transitionTicket(payload.id, payload.status);
+      {
+        const { id, status } = payload as { id: string; status: string };
+        return api.transitionTicket(id, status);
+      }
     case 'comment:create':
       return api.createComment(payload);
     case 'evidence:delete':
-      return api.deleteEvidence(payload.id);
+      {
+        const { id } = payload as { id: string };
+        return api.deleteEvidence(id);
+      }
     default:
-      return api.updateTicket(payload?.id, payload);
+      return api.updateTicket(payload?.id as string, payload as unknown);
   }
 }
 
@@ -51,11 +63,11 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-          <AppProvider>
-            <ThemeBootstrap />
-            <App />
-            <ToastContainer />
-          </AppProvider>
+        <AppProvider>
+          <ThemeBootstrap />
+          <App />
+          <ToastContainer />
+        </AppProvider>
       </ToastProvider>
       {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
     </QueryClientProvider>

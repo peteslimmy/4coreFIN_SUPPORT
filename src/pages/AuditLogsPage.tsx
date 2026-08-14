@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Download, FileText, Lock, Shield, CheckCircle, XCircle } from 'lucide-react';
+import { Download, FileText, Lock, Shield, CheckCircle, XCircle, Search } from 'lucide-react';
 import type { AuditLog } from '../types/app';
 import { useApp } from '../context/AppContext';
 import Skeleton from '../components/ui/Skeleton';
@@ -14,11 +14,11 @@ import { exportAuditLogsToCsv, exportAuditLogsToPdf } from '../lib/exportUtils';
 interface AuditLogsPageProps {
   auditLogs: AuditLog[];
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
-  searchQuery: string;
 }
 
-export default function AuditLogsPage({ auditLogs, showToast, searchQuery }: AuditLogsPageProps) {
+export default function AuditLogsPage({ auditLogs, showToast }: AuditLogsPageProps) {
   const { isLoading } = useApp();
+  const [searchQuery, setSearchQuery] = useState('');
   const [chainResult, setChainResult] = useState<{ valid: boolean; brokenIndex: number | null } | null>(null);
 
   const filteredLogs = searchQuery
@@ -70,6 +70,18 @@ export default function AuditLogsPage({ auditLogs, showToast, searchQuery }: Aud
             </div>
           }
         />
+
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by action, details, actor, or ticket ID..."
+            aria-label="Search audit logs"
+            className="w-full bg-surface-elevated border border-border rounded-xl pl-10 pr-4 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring"
+          />
+        </div>
 
         {chainResult && (
         <div className={`p-4 rounded-xl border flex items-center gap-3 text-sm font-semibold ${chainResult.valid ? 'bg-success-light border-success/20 text-success-dark' : 'bg-error-light border-error/20 text-error-dark'}`}>

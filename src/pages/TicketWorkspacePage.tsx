@@ -7,7 +7,9 @@ import EmptyState from '../components/ui/EmptyState';
 import type { CommentRecord, WatcherNotification, AuditLog } from '../types/app';
 import { TicketStatus, TicketPriority } from '../types/app';
 import { useApp } from '../context/AppContext';
-import { syncComment, syncNotification } from '../lib/sync';
+import { useUi } from '../context/UiContext';
+import { syncComment, syncNotification, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
+import { isBuSupportRole } from '../lib/rbac';
 import { isAddressed, applyMention, mentionCandidates, resolveMention } from '../lib/mention';
 import { formatSlaDuration } from '../lib/utils';
 import TicketListPane from './ticket-workspace/TicketListPane';
@@ -23,18 +25,19 @@ interface TicketWorkspacePageProps {
 function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePageProps) {
   const {
     isLoading,
-    activeTicketId, setActiveTicketId,
     tickets, setTickets, comments, setComments,
     auditLogs, setAuditLogs,
     watcherNotifications, setWatcherNotifications,
     majorIncidents,
     currentRole, currentUser,
     logAuditAction, saveToStorage, showToast,
-    commentText, setCommentText, notifyWatchers,
+    notifyWatchers,
     evidence,
     handleCreateTicket, users,
     slaRules, holidays, ticketTemplates, kbArticles,
   } = useApp();
+
+  const { commentText, setCommentText, activeTicketId, setActiveTicketId } = useUi();
 
   const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
   const [removeWatcherConfirm, setRemoveWatcherConfirm] = useState<string | null>(null);
@@ -78,8 +81,18 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const clearError = (field: string) => setFormErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
   const clearFormErrors = () => setFormErrors({});
 
-  const handleBeginInvestigation = () => {
+  const handleBeginInvestigation = async () => {
     if (!activeTicket) return;
+    if (!activeTicket.assignedAgentId) {
+      showToast('Investigation can only begin after the ticket is assigned to a team.', 'error');
+      return;
+    }
+    try {
+      await syncTicketTransition(activeTicket.id, TicketStatus.INVESTIGATE);
+    } catch {
+      showToast('Failed to start investigation on server.', 'error');
+      return;
+    }
     const updated = { ...activeTicket, status: TicketStatus.INVESTIGATE as TicketStatus };
     setTickets(ts => ts.map(t => t.id === activeTicket.id ? updated : t));
     saveToStorage(tickets.map(t => t.id === activeTicket.id ? updated : t), comments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
@@ -90,17 +103,59 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const handleResolveTicket = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!activeTicket) return;
-    const updated = { ...activeTicket, status: TicketStatus.RESOLVED as TicketStatus };
+    const rcaDetails = {
+      ...(activeTicket.rcaDetails || {}),
+      rootCause: rcaForm.rootCause,
+      contributingFactors: rcaForm.contributingFactors,
+      correctiveActions: rcaForm.correctiveActions,
+      preventiveActions: rcaForm.preventiveActions,
+      preventiveOwner: currentUser.firstName + ' ' + currentUser.lastName,
+      preventiveDueDate: new Date().toISOString().split('T')[0],
+    };
+    try {
+      await syncTicketUpdate(activeTicket.id, { rcaDetails });
+    } catch {
+      showToast('Failed to save RCA on server.', 'error');
+      return;
+    }
+    try {
+      await syncTicketTransition(activeTicket.id, TicketStatus.RESOLVED);
+    } catch {
+      showToast('Failed to resolve ticket on server.', 'error');
+      return;
+    }
+    const updated = { ...activeTicket, status: TicketStatus.RESOLVED as TicketStatus, rootCause: rcaDetails.rootCause, correctiveAction: rcaDetails.correctiveActions, rcaDetails };
     setTickets(ts => ts.map(t => t.id === activeTicket.id ? updated : t));
     saveToStorage(tickets.map(t => t.id === activeTicket.id ? updated : t), comments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
     logAuditAction(activeTicket.id, 'STATUS_CHANGED', 'Status changed to RESOLVED');
     showToast('Ticket resolved.', 'success');
   };
 
-  const handleResolutionResponse = (accept: boolean) => {
+  const handleResolutionResponse = async (accept: boolean) => {
     if (!activeTicket) return;
+    if (accept && (feedbackInput.score === null || feedbackInput.score === undefined)) {
+      showToast('Rating is required to close the ticket.', 'error');
+      return;
+    }
     const status = accept ? TicketStatus.CLOSED : TicketStatus.INVESTIGATE;
-    const updated = { ...activeTicket, status };
+    if (accept) {
+      try {
+        await syncTicketUpdate(activeTicket.id, {
+          feedbackScore: feedbackInput.score,
+          feedbackComment: feedbackInput.comment.trim() || null,
+        });
+      } catch {
+        showToast('Failed to save feedback on server.', 'error');
+        return;
+      }
+    }
+    try {
+      await syncTicketTransition(activeTicket.id, status);
+    } catch {
+      showToast(`Failed to ${accept ? 'accept' : 'reject'} resolution on server.`, 'error');
+      return;
+    }
+    const updated = { ...activeTicket, status, feedbackScore: accept ? feedbackInput.score : activeTicket.feedbackScore, feedbackComment: accept ? (feedbackInput.comment.trim() || null) : activeTicket.feedbackComment };
     setTickets(ts => ts.map(t => t.id === activeTicket.id ? updated : t));
     saveToStorage(tickets.map(t => t.id === activeTicket.id ? updated : t), comments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
     logAuditAction(activeTicket.id, 'RESOLUTION_' + (accept ? 'ACCEPTED' : 'REJECTED'), '');
@@ -122,26 +177,85 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const handleManualEscalate = async () => {
     if (!activeTicket) return;
     if (!escalationReason.trim()) { setFormErrors({ escalationReason: 'Escalation reason is required.' }); return; }
-    const updated = { ...activeTicket, priority: TicketPriority.CRITICAL };
+    try {
+      await syncTicketUpdate(activeTicket.id, { priority: TicketPriority.CRITICAL, isEscalated: true });
+    } catch {
+      showToast('Failed to escalate ticket on server.', 'error');
+      return;
+    }
+    const updated = { ...activeTicket, priority: TicketPriority.CRITICAL, isEscalated: true, escalationCount: (activeTicket.escalationCount || 0) + 1 };
     setTickets(ts => ts.map(t => t.id === activeTicket.id ? updated : t));
     saveToStorage(tickets.map(t => t.id === activeTicket.id ? updated : t), comments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
     logAuditAction(activeTicket.id, 'ESCALATED', escalationReason);
+    
+    // Enforce partner-domain rule: BU users can only escalate within the ticket's payment partner domain
+    if (isBuSupportRole(currentRole)) {
+      const partnerDomain = (activeTicket.partner || activeTicket.businessUnit || '').toLowerCase();
+      const mine = (currentUser.partner || currentUser.bu || '').toLowerCase();
+      if (partnerDomain && mine && partnerDomain !== mine) {
+        // User is attempting to escalate outside their partner domain — restrict to domain
+        // Add a watcher indicating escalation stayed within domain
+        const newWatcher: WatcherNotification = {
+          id: 'wn-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
+          timestamp: new Date().toISOString(),
+          ticketId: activeTicket.id,
+          message: `[ESCALATION] Ticket escalated to ${activeTicket.partner || 'Unknown'} payment partner domain.`,
+          recipient: currentUser.email,
+          seen: false
+        };
+        const updatedWN = [...watcherNotifications, newWatcher];
+        setWatcherNotifications(updatedWN);
+        showToast(`Escalation routed within ${activeTicket.partner || 'your'} payment partner domain.`, 'success');
+      } else {
+        showToast('Escalation within same payment partner domain.', 'success');
+      }
+    } else {
+      showToast('Ticket escalated.', 'success');
+    }
     setShowEscalationModal(false);
     setEscalationReason('');
-    showToast('Ticket escalated.', 'success');
   };
 
   const confirmEscalation = () => { setShowEscalationModal(false); setEscalationReason(''); };
 
-  const handleMergeTicket = () => {
+  const handleMergeTicket = async () => {
     if (!activeTicket) return;
     const target = prompt('Enter target ticket ID to merge into:');
     if (!target || target === activeTicket.id) return;
     const targetTicket = tickets.find(t => t.id === target);
     if (!targetTicket) { showToast('Target ticket not found.', 'error'); return; }
+    if (targetTicket.isDeleted) { showToast('Target ticket is archived and cannot receive a merge.', 'error'); return; }
+    if ((targetTicket.partner || '').toLowerCase() !== (activeTicket.partner || '').toLowerCase()) {
+      const ok = window.confirm(`"${activeTicket.partner}" differs from target partner "${targetTicket.partner}". Merging across payment partners could misroute the case. Continue?`);
+      if (!ok) return;
+    }
+    if (targetTicket.status === TicketStatus.CLOSED && (targetTicket.duplicateOf || '').trim()) {
+      showToast(`Target ticket is already a duplicate of ${targetTicket.duplicateOf}. Rejected to avoid merge chaining.`, 'error');
+      return;
+    }
     const mergedComments = [...comments, { id: 'cm-' + Date.now(), ticketId: target, message: `Migrated from ${activeTicket.id}`, timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole, seen: false, isInternal: false } as CommentRecord];
     const mergeLog = { id: 'al-' + Date.now(), ticketId: target, action: 'TICKET_MERGED', details: `Merged ${activeTicket.id}`, timestamp: new Date().toISOString(), actor: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole } as AuditLog;
     const mergedAudits = [...auditLogs, mergeLog];
+    
+    // Delete the source ticket on the server
+    try {
+      await syncTicketDelete(activeTicket.id);
+    } catch {
+      showToast('Failed to delete source ticket from server.', 'error');
+      return;
+    }
+    
+    // Update the target ticket with merged comments and audit log
+    try {
+      await syncTicketUpdate(target, { 
+        comments: mergedComments,
+        auditLogs: mergedAudits
+      });
+    } catch {
+      showToast('Failed to update target ticket on server.', 'error');
+      return;
+    }
+    
     const updatedTickets = tickets.filter(t => t.id !== activeTicket.id && t.id !== target);
     setTickets(updatedTickets);
     setComments(mergedComments);
@@ -152,9 +266,16 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     setActiveTicketId(target);
   };
 
-  const handleSoftDeleteTicket = (id: string) => {
+  const handleSoftDeleteTicket = async (id: string) => {
     if (archiveConfirmId !== id) { setArchiveConfirmId(id); return; }
-    const updated = tickets.map(t => t.id === id ? { ...t, status: TicketStatus.CLOSED as TicketStatus } : t);
+    try {
+      // Soft delete on server - set isDeleted flag
+      await syncTicketUpdate(id, { isDeleted: true, status: TicketStatus.CLOSED as TicketStatus });
+    } catch {
+      showToast('Failed to archive ticket on server.', 'error');
+      return;
+    }
+    const updated = tickets.map(t => t.id === id ? { ...t, isDeleted: true, status: TicketStatus.CLOSED as TicketStatus } : t);
     setTickets(updated);
     saveToStorage(updated, comments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
     logAuditAction(id, 'ARCHIVED', 'Ticket archived');
@@ -199,10 +320,8 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
       setCommentText('');
       setReplyingTo(null);
       saveToStorage(tickets, updatedComments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
-      const ok = await syncComment(newComment);
-      if (!ok) {
-        showToast('Comment stored locally but failed to sync to server.', 'error');
-      } else {
+      try {
+        await syncComment(newComment);
         const mentioned = resolveMention(trimmed, users);
         if (mentioned && mentioned.email.toLowerCase() !== currentUser.email.toLowerCase()) {
           const direct: WatcherNotification = {
@@ -224,6 +343,8 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
           notifyWatchers(activeTicket, `New comment on ticket ${activeTicket.id}`);
           showToast('Comment sent.', 'success');
         }
+      } catch {
+        showToast('Comment stored locally but failed to sync to server.', 'error');
       }
     } catch (err) {
       console.error('[4C] send comment failed', err);

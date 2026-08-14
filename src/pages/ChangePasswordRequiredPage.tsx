@@ -5,6 +5,7 @@ import { authorizedFetch } from '../lib/api';
 import PasswordStrengthMeter from '../components/admin/PasswordStrengthMeter';
 import { isPasswordValid } from '../components/admin/passwordStrength';
 import PageTransition from '../components/layout/PageTransition';
+import BrandLogo from '../components/BrandLogo';
 
 export default function ChangePasswordRequiredPage() {
   const { setMustChangePassword, showToast } = useApp();
@@ -53,8 +54,15 @@ export default function ChangePasswordRequiredPage() {
     <div className="min-h-screen bg-app flex items-center justify-center p-4">
       <div className="w-full max-w-sm">
         <div className="text-center mb-6">
-          <div className="inline-flex items-center justify-center w-14 h-14 bg-surface-card rounded-2xl mb-3 shadow-3 border border-border-subtle">
-            <Shield className="w-7 h-7 text-accent" />
+          <div className="inline-flex items-center justify-center mb-3">
+            <BrandLogo
+              imgClassName="max-h-14 w-auto object-contain"
+              fallback={
+                <div className="w-14 h-14 bg-surface-card rounded-2xl shadow-3 border border-border-subtle flex items-center justify-center">
+                  <Shield className="w-7 h-7 text-accent" />
+                </div>
+              }
+            />
           </div>
           <h1 className="text-display font-bold text-text-primary">Change your password</h1>
           <p className="text-body-sm text-text-muted mt-1 font-medium">Your administrator set a temporary password. Create a new one to continue.</p>

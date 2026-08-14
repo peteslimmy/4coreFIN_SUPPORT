@@ -31,7 +31,7 @@ export function createOperationsRouter(): Router {
     if (wants('evidence')) data.evidence = await listEvidence(undefined, req.user!);
 
     if (wants('auditLogs') && can('audit:view')) data.auditLogs = await listAuditLogs(500, req.user!);
-    if (wants('users') && can('admin:users')) data.users = await listUsersPublic();
+    if (wants('users') && can('users:view')) data.users = await listUsersPublic();
     if (wants('customers') && can('customers:manage')) data.customers = await listCustomers(req.user!);
     if (wants('config')) {
       // Shared config (business-unit names/codes + payment channels) is served

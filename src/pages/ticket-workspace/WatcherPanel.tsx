@@ -3,7 +3,7 @@ import { Bell } from 'lucide-react';
 
 import type { TicketRecord } from '../../types/app';
 import { useApp } from '../../context/AppContext';
-import { syncNotification, syncNotificationRead, syncTicketPatch } from '../../lib/sync';
+import { syncNotification, syncNotificationRead, syncTicketUpdate } from '../../lib/sync';
 
 interface WatcherPanelProps {
   activeTicket: TicketRecord;
@@ -76,7 +76,7 @@ export default function WatcherPanel({ activeTicket, selectedWatcherIds, setSele
           setTickets(updated); setWatcherNotifications(updatedWN); setNewWatcherEmail('');
           saveToStorage(updated, comments, auditLogs, majorIncidents, updatedWN, users, slaRules, holidays, ticketTemplates, kbArticles);
           const changedTicket = updated.find(t => t.id === activeTicket.id);
-          if (changedTicket) syncTicketPatch(changedTicket.id, { watchers: changedTicket.watchers || [] });
+          if (changedTicket) syncTicketUpdate(changedTicket.id, { watchers: changedTicket.watchers || [] });
           newNotifications.forEach(n => syncNotification(n));
           showToast(`Added ${validEmails.length} watcher(s).`, 'success');
           logAuditAction(activeTicket.id, 'TICKET_WATCHER_ADDED', `Added ${validEmails.join(', ')} to watchers.`);

@@ -1,18 +1,11 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Upload,
   Image,
-  Trash2,
-  RotateCcw,
-  Eye,
-  Settings,
-  Calendar,
-  FileImage,
-  CheckCircle,
   XCircle,
   AlertCircle,
-  Loader2,
+  CheckCircle,
 } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 import ImageCard from './ImageCard';
@@ -63,30 +56,33 @@ export default function LandingPageManager() {
   const [filter, setFilter] = useState<'all' | 'draft' | 'published' | 'archived'>('all');
   const { showToast } = useToast();
 
-  const fetchImages = async () => {
-    try {
-      setLoading(true);
-      const params = new URLSearchParams();
-      if (filter !== 'all') params.append('status', filter);
+   const fetchImages = useCallback(async () => {
+     try {
+       setLoading(true);
+       const params = new URLSearchParams();
+       if (filter !== 'all') params.append('status', filter);
 
-      const response = await fetch(`/api/landing-page/images?${params.toString()}`, {
-        credentials: 'include',
-      });
+       const response = await fetch(`/api/landing-page/images?${params.toString()}`, {
+         credentials: 'include',
+       });
 
-      if (!response.ok) throw new Error('Failed to fetch images');
+       if (!response.ok) throw new Error('Failed to fetch images');
 
-      const data = await response.json();
-      setImages(data.images || []);
-    } catch (error) {
-      showToast('Failed to load images', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+       const data = await response.json();
+       setImages(data.images || []);
+} catch {
+        showToast('Failed to load images', 'error');
+      } finally {
+        setLoading(false);
+      }
+    }, [filter, showToast]);
 
-  useEffect(() => {
-    fetchImages();
-  }, [filter]);
+   useEffect(() => {
+     const timer = setTimeout(() => {
+       fetchImages();
+     }, 0);
+     return () => clearTimeout(timer);
+   }, [fetchImages]);
 
   const handleUploadComplete = () => {
     setShowUploadWizard(false);
@@ -108,7 +104,7 @@ export default function LandingPageManager() {
       setImages(images.filter(img => img.id !== deleteConfirm.id));
       setDeleteConfirm(null);
       showToast('Image deleted successfully', 'success');
-    } catch (error) {
+    } catch { /* ignore */ } {
       showToast('Failed to delete image', 'error');
     }
   };
@@ -126,7 +122,7 @@ export default function LandingPageManager() {
         img.id === image.id ? { ...img, deleted_at: null } : img
       ));
       showToast('Image restored successfully', 'success');
-    } catch (error) {
+    } catch { /* ignore */ } {
       showToast('Failed to restore image', 'error');
     }
   };
@@ -144,7 +140,7 @@ export default function LandingPageManager() {
         img.id === image.id ? { ...img, status: 'published', published_at: new Date().toISOString() } : img
       ));
       showToast('Image published successfully', 'success');
-    } catch (error) {
+    } catch { /* ignore */ } {
       showToast('Failed to publish image', 'error');
     }
   };

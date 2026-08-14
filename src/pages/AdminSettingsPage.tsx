@@ -4,7 +4,8 @@ import BrandingSettings from '../components/admin/BrandingSettings';
 import ThemeSettings from '../components/admin/ThemeSettings';
 import IntegrationSettings from '../components/admin/IntegrationSettings';
 import DataSettings from '../components/admin/DataSettings';
-import ComplaintFormsSettings from '../components/admin/ComplaintFormsSettings';
+
+import TicketFormBuilder from '../components/admin/TicketFormBuilder';
 import AccessControlSettings from '../components/admin/AccessControlSettings';
 import LandingPageManager from '../components/admin/LandingPageManager';
 import { Palette, Building2, Plug, Database, ClipboardList, ShieldCheck, Image } from 'lucide-react';
@@ -17,7 +18,7 @@ const TABS = [
   { id: 'landing', label: 'Landing Page', icon: Image },
   { id: 'theme', label: 'Theme', icon: Palette },
   { id: 'integrations', label: 'Integrations', icon: Plug },
-  { id: 'forms', label: 'Complaint Forms', icon: ClipboardList },
+  { id: 'forms', label: 'Ticket Form Builder', icon: ClipboardList },
   { id: 'access', label: 'Access Control', icon: ShieldCheck },
   { id: 'data', label: 'Data', icon: Database },
 ];
@@ -38,7 +39,7 @@ export default function AdminSettingsPage() {
 
   return (
     <PageTransition>
-      <PageContainer maxWidth="lg">
+      <PageContainer maxWidth="full">
         <PageHeader
           title="Admin Settings"
           subtitle="Customize branding, theme, and integrations for your organization"
@@ -72,7 +73,7 @@ export default function AdminSettingsPage() {
   {activeTab === 'landing' && <LandingPageManager />}
   {activeTab === 'theme' && <ThemeSettings />}
   {activeTab === 'integrations' && <IntegrationSettings />}
-  {activeTab === 'forms' && <ComplaintFormsSettings />}
+  {activeTab === 'forms' && <TicketFormBuilder />}
   {activeTab === 'access' && <AccessControlSettings />}
   {activeTab === 'data' && <DataSettings />}
           </div>

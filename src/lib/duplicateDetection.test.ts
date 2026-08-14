@@ -20,7 +20,7 @@ function makeTicket(partial: Partial<TicketRecord>): TicketRecord {
     slaDeadline: new Date().toISOString(),
     isEscalated: false,
     escalationCount: 0,
-    assignedAgentId: 'Parkway Partner Team',
+    assignedAgentId: 'Parkway Payment Partner Team',
     majorIncidentId: null,
     feedbackScore: null,
     feedbackComment: null,

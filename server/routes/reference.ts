@@ -24,6 +24,8 @@ import {
   countTicketsByBu,
   countTicketsByPartner,
   countTicketsByCategory,
+  countActiveTicketsByCategoryAndPriority,
+  categoryExists,
   countUsersByBu,
   listUsersPublic,
   upsertUser,
@@ -128,6 +130,14 @@ const KINDS: Record<string, KindDef> = {
       durationHours: z.number().int().positive(),
     }),
     idOf: (i) => String(i.id ?? ''),
+    deleteRoles: ['SUPER_ADMIN'],
+    checkDelete: async (id) => {
+      const rules = await listJsonTable('sla_rules');
+      const rule = rules.find((r) => String(r.id ?? '') === String(id));
+      if (!rule) return null;
+      const tickets = await countActiveTicketsByCategoryAndPriority(String(rule.category), String(rule.priority));
+      return tickets > 0 ? { referencedBy: { tickets } } : null;
+    },
   },
   holidays: {
     storage: 'table',
@@ -161,15 +171,33 @@ const KINDS: Record<string, KindDef> = {
     permission: 'admin:users',
     deleteRoles: ['SUPER_ADMIN'],
     label: 'User',
-    schema: z.object({
-      id: z.string().optional(),
-      name: z.string().min(1).trim(),
-      email: z.string().email().trim().toLowerCase(),
-      role: z.string().min(1).trim(),
-      bu: z.string().trim().optional().default(''),
-      phone: z.string().trim().optional().default(''),
-      password: z.string().min(6).optional(),
-    }),
+    schema: z
+      .object({
+        id: z.string().optional(),
+        name: z.string().min(1).trim(),
+        email: z.string().email().trim().toLowerCase(),
+        accountType: z.enum(['BU', 'PARTNER']).optional(),
+        role: z.enum(['SUPER_ADMIN', 'EXECUTIVE', 'BU_SUPPORT', 'BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3', 'PARTNER']),
+        bu: z.string().trim().optional().default(''),
+        partner: z.string().trim().optional().default(''),
+        phone: z.string().trim().optional().default(''),
+        password: z.string().min(6).optional(),
+      })
+      .superRefine((v, ctx) => {
+        const acct = v.accountType ?? (v.role === 'PARTNER' ? 'PARTNER' : 'BU');
+        if (acct === 'BU' && !v.bu.trim()) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['bu'], message: 'Business Unit is required for a BU account' });
+        }
+        if (acct === 'PARTNER' && !v.partner.trim()) {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['partner'], message: 'Payment Partner is required for a Payment Partner account' });
+        }
+        if (acct === 'PARTNER' && v.role !== 'PARTNER') {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['role'], message: 'Payment Partner accounts must use the PARTNER role' });
+        }
+        if (acct === 'BU' && v.role === 'PARTNER') {
+          ctx.addIssue({ code: z.ZodIssueCode.custom, path: ['role'], message: 'The PARTNER role requires a Payment Partner account' });
+        }
+      }),
     idOf: (i) => String(i.id ?? ''),
   },
 };
@@ -256,14 +284,18 @@ export function createReferenceRouter(): Router {
           return res.status(400).json({ error: 'password: Required' });
         }
         const userId = item.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        const accountType = item.accountType || (item.role === 'PARTNER' ? 'PARTNER' : 'BU');
         const passwordHash = hashPassword(item.password);
         // Provision a Supabase Auth identity so the user can actually sign in.
         const identity = await supabaseCreateUser(item.email, item.password, item.name);
         const { password: _pw, id: _id, ...rest } = item;
-        await upsertUser({ ...rest, id: userId, passwordHash, authUserId: identity.id, mustChangePassword: true });
-        item = { ...rest, id: userId };
+        await upsertUser({ ...rest, accountType, id: userId, passwordHash, authUserId: identity.id, mustChangePassword: true });
+        item = { ...rest, accountType, id: userId };
       } else if (def.storage === 'table') {
         if (!def.idOf(item)) item = { ...item, id: nextId(req.params.kind.replace(/_/g, '-')) };
+        if (req.params.kind === 'sla_rules' && !(await categoryExists((item as any).category))) {
+          return res.status(400).json({ error: 'category: Category must exist in the categories list' });
+        }
         await insertJsonTableRow(req.params.kind, item);
       } else {
         if (typeof item !== 'string' && !def.idOf(item)) {
@@ -319,6 +351,9 @@ export function createReferenceRouter(): Router {
         if (!merged.success) {
           const first = merged.error.issues[0];
           return res.status(400).json({ error: `${first?.path.join('.') || 'body'}: ${first?.message || 'Invalid input'}` });
+        }
+        if (req.params.kind === 'sla_rules' && !(await categoryExists(merged.data.category))) {
+          return res.status(400).json({ error: 'category: Category must exist in the categories list' });
         }
         await updateJsonTableRow(req.params.kind, req.params.id, merged.data);
         await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, `Updated ${def.label}: ${req.params.id}`);

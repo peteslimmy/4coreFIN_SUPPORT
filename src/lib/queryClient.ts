@@ -23,7 +23,7 @@ export const queryKeys = {
     me: () => ['auth', 'me'] as const,
   },
   tickets: {
-    all: (filters?: Record<string, any>) => ['tickets', filters] as const,
+     all: (filters?: Record<string, unknown>) => ['tickets', filters] as const,
     detail: (id: string) => ['tickets', 'detail', id] as const,
     comments: (ticketId: string) => ['tickets', ticketId, 'comments'] as const,
     evidence: (ticketId: string) => ['tickets', ticketId, 'evidence'] as const,
@@ -33,11 +33,11 @@ export const queryKeys = {
     all: () => ['comments'] as const,
   },
   majorIncidents: {
-    all: (filters?: Record<string, any>) => ['majorIncidents', filters] as const,
+     all: (filters?: Record<string, unknown>) => ['majorIncidents', filters] as const,
     detail: (id: string) => ['majorIncidents', 'detail', id] as const,
   },
   customers: {
-    all: (filters?: Record<string, any>) => ['customers', filters] as const,
+     all: (filters?: Record<string, unknown>) => ['customers', filters] as const,
     detail: (id: string) => ['customers', 'detail', id] as const,
   },
   auditLogs: {
@@ -74,8 +74,8 @@ export const queryKeys = {
   },
   ai: {
     classify: (description: string) => ['ai', 'classify', description] as const,
-    rca: (ticketDetails: any) => ['ai', 'rca', ticketDetails] as const,
-    chat: (message: string, history: any[]) => ['ai', 'chat', message, history] as const,
-    analyze: (body: any) => ['ai', 'analyze', body] as const,
+     rca: (ticketDetails: unknown) => ['ai', 'rca', ticketDetails] as const,
+     chat: (message: string, history: unknown[]) => ['ai', 'chat', message, history] as const,
+     analyze: (body: unknown) => ['ai', 'analyze', body] as const,
   },
 } as const;

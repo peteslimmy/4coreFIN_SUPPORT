@@ -25,7 +25,8 @@ export type Permission =
   | 'admin:access'
   | 'admin:branding'
   | 'admin:landing_page'
-  | 'admin:sla';
+  | 'admin:sla'
+  | 'users:view';
 
 export interface RoleDefinition {
   id: string;

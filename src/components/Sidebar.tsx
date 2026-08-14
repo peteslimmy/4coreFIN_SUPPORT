@@ -7,7 +7,7 @@ import ThemeToggle from './ThemeToggle';
 interface SidebarProps {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  currentUser: { firstName: string; lastName: string; email: string; bu: string };
+  currentUser: { firstName: string; lastName: string; email: string; bu: string; partner?: string; accountType?: string };
   currentRole: UserRole;
   tickets: TicketRecord[];
   majorIncidents: MajorIncidentRecord[];
@@ -29,7 +29,7 @@ interface NavItem {
 function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tickets, majorIncidents, watcherNotifications, collapsed, setCollapsed, onNavClick }: {
   activeTab: string;
   setActiveTab: (tab: string) => void;
-  currentUser: { firstName: string; lastName: string; email: string; bu: string };
+  currentUser: { firstName: string; lastName: string; email: string; bu: string; partner?: string; accountType?: string };
   currentRole: UserRole;
   tickets: TicketRecord[];
   majorIncidents: MajorIncidentRecord[];
@@ -46,7 +46,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
     let scoped = tickets;
     if (currentRole !== UserRole.SUPER_ADMIN && currentRole !== UserRole.EXECUTIVE) {
       scoped = currentRole === UserRole.PARTNER
-        ? tickets.filter(t => t.assignedAgentId?.toLowerCase().includes(currentUser.bu.toLowerCase()))
+        ? tickets.filter(t => t.assignedAgentId?.toLowerCase().includes((currentUser.partner || currentUser.bu || '').toLowerCase()))
         : tickets.filter(t => t.businessUnit === currentUser.bu);
     }
     return scoped.filter(t => t.status !== TicketStatus.CLOSED).length;
@@ -60,10 +60,10 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
     { id: 'watcher_notifications', label: 'Watcher Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Compliance' },
     { id: 'reference_data', label: 'Reference Data', icon: Database, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
     { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
-    { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
-    { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.SUPER_ADMIN], section: 'Operations' },
-    { id: 'customer_portal', label: 'Submit Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.SUPER_ADMIN], section: 'Complaints' },
-    { id: 'partner_portal', label: 'Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Partner Desk' },
+  { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
+  { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operations' },
+    { id: 'customer_portal', label: 'Submit Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Complaints' },
+    { id: 'payment_partner_portal', label: 'Payment Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Payment Partner Desk' },
     { id: 'profile_settings', label: 'Profile & Security', icon: User, section: 'Account' },
   ];
 
@@ -154,7 +154,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-text-primary truncate">{currentUser.firstName + ' ' + currentUser.lastName}</p>
               <p className="text-caption text-text-muted truncate">
-                {currentRole} · {currentUser.bu}
+                {currentRole} · {currentUser.bu || currentUser.partner}
               </p>
             </div>
             <button

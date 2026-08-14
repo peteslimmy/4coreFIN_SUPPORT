@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sliders, Plus, X, Activity, AlertTriangle, Lock, FileText, Send, Mail } from 'lucide-react';
 import { UserRole } from '../types/app';
 import { useApp } from '../context/AppContext';
-import { syncTicketPatch, syncMajorIncidentUpdate } from '../lib/sync';
+import { syncTicketUpdate, syncMajorIncidentUpdate } from '../lib/sync';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import PageTransition from '../components/layout/PageTransition';
@@ -61,7 +61,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
     } else {
       saveToStorage(updatedTickets, comments, auditLogs, updatedMIs);
     }
-    syncTicketPatch(ticketId, { majorIncidentId: miId });
+    syncTicketUpdate(ticketId, { majorIncidentId: miId });
     const linkedMI = updatedMIs.find(mi => mi.id === miId);
     if (linkedMI) syncMajorIncidentUpdate(miId, { ticketCount: linkedMI.ticketCount });
     showToast(`Ticket ${ticketId} linked successfully to incident ${miId}.`, 'success');
@@ -89,7 +89,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
     } else {
       saveToStorage(updatedTickets, comments, auditLogs, updatedMIs);
     }
-    syncTicketPatch(ticketId, { majorIncidentId: null });
+    syncTicketUpdate(ticketId, { majorIncidentId: null });
     const linkedMI = updatedMIs.find(mi => mi.id === miId);
     if (linkedMI) syncMajorIncidentUpdate(miId, { ticketCount: linkedMI.ticketCount });
     showToast(`Ticket ${ticketId} unlinked from incident.`, 'info');
@@ -103,7 +103,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
           id: 'tl-' + Date.now(),
           timestamp: new Date().toISOString(),
           author: currentUser.firstName + ' ' + currentUser.lastName,
-          role: currentRole === UserRole.PARTNER ? 'Partner' : 'BU Support',
+          role: currentRole === UserRole.PARTNER ? 'Payment Partner' : 'BU Support',
           message: messageText
         };
         return { ...mi, timeline: [...mi.timeline, newEntry] };
@@ -241,7 +241,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="bg-surface p-2.5 rounded border border-border">
-                  <span className="text-overline text-text-muted font-bold uppercase block">Affected Partner</span>
+                  <span className="text-overline text-text-muted font-bold uppercase block">Affected Payment Partner</span>
                   <span className="font-bold text-text-primary mt-0.5 block">{m.partner}</span>
                 </div>
                 <div className="bg-surface p-2.5 rounded border border-border">

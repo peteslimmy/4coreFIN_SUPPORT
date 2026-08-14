@@ -5,6 +5,8 @@ import {
   canTransition,
   getAvailableTransitions,
   getTicketStatusStep,
+  getAllTransitionBlockers,
+  getTransitionBlockers,
   isTerminal,
   TransitionError,
 } from './ticketStateMachine';
@@ -191,5 +193,37 @@ describe('ticketStateMachine', () => {
     } catch (e) {
       expect((e as TransitionError).code).toBe('REQUIRES_FIELDS');
     }
+  });
+
+  it('getTransitionBlockers reports the missing required fields with labels', () => {
+    const incomplete = baseTicket({ status: TicketStatus.INVESTIGATE });
+    const rule = getAvailableTransitions(incomplete, UserRole.PARTNER).find(
+      r => r.to === TicketStatus.RESOLVED
+    );
+    expect(rule).toBeTruthy();
+    expect(getTransitionBlockers(incomplete, rule!)).toEqual(
+      expect.arrayContaining(['Root Cause', 'Corrective Actions', 'Preventive Actions'])
+    );
+
+    const complete = fullRcaTicket();
+    expect(getTransitionBlockers(complete, rule!)).toHaveLength(0);
+  });
+
+  it('close surfaces the missing feedback requirement', () => {
+    const resolvedNoFeedback = fullRcaTicket({ status: TicketStatus.RESOLVED, feedbackScore: null });
+    const closeRule = getAvailableTransitions(resolvedNoFeedback, UserRole.BU_SUPPORT).find(
+      r => r.to === TicketStatus.CLOSED
+    );
+    expect(getTransitionBlockers(resolvedNoFeedback, closeRule!)).toContain('Customer feedback score');
+  });
+
+  it('getAllTransitionBlockers unions blockers across the role accessible rules', () => {
+    const incomplete = baseTicket({ status: TicketStatus.INVESTIGATE });
+    const blockers = getAllTransitionBlockers(incomplete, UserRole.PARTNER);
+    expect(blockers).toContain('Root Cause');
+    expect(blockers).toContain('Corrective Actions');
+    expect(new Set(blockers).size).toBe(blockers.length);
+
+    expect(getAllTransitionBlockers(fullRcaTicket(), UserRole.PARTNER)).toHaveLength(0);
   });
 });

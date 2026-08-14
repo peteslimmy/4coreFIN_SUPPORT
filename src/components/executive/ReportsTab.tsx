@@ -85,8 +85,8 @@ export default function ReportsTab() {
     const totalExposure = active.reduce((s, t) => s + t.amount, 0);
 
     const exposureHeaders = ['Group', 'Exposure', 'Open Tickets'];
-    const partnerHeaders = ['Partner', 'SLA %', 'Active', 'Closed', 'MTTR (h)', 'Reopen %', 'CSAT'];
-    const riskHeaders = ['Ticket', 'Customer', 'Partner', 'Business Unit', 'Priority', 'Amount', 'Risk Score'];
+    const partnerHeaders = ['Payment Partner', 'SLA %', 'Active', 'Closed', 'MTTR (h)', 'Reopen %', 'CSAT'];
+    const riskHeaders = ['Ticket', 'Customer', 'Payment Partner', 'Business Unit', 'Priority', 'Amount', 'Risk Score'];
     const agentHeaders = ['Agent', 'Active', 'Closed', 'Resolved', 'Escalated', 'SLA %', 'CSAT'];
     const customerHeaders = ['Customer', 'Tickets', 'Open', 'Closed', 'Exposure'];
 
@@ -136,10 +136,10 @@ export default function ReportsTab() {
     {
       id: 'vendor',
       icon: <Handshake className="w-5 h-5" />,
-      title: 'Partner / Vendor Scorecard',
-      description: 'SLA %, MTTR, reopen ratio and CSAT ranked per partner.',
+      title: 'Payment Partner / Vendor Scorecard',
+      description: 'SLA %, MTTR, reopen ratio and CSAT ranked per payment partner.',
       stats: data.partnerMetrics.map(p => ({ label: p.partner, value: `${p.sla.toFixed(0)}%` })),
-      onExport: () => { data.exporter.partners(); showToast('Partner scorecard exported.', 'success'); },
+      onExport: () => { data.exporter.partners(); showToast('Payment Partner scorecard exported.', 'success'); },
     },
     {
       id: 'throughput',
@@ -163,7 +163,7 @@ export default function ReportsTab() {
         { label: 'Linked Tickets', value: `${data.incidents.reduce((s, i) => s + i.linkedTickets.length, 0)}` },
         { label: 'Total MI', value: `${majorIncidents.length}` },
       ],
-      onExport: () => { downloadCsv('major_incidents.csv', ['Incident', 'Partner', 'Severity', 'Status', 'Linked Tickets'], data.incidents.map(i => [i.incident.name, i.incident.partner, i.incident.severity, i.incident.status, i.linkedTickets.length])); showToast('Incident report exported.', 'success'); },
+      onExport: () => { downloadCsv('major_incidents.csv', ['Incident', 'Payment Partner', 'Severity', 'Status', 'Linked Tickets'], data.incidents.map(i => [i.incident.name, i.incident.partner, i.incident.severity, i.incident.status, i.linkedTickets.length])); showToast('Incident report exported.', 'success'); },
     },
     {
       id: 'audit',

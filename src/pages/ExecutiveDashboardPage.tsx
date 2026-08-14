@@ -101,7 +101,7 @@ function ExecutiveDashboardPage() {
       return remaining > 0 && remaining < 2 * 3600000;
     });
     if (approaching.length > 0) {
-      alerts.push({ id: 'approach', type: 'warning', message: `${approaching.length} ticket(s) approaching SLA deadline within 2 hours. Partners: ${[...new Set(approaching.map(t => t.partner))].join(', ')}.` });
+      alerts.push({ id: 'approach', type: 'warning', message: `${approaching.length} ticket(s) approaching SLA deadline within 2 hours. Payment Partners: ${[...new Set(approaching.map(t => t.partner))].join(', ')}.` });
     }
 
     // High-value disputes
@@ -205,7 +205,7 @@ function ExecutiveDashboardPage() {
   // â”€â”€â”€ Handlers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const handleExportExcel = () => {
     try {
-      const headers = ['Partner', 'SLA%', 'Active Cases', 'MTTR (Hours)', 'Reopen Ratio', 'Satisfaction', 'Status'];
+      const headers = ['Payment Partner', 'SLA%', 'Active Cases', 'MTTR (Hours)', 'Reopen Ratio', 'Satisfaction', 'Status'];
       const rows = metrics.partnerMetrics.map(s => [s.partner, s.sla.toFixed(1), s.active, s.mttr, s.reopen, s.satisfaction, s.status]);
       const csvContent = "data:text/csv;charset=utf-8," + [headers, ...rows].map(r => r.join(',')).join('\n');
       const link = document.createElement("a");
@@ -244,7 +244,7 @@ function ExecutiveDashboardPage() {
       <PageContainer className="space-y-5">
         <PageHeader
           title="Executive Performance Desk"
-          subtitle="BPO operational intelligence — SLA, financial exposure, Partner quality, and compliance"
+          subtitle="BPO operational intelligence — SLA, financial exposure, Payment Partner quality, and compliance"
           breadcrumbs={[{ label: 'Home' }, { label: 'Executive Performance' }]}
           actions={
             <div className="flex items-center gap-4 flex-wrap">
@@ -368,7 +368,7 @@ function ExecutiveDashboardPage() {
             trend={{ direction: metrics.escalated.length === 0 ? 'up' : 'down', label: metrics.escalated.length === 0 ? 'Clear' : `Δ ${metrics.deltas.breachDelta >= 0 ? '+' : ''}${metrics.deltas.breachDelta}%` }}
             onClick={() => {
               const byPartner = partners.map(p => ({ label: p, value: scopedTickets.filter(t => t.partner === p && t.isEscalated).length.toString() }));
-              setDrillDown({ title: 'SLA Breaches by Partner', rows: byPartner.concat([{ label: 'Total', value: metrics.escalated.length.toString() }]) });
+              setDrillDown({ title: 'SLA Breaches by Payment Partner', rows: byPartner.concat([{ label: 'Total', value: metrics.escalated.length.toString() }]) });
             }}
           />
           <KpiCard
@@ -379,7 +379,7 @@ function ExecutiveDashboardPage() {
             animateValue
             format={(n) => formatCurrency(n)}
             trend={{ direction: 'neutral', label: `${formatCurrencyCompact(metrics.atRiskExposure)} at risk` }}
-            onClick={() => setDrillDown({ title: 'Exposure by Partner', rows: metrics.exposureByPartner.map(e => ({ label: e.partner, value: formatCurrency(e.value) })).concat([{ label: 'Total Exposure', value: formatCurrency(metrics.totalExposure) }]) })}
+            onClick={() => setDrillDown({ title: 'Exposure by Payment Partner', rows: metrics.exposureByPartner.map(e => ({ label: e.partner, value: formatCurrency(e.value) })).concat([{ label: 'Total Exposure', value: formatCurrency(metrics.totalExposure) }]) })}
           />
           <KpiCard
             title="CSAT Score"
@@ -447,7 +447,7 @@ function ExecutiveDashboardPage() {
           />
         </div>
 
-        {/* â”€â”€ Pipeline Funnel + Partner Radar â”€â”€ */}
+        {/* â”€â”€ Pipeline Funnel + Payment Partner Radar â”€â”€ */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="bg-surface-elevated rounded-xl shadow-card p-5">
             <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-4 flex items-center gap-2">
@@ -484,14 +484,14 @@ function ExecutiveDashboardPage() {
               ],
               showGrid: true,
             }}
-            title="Partner Performance Radar"
+            title="Payment Partner Performance Radar"
             governanceContext="sla"
             height={208}
             onDrillDown={(info) => {
               const e = info.payload;
               const rows: ReturnType<typeof drRows>[] = [];
-              if (e) { rows.push(drRows('Partner', info.label), drRows('SLA %', `${e.sla}%`), drRows('Satisfaction', `${e.satisfaction}/5`)); }
-              setGovDrill({ open: true, title: 'Partner Detail', subtitle: info.label, rows, context: 'sla' });
+              if (e) { rows.push(drRows('Payment Partner', info.label), drRows('SLA %', `${e.sla}%`), drRows('Satisfaction', `${e.satisfaction}/5`)); }
+              setGovDrill({ open: true, title: 'Payment Partner Detail', subtitle: info.label, rows, context: 'sla' });
             }}
             onCrossFilter={setCrossFilter}
             crossFilter={crossFilter}
@@ -502,11 +502,11 @@ function ExecutiveDashboardPage() {
         {/* â”€â”€â”€ TAB: Operations â”€â”€â”€ */}
         {dashboardTab === 'operations' && (
           <div role="tabpanel" id="tabpanel-operations" aria-labelledby="tab-operations">
-        {/* â”€â”€ Partner Scorecard â”€â”€ */}
+        {/* â”€â”€ Payment Partner Scorecard â”€â”€ */}
         <div className="bg-surface-elevated rounded-xl shadow-card p-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide flex items-center gap-2">
-              <BarChart3 className="w-4 h-4 text-primary" /> Partner SLA Scorecard
+              <BarChart3 className="w-4 h-4 text-primary" /> Payment Partner SLA Scorecard
             </h3>
             <div className="flex items-center gap-2">
               <Search className="w-4 h-4 text-text-muted" />
@@ -515,7 +515,7 @@ function ExecutiveDashboardPage() {
           </div>
           <Table
             columns={[
-              { key: 'partner', header: 'Partner', sortable: true, render: (s: PartnerMetricRow) => <span className="font-bold text-text-primary">{s.partner}</span> },
+              { key: 'partner', header: 'Payment Partner', sortable: true, render: (s: PartnerMetricRow) => <span className="font-bold text-text-primary">{s.partner}</span> },
               { key: 'sla', header: 'SLA %', sortable: true, align: 'right', render: (s: PartnerMetricRow) => <span className="font-mono text-success-dark">{s.sla.toFixed(1)}%</span> },
               { key: 'active', header: 'Active', sortable: true, align: 'right', render: (s: PartnerMetricRow) => <span className="font-mono">{s.active}</span> },
               { key: 'mttr', header: 'MTTR (h)', sortable: true, align: 'right', render: (s: PartnerMetricRow) => <span className="font-mono">{s.mttr}h</span> },
@@ -551,7 +551,7 @@ function ExecutiveDashboardPage() {
             type="bar"
             data={metrics.exposureByPartner}
             config={{ xKey: 'partner', valueKey: 'value', colors: PIE_COLORS, showGrid: true }}
-            title="Dispute Value by Partner"
+            title="Dispute Value by Payment Partner"
             governanceContext="risk"
             valueFormatter={(v) => formatCurrencyCompact(v)}
             onDrillDown={(info) => {
@@ -575,7 +575,7 @@ function ExecutiveDashboardPage() {
               showGrid: true,
               showLegend: true,
             }}
-            title="Resolution Quality by Partner"
+            title="Resolution Quality by Payment Partner"
             governanceContext="audit"
             onDrillDown={(info) => {
               const e = info.payload;

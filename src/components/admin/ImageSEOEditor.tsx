@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Check, AlertCircle } from 'lucide-react';
+import { X, Check } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 
 interface ImageSEOEditorProps {
@@ -43,7 +43,7 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
       showToast('SEO metadata updated successfully', 'success');
       onSave();
       onClose();
-    } catch (error) {
+    } catch {
       showToast('Failed to update SEO metadata', 'error');
     } finally {
       setSaving(false);

@@ -5,7 +5,7 @@ import ConfirmModal from '../../components/ui/ConfirmModal';
 import Textarea from '../../components/ui/Textarea';
 import type { TicketRecord } from '../../types/app';
 import { useApp } from '../../context/AppContext';
-import { syncNotification, syncTicketPatch } from '../../lib/sync';
+import { syncNotification, syncTicketUpdate } from '../../lib/sync';
 
 interface EscalationModalsProps {
   activeTicket: TicketRecord | null;
@@ -137,7 +137,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
         onConfirm={() => {
           if (!archiveConfirmId) return;
           setTickets(prev => prev.map(t => t.id === archiveConfirmId ? { ...t, isDeleted: true } : t));
-          syncTicketPatch(archiveConfirmId, { isDeleted: true });
+          syncTicketUpdate(archiveConfirmId, { isDeleted: true });
           logAuditAction(archiveConfirmId, 'TICKET_SOFT_DELETED', `Ticket ${archiveConfirmId} soft-deleted by ${currentUser.firstName + ' ' + currentUser.lastName} (${currentUser.email}) for compliance archival.`);
           showToast(`Ticket ${archiveConfirmId} archived (soft-delete).`, 'success');
           setArchiveConfirmId(null);
@@ -161,7 +161,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
           setTickets(u);
           saveToStorage(u, comments, auditLogs);
           const changedTicket = u.find(t => t.id === activeTicket.id);
-          if (changedTicket) syncTicketPatch(changedTicket.id, { watchers: changedTicket.watchers || [] });
+          if (changedTicket) syncTicketUpdate(changedTicket.id, { watchers: changedTicket.watchers || [] });
           showToast(`Removed ${watcher}.`, 'info');
           logAuditAction(activeTicket.id, 'TICKET_WATCHER_REMOVED', `Removed ${watcher} from ticket ${activeTicket.id}`);
           setRemoveWatcherConfirm(null);

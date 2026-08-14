@@ -34,6 +34,7 @@ const FIELD_TYPE_META: Record<FormFieldType, { icon: typeof Type; chip: string; 
   select: { icon: ListFilter, chip: 'bg-violet-500/10 text-violet-600', accent: 'text-violet-600' },
   date: { icon: CalendarDays, chip: 'bg-rose-500/10 text-rose-600', accent: 'text-rose-600' },
   textarea: { icon: AlignLeft, chip: 'bg-cyan-500/10 text-cyan-600', accent: 'text-cyan-600' },
+  file: { icon: Type, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
 };
 
 function TypeIcon({ type, className = 'w-4 h-4' }: { type: FormFieldType; className?: string }) {

@@ -21,7 +21,7 @@ const STEPS: Step[] = [
   {
     icon: <LayoutDashboard className="w-10 h-10 text-accent" />,
     title: 'Executive Dashboard',
-    description: 'Monitor real-time KPIs across Performance, Operations, and Quality tabs. Track FCR, SLA breaches, dispute exposure, partner scorecards, and trend charts.',
+    description: 'Monitor real-time KPIs across Performance, Operations, and Quality tabs. Track FCR, SLA breaches, dispute exposure, payment partner scorecards, and trend charts.',
     note: 'Switch tabs to drill into operational metrics and quality benchmarks.',
   },
   {
@@ -33,7 +33,7 @@ const STEPS: Step[] = [
   {
     icon: <Globe className="w-10 h-10 text-success" />,
     title: 'Multi-Party Portals',
-    description: 'Customer and Partner portals allow each party to submit, track, and update complaints — with role-based views and survey feedback.',
+    description: 'Customer and Payment Partner portals allow each party to submit, track, and update complaints — with role-based views and survey feedback.',
     note: 'Portals are auto-selected based on your login role.',
   },
   {

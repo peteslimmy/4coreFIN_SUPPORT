@@ -1,6 +1,6 @@
 import type { Page } from '@playwright/test';
 
-export const DEMO_EMAIL = process.env.E2E_EMAIL || 'peteslimmy@gmail.com';
+export const DEMO_EMAIL = process.env.E2E_EMAIL || 'alice@alpha.com';
 export const DEMO_PASSWORD = process.env.E2E_PASSWORD || process.env.DEMO_PASSWORD || 'password123';
 
 export async function login(page: Page, email = DEMO_EMAIL, password = DEMO_PASSWORD) {

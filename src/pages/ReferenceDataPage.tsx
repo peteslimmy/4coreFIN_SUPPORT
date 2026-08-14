@@ -3,6 +3,7 @@ import { Database } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { REFERENCE_KINDS } from '../types/reference';
 import CrudTable from '../components/reference/CrudTable';
+import UserAccountsManager from '../components/admin/UserAccountsManager';
 import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
@@ -64,7 +65,7 @@ export default function ReferenceDataPage() {
           </div>
 
           <div className="flex-1 bg-surface-elevated rounded-xl p-6">
-            <CrudTable kind={activeDef} />
+            {activeDef.kind === 'users' ? <UserAccountsManager /> : <CrudTable kind={activeDef} />}
           </div>
         </div>
       </PageContainer>

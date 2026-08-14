@@ -28,11 +28,25 @@ export default function BrandLogo({ imgClassName, fallback }: BrandLogoProps) {
 
   if (!show) return <>{fallback ?? null}</>;
 
+  // Get logo size from settings (default 32px)
+  const logoSize = Number(settings['branding.logo_size']) || 32;
+
+  // Add cache-busting timestamp to prevent browser caching issues
+  const getBrandingUrl = (path: string): string => {
+    const timestamp = new Date().getTime();
+    return `/api/public/branding/${path}?v=${timestamp}`;
+  };
+
   return (
     <img
-      src={`/api/public/branding/${show === 'logo_dark' ? 'logo_dark' : 'logo_light'}`}
+      src={getBrandingUrl(show === 'logo_dark' ? 'logo_dark' : 'logo_light')}
       alt={settings['branding.org_name'] || '4CoreFin'}
-      className={imgClassName}
+      className={`object-contain ${imgClassName ?? ''}`}
+      style={
+        imgClassName
+          ? undefined
+          : { maxHeight: `${logoSize}px`, height: 'auto', width: 'auto' }
+      }
     />
   );
 }

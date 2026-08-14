@@ -6,9 +6,10 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 import PageErrorBoundary from './components/ui/PageErrorBoundary';
 import Sidebar from './components/Sidebar';
 import { KbArticle } from './types/admin';
-import { TicketStatus, TicketPriority, UserRole, type MajorIncidentRecord, type WatcherNotification } from './types/app';
+import { TicketPriority, UserRole, type MajorIncidentRecord, type WatcherNotification } from './types/app';
 import { useApp } from './context/AppContext';
-import { syncMajorIncident, syncTicketPatch, syncKbArticles } from './lib/sync';
+import { useUi } from './context/UiContext';
+import { syncMajorIncident, syncTicketUpdate, syncKbArticles } from './lib/sync';
 import OnboardingTour from './components/onboarding/OnboardingTour';
 import CommandPalette from './components/CommandPalette';
 import BrandLogo from './components/BrandLogo';
@@ -32,30 +33,29 @@ const ExecutiveDashboardPage = lazy(() => import('./pages/ExecutiveDashboardPage
 const MajorIncidentsPage = lazy(() => import('./pages/MajorIncidentsPage'));
 const TicketWorkspacePage = lazy(() => import('./pages/TicketWorkspacePage'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
-const PartnerPortalPage = lazy(() => import('./pages/PartnerPortalPage'));
+const PaymentPartnerPortalPage = lazy(() => import('./pages/PaymentPartnerPortalPage'));
 const CustomersPage = lazy(() => import('./pages/CustomersPage'));
 const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
 const ReferenceDataPage = lazy(() => import('./pages/ReferenceDataPage'));
 const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'));
 const ChangePasswordRequiredPage = lazy(() => import('./pages/ChangePasswordRequiredPage'));
-const LandingPage = lazy(() => import('./pages/LandingPage'));
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 
 export default function App() {
   const app = useApp();
+  const ui = useUi();
   const {
     isAuthenticated, currentRole, currentUser, handleRoleChange, handleLogout,
-    activeTab, setActiveTab, activeTicketId, setActiveTicketId,
     tickets, setTickets, comments,
     auditLogs, watcherNotifications, setWatcherNotifications,
     majorIncidents, setMajorIncidents,
     users, slaRules, holidays, ticketTemplates,
     kbArticles, setKbArticles,
-    searchQuery,
     showToast, logAuditAction, saveToStorage, notifyWatchers, can,
   } = app;
+  const { activeTab, setActiveTab, activeTicketId, setActiveTicketId } = ui;
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
@@ -98,7 +98,7 @@ export default function App() {
       ticketCount: 1,
       createdAt: new Date().toISOString(),
       status: 'INVESTIGATING',
-      timeline: [{ id: 'tl-' + Date.now(), timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole === UserRole.PARTNER ? 'Partner' : 'BU Support', message: `Major Incident declared. Severity set to ${data.severity}. System monitors deployed.` }],
+      timeline: [{ id: 'tl-' + Date.now(), timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole === UserRole.PARTNER ? 'Payment Partner' : 'BU Support', message: `Major Incident declared. Severity set to ${data.severity}. System monitors deployed.` }],
       notifications: [{ id: 'not-' + Date.now(), timestamp: new Date().toISOString(), channel: data.initialNotification, recipient: data.initialNotification === 'Slack/Teams Webhook' ? '#ops-severity-1-war-room' : 'executive-alerts@company.com', subject: `CRITICAL OUTAGE WARNING: ${data.name}`, status: 'SENT' }],
       pir: { rootCauseSummary: '', timelineSummary: '', impactSummary: '', preventiveOwner: '', preventiveDueDate: '', draft: true, lastUpdated: new Date().toISOString(), lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName }
     };
@@ -115,7 +115,7 @@ export default function App() {
     setSelectedMajorIncidentId(miId);
     syncMajorIncident(newMI);
     const linkedTicket = updatedTickets.find(t => t.id === activeTicketId);
-    if (linkedTicket) syncTicketPatch(linkedTicket.id, { majorIncidentId: miId, priority: TicketPriority.CRITICAL });
+    if (linkedTicket) syncTicketUpdate(linkedTicket.id, { majorIncidentId: miId, priority: TicketPriority.CRITICAL });
     showToast(`Major Incident ${miId} declared and active!`, 'success');
     const targetTicket = updatedTickets.find(t => t.id === activeTicketId);
     if (targetTicket) {
@@ -127,29 +127,26 @@ export default function App() {
 
   
 
-  // Path-based routing for standalone public/auth/legal pages. Supabase recovery
-  // tokens arrive in the URL hash (e.g. /reset-password#access_token=...),
-  // so routing is path-based, never hash-based.
-  const { pathname } = window.location;
-  if (!isAuthenticated && pathname === '/') {
-    return <LandingPage />;
-  }
-  if (pathname === '/auth/login' && !isAuthenticated) {
-    return <LoginPage />;
-  }
-  if (pathname === '/auth/forgot-password') {
-    return <ForgotPasswordPage />;
-  }
-  if (pathname === '/auth/reset-password' || pathname === '/reset-password') {
-    return <ResetPasswordPage />;
-  }
-  if (pathname === '/privacy-policy' || pathname === '/privacy') {
-    return <PrivacyPolicyPage />;
-  }
+   // Path-based routing for standalone public/auth/legal pages. Supabase recovery
+   // tokens arrive in the URL hash (e.g. /reset-password#access_token=...),
+   // so routing is path-based, never hash-based.
+   const { pathname } = window.location;
+   if (pathname === '/auth/login' && !isAuthenticated) {
+     return <LoginPage />;
+   }
+   if (pathname === '/auth/forgot-password') {
+     return <ForgotPasswordPage />;
+   }
+   if (pathname === '/auth/reset-password' || pathname === '/reset-password') {
+     return <ResetPasswordPage />;
+   }
+   if (pathname === '/privacy-policy' || pathname === '/privacy') {
+     return <PrivacyPolicyPage />;
+   }
 
-  if (!isAuthenticated) {
-    return <LoginPage />;
-  }
+   if (!isAuthenticated) {
+     return <LoginPage />;
+   }
 
   // Force a password change before granting access to the app (see server gate).
   if (app.mustChangePassword) {
@@ -160,22 +157,26 @@ export default function App() {
 
   // Role-based tab access guard
   const ROLE_TABS: Partial<Record<UserRole, string[]>> = {
-    [UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings'],
-    [UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-    [UserRole.PARTNER]: ['partner_portal', 'tickets', 'kb', 'profile_settings'],
-    [UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
-    [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'partner_portal', 'profile_settings'],
+[UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings'],
+[UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
+[UserRole.BU_SUPPORT_L1]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
+[UserRole.BU_SUPPORT_L2]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
+[UserRole.BU_SUPPORT_L3]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
+[UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'kb', 'profile_settings'],
+[UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
+[UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'payment_partner_portal', 'profile_settings'],
+
   };
-  const permissionTabs: string[] = [];
-  if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
-  if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
-  if (can('customers:manage')) permissionTabs.push('customers');
-  if (can('executive:dashboard')) permissionTabs.push('dashboard');
-  if (can('audit:view')) permissionTabs.push('audit_logs');
-  if (can('notifications:view')) permissionTabs.push('watcher_notifications');
-  if (can('admin:config') || can('admin:access') || can('admin:users')) permissionTabs.push('admin_settings', 'reference_data');
-  if (can('partner:rca') || can('tickets:view')) permissionTabs.push('partner_portal');
-  permissionTabs.push('kb', 'profile_settings');
+const permissionTabs: string[] = [];
+if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
+if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
+if (can('customers:manage')) permissionTabs.push('customers');
+if (can('executive:dashboard')) permissionTabs.push('dashboard');
+if (can('audit:view')) permissionTabs.push('audit_logs');
+if (can('notifications:view')) permissionTabs.push('watcher_notifications');
+if (can('admin:config') || can('admin:access') || can('admin:users')) permissionTabs.push('admin_settings', 'reference_data');
+if (can('partner:rca') || can('tickets:view')) permissionTabs.push('payment_partner_portal');
+permissionTabs.push('ai_chat', 'kb', 'profile_settings');
   const allowedTabs = ROLE_TABS[currentRole] || permissionTabs || ['profile_settings'];
   const safeTab = allowedTabs.includes(effectiveTab) ? effectiveTab : allowedTabs[0];
   const unreadNotificationCount = watcherNotifications.filter(
@@ -204,7 +205,7 @@ export default function App() {
             imgClassName="h-5 w-auto object-contain shrink-0"
             fallback={<Shield className="w-4 h-4 text-accent" />}
           />
-          <span className="text-caption text-text-muted font-medium hidden sm:inline">Tenant Portal Switchboard</span>
+          <span className="text-caption text-text-muted font-medium hidden sm:inline">4CORE Payment Support</span>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -302,10 +303,10 @@ export default function App() {
           )}
           {safeTab === 'customer_portal' && <CustomerPortalPage />}
           {safeTab === 'dashboard' && <ExecutiveDashboardPage />}
-          {safeTab === 'partner_portal' && <PartnerPortalPage />}
+          {safeTab === 'payment_partner_portal' && <PaymentPartnerPortalPage />}
           {safeTab === 'customers' && <CustomersPage />}
           {safeTab === 'audit_logs' && (
-            <AuditLogsPage auditLogs={auditLogs} showToast={showToast} searchQuery={searchQuery} />
+            <AuditLogsPage auditLogs={auditLogs} showToast={showToast} />
           )}
           {safeTab === 'watcher_notifications' && (
             <WatcherNotificationsPage
@@ -345,8 +346,8 @@ export default function App() {
 
           {safeTab === 'admin_settings' && <AdminSettingsPage />}
 
-          {safeTab === 'reference_data' && <ReferenceDataPage />}
-          {safeTab === 'profile_settings' && <ProfileSettingsPage />}
+{safeTab === 'reference_data' && <ReferenceDataPage />}
+{safeTab === 'profile_settings' && <ProfileSettingsPage />}
 
             </Suspense>
           </motion.div>

@@ -14,6 +14,7 @@ export interface TransitionRule {
   roles: UserRole[];
   canTransition?: (ticket: TicketRecord, role: UserRole) => boolean;
   required?: ((ticket: TicketRecord) => boolean)[];
+  requiredLabels?: string[];
   mutate?: (ticket: TicketRecord, ctx?: TransitionContext) => Partial<TicketRecord>;
 }
 
@@ -50,6 +51,18 @@ export function getTicketStatusStep(status: TicketStatus | string): number {
   return idx >= 0 ? idx : 0;
 }
 
+/** Roles allowed on the BU side (every support tier + legacy + super admin). */
+export const BU_AGENT_ROLES: UserRole[] = [
+  UserRole.SUPER_ADMIN,
+  UserRole.BU_SUPPORT,
+  UserRole.BU_SUPPORT_L1,
+  UserRole.BU_SUPPORT_L2,
+  UserRole.BU_SUPPORT_L3,
+];
+
+/** BU-side roles plus the payment-partner role. */
+export const BU_AGENT_AND_PARTNER_ROLES: UserRole[] = [...BU_AGENT_ROLES, UserRole.PARTNER];
+
 export const TRANSITIONS: TransitionRule[] = [
   {
     from: TicketStatus.RECEIPT,
@@ -57,7 +70,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'ASSIGNED',
     label: 'Assign',
     customerFacingLabel: 'Assigned',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     canTransition: () => true,
   },
   {
@@ -66,7 +79,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'BEGIN_INVESTIGATION',
     label: 'Start Investigation',
     customerFacingLabel: 'In Review',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT, UserRole.PARTNER],
+    roles: BU_AGENT_AND_PARTNER_ROLES,
     canTransition: (t) => !!t.assignedAgentId,
   },
   {
@@ -85,6 +98,7 @@ export const TRANSITIONS: TransitionRule[] = [
       (t) => !!t.rcaDetails?.preventiveOwner && t.rcaDetails.preventiveOwner.trim() !== '',
       (t) => !!t.rcaDetails?.preventiveDueDate && t.rcaDetails.preventiveDueDate.trim() !== '',
     ],
+    requiredLabels: ['Root Cause', 'Corrective Actions', 'Preventive Actions', 'Preventive Owner', 'Preventive Due Date'],
     mutate: (t, ctx) => ({
       rootCause: t.rcaDetails?.rootCause,
       correctiveAction: t.rcaDetails?.correctiveActions,
@@ -101,8 +115,9 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'CLOSE',
     label: 'Close',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     required: [(t) => t.feedbackScore !== null && t.feedbackScore !== undefined],
+    requiredLabels: ['Customer feedback score'],
   },
   {
     from: TicketStatus.RESOLVED,
@@ -110,7 +125,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'REJECT_AND_REOPEN',
     label: 'Reject & Reopen',
     customerFacingLabel: 'In Review',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     mutate: (t) => ({ isEscalated: true, escalationCount: (t.escalationCount ?? 0) + 1 }),
   },
   {
@@ -119,7 +134,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'REOPEN',
     label: 'Reopen',
     customerFacingLabel: 'In Review',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
   },
   {
     from: TicketStatus.CLOSED,
@@ -127,7 +142,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'MERGE_CLOSE',
     label: 'Mark Merged',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
   },
   // A merge forces the source ticket to CLOSED regardless of its current
   // (non-terminal) state. Modelled as a distinct event so it can be audited
@@ -138,7 +153,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'MERGE_CLOSE',
     label: 'Mark Merged',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     canTransition: () => true,
   },
   {
@@ -147,7 +162,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'MERGE_CLOSE',
     label: 'Mark Merged',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     canTransition: () => true,
   },
   {
@@ -156,7 +171,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'MERGE_CLOSE',
     label: 'Mark Merged',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     canTransition: () => true,
   },
   {
@@ -165,7 +180,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'MERGE_CLOSE',
     label: 'Mark Merged',
     customerFacingLabel: 'Closed',
-    roles: [UserRole.SUPER_ADMIN, UserRole.BU_SUPPORT],
+    roles: BU_AGENT_ROLES,
     canTransition: () => true,
   },
 ];
@@ -206,6 +221,30 @@ export function getAvailableTransitions(
 export function isTransitionSatisfied(ticket: TicketRecord, rule: TransitionRule): boolean {
   const missing = (rule.required || []).filter((req) => !req(ticket));
   return missing.length === 0;
+}
+
+/**
+ * Human-readable list of the unmet required-field predicates for a rule.
+ * Returns labels when provided (e.g. 'Root Cause'), otherwise 'Required field'.
+ */
+export function getTransitionBlockers(ticket: TicketRecord, rule: TransitionRule): string[] {
+  return (rule.required || [])
+    .map((req, i) => ({ ok: req(ticket), label: rule.requiredLabels?.[i] }))
+    .filter((entry) => !entry.ok)
+    .map((entry) => entry.label || 'Required field');
+}
+
+/**
+ * All blockers across the transitions the role may take from this state
+ * (excluding rules already in the target state). Used to surface "why can't I
+ * move this ticket forward" hints in the UI.
+ */
+export function getAllTransitionBlockers(ticket: TicketRecord, role: UserRole): string[] {
+  const blockers = new Set<string>();
+  for (const rule of getAvailableTransitions(ticket, role)) {
+    for (const label of getTransitionBlockers(ticket, rule)) blockers.add(label);
+  }
+  return [...blockers];
 }
 
 export function canTransition(

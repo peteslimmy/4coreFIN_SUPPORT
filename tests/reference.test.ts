@@ -23,7 +23,7 @@ function seedStore(): TableStore {
     users: [
       { id: 'usr-a', name: 'Alice Alpha', email: 'alice@alpha.com', password_hash: pass, role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
       { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: pass, role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA },
-      { id: 'usr-prov', name: 'Rep', email: 'rep@provider.com', password_hash: pass, role: 'PARTNER', bu: 'Paystack', phone: '', tenant_id: ALPHA },
+      { id: 'usr-prov', name: 'Rep', email: 'rep@provider.com', password_hash: pass, role: 'PARTNER', partner: 'Paystack', phone: '', tenant_id: ALPHA },
     ],
     tickets: [
       { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
@@ -244,6 +244,7 @@ describe('Reference data — table CRUD (sla_rules)', () => {
   const seedSla = () => {
     Object.assign(supabase, createFakeSupabase({
       ...seedStore(),
+      app_config: [{ key: 'categories', value: [{ id: 'cat-1', name: 'Duplicate Debit', description: 'a' }, { id: 'cat-2', name: 'Refund', description: 'b' }] }],
       sla_rules: [{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', duration_hours: 24 }],
     }));
   };
@@ -290,6 +291,55 @@ describe('Reference data — table CRUD (sla_rules)', () => {
       body: JSON.stringify({ category: '', priority: 'HIGH', durationHours: -1 }),
     });
     expect(res.status).toBe(400);
+  });
+
+  it('rejects an SLA rule whose category does not exist', async () => {
+    seedSla();
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ category: 'No Such Category', priority: 'LOW', durationHours: 12 }),
+    });
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(JSON.stringify(body)).toContain('Category must exist');
+  });
+
+  it('blocks deleting an SLA rule referenced by active tickets', async () => {
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      tickets: [
+        { id: 'tkt-sla', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Duplicate Debit', issue_type: 'Duplicate Debit', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
+      ],
+      app_config: [{ key: 'categories', value: [{ id: 'cat-1', name: 'Duplicate Debit', description: 'a' }, { id: 'cat-2', name: 'Refund', description: 'b' }] }],
+      sla_rules: [{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', duration_hours: 24 }],
+    }));
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules/sla-1`, {
+      method: 'DELETE',
+      headers: { ...authedHeaders(s) },
+    });
+    expect(res.status).toBe(409);
+    const { data } = await supabase.from('sla_rules').select('*');
+    expect((data as any[]).length).toBe(1);
+  });
+
+  it('allows deleting an SLA rule with no active matching tickets', async () => {
+    Object.assign(supabase, createFakeSupabase({
+      ...seedStore(),
+      tickets: [],
+      app_config: [{ key: 'categories', value: [{ id: 'cat-1', name: 'Duplicate Debit', description: 'a' }] }],
+      sla_rules: [{ id: 'sla-1', category: 'Duplicate Debit', priority: 'HIGH', duration_hours: 24 }],
+    }));
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/sla_rules/sla-1`, {
+      method: 'DELETE',
+      headers: { ...authedHeaders(s) },
+    });
+    expect(res.status).toBe(200);
+    const { data } = await supabase.from('sla_rules').select('*');
+    expect((data as any[]).length).toBe(0);
   });
 
   it('accepts camelCase UI kind labels (slaRules → sla_rules)', async () => {
@@ -342,7 +392,7 @@ describe('Reference data — users kind', () => {
     const res = await fetch(`${base}/reference/users`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Carol', email: 'carol@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'secret123' }),
+      body: JSON.stringify({ name: 'Carol', email: 'carol@alpha.com', role: 'PARTNER', partner: 'Paystack', password: 'secret123' }),
     });
     expect(res.status).toBe(201);
     const { data } = await supabase.from('users').select('*').eq('email', 'carol@alpha.com').single();
@@ -358,7 +408,7 @@ describe('Reference data — users kind', () => {
     const res = await fetch(`${base}/reference/users`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Dave', email: 'dave@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'short' }),
+      body: JSON.stringify({ name: 'Dave', email: 'dave@alpha.com', role: 'PARTNER', partner: 'Paystack', password: 'short' }),
     });
     expect(res.status).toBe(400);
   });
@@ -382,7 +432,7 @@ describe('Reference data — users kind', () => {
     const res = await fetch(`${base}/reference/users`, {
       method: 'POST',
       headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Eve', email: 'eve@alpha.com', role: 'PARTNER', bu: 'ALPHA', password: 'secret123' }),
+      body: JSON.stringify({ name: 'Eve', email: 'eve@alpha.com', role: 'PARTNER', partner: 'Paystack', password: 'secret123' }),
     });
     expect(res.status).toBe(403);
   });

@@ -3,11 +3,15 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { appendAuditLog, listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer } from '../repository';
+import { appendAuditLog, listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable } from '../repository';
 import { tenantIdForBu } from '../tenant';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { getConfig } from '../repository';
 import { nextTicketId, normalizeBusinessUnits } from '../../src/lib/buCodes';
+import { computeSlaDeadline } from '../../src/lib/slaCalculator';
+import type { SlaRule } from '../../src/types/admin';
+import type { HolidayRecord } from '../../src/types/admin';
+import { TicketPriority } from '../../src/types/app';
 
 /**
  * Compute the next ticket id using the business-unit code prefix
@@ -96,6 +100,45 @@ export function createTicketsRouter(): Router {
       }
       if (body.isEscalated === true) {
         body.escalationCount = (existing.escalationCount || 0) + 1;
+      }
+    }
+
+    // Raising priority to CRITICAL is an escalation: enforce the escalate
+    // permission (mirrors the isEscalated guard) and recompute the SLA deadline
+    // against the current SLA rules so the shorter target applies immediately.
+    if (body.priority === 'CRITICAL' && existing.priority !== 'CRITICAL') {
+      if (!feat('tickets:escalate')) {
+        return res.status(403).json({ error: 'Requires permission: tickets:escalate' });
+      }
+      if (existing.createdAt) {
+        const [slaRules, holidays] = await Promise.all([
+          listJsonTable('sla_rules'),
+          listJsonTable('holidays'),
+        ]);
+        body.slaDeadline = computeSlaDeadline(
+          new Date(existing.createdAt),
+          existing.category || '',
+          TicketPriority.CRITICAL,
+          slaRules as SlaRule[],
+          holidays as HolidayRecord[]
+        ).deadline.toISOString();
+      }
+    }
+
+    // Recompute SLA whenever priority changes non-escalation-wise too.
+    if (body.priority && body.priority !== existing.priority && body.priority !== 'CRITICAL') {
+      if (existing.createdAt) {
+        const [slaRules, holidays] = await Promise.all([
+          listJsonTable('sla_rules'),
+          listJsonTable('holidays'),
+        ]);
+        body.slaDeadline = computeSlaDeadline(
+          new Date(existing.createdAt),
+          existing.category || '',
+          body.priority as TicketPriority,
+          slaRules as SlaRule[],
+          holidays as HolidayRecord[]
+        ).deadline.toISOString();
       }
     }
 

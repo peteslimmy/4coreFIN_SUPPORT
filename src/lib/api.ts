@@ -17,7 +17,6 @@ import type {
 } from '../types/admin';
 import type { BuFormConfig } from '../types/forms';
 import type { RoleDefinition } from '../types/rbac';
-import type { Permission } from '../types/rbac';
 
 export interface BootstrapData {
   tickets?: TicketRecord[];
@@ -46,7 +45,7 @@ export interface BootstrapData {
 export interface ApiListOptions {
   limit?: number;
   offset?: number;
-  filters?: Record<string, any>;
+  filters?: Record<string, unknown>;
 }
 
 export const SESSION_COOKIE = '4c_session';
@@ -144,7 +143,7 @@ export const api = {
     return apiFetch<BootstrapData>(`/api/bootstrap${qs}`);
   },
 
-  listTickets: (filters?: Record<string, any>) => {
+  listTickets: (filters?: Record<string, unknown>) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters || {})) {
       if (v !== undefined && v !== null) params.set(k, String(v));
@@ -178,7 +177,7 @@ export const api = {
   createComment: (comment: unknown) =>
     apiFetch<CommentRecord>('/api/comments', { method: 'POST', body: JSON.stringify(comment) }),
 
-  listMajorIncidents: (filters?: Record<string, any>) => {
+  listMajorIncidents: (filters?: Record<string, unknown>) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters || {})) {
       if (v !== undefined && v !== null) params.set(k, String(v));
@@ -190,7 +189,7 @@ export const api = {
   getMajorIncident: (id: string) =>
     apiFetch<MajorIncidentRecord>(`/api/major-incidents/${encodeURIComponent(id)}`),
 
-  listCustomers: (filters?: Record<string, any>) => {
+  listCustomers: (filters?: Record<string, unknown>) => {
     const params = new URLSearchParams();
     for (const [k, v] of Object.entries(filters || {})) {
       if (v !== undefined && v !== null) params.set(k, String(v));
@@ -214,10 +213,11 @@ export const api = {
 
   listUsers: () => apiFetch<UserRecord[]>('/api/users'),
 
-  getConfig: (key: string, fallback: unknown = null) =>
-    apiFetch(`/api/config/${encodeURIComponent(key)}`).then((data) =>
-      (data as any)?.value !== undefined ? (data as any).value : (data ?? fallback)
-    ),
+  getConfig: <T>(key: string, fallback: T) =>
+    apiFetch(`/api/config/${encodeURIComponent(key)}`).then((data) => {
+      if (data != null && typeof data === 'object' && 'value' in data) return (data as { value: T }).value;
+      return (data as T) ?? fallback;
+    }),
 
   getFormConfigs: (bu?: string) => {
     const params = new URLSearchParams();
@@ -265,6 +265,8 @@ export const api = {
   updateUser: (id: string, u: unknown) =>
     apiFetch(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(u) }),
   deleteUser: (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
+  toggleUserActivation: (id: string, isActive: boolean) =>
+    apiFetch(`/api/users/${id}/activation`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
 
   putSlaRules: (items: unknown[]) =>
     apiFetch('/api/config/sla_rules', { method: 'PUT', body: JSON.stringify(items) }),

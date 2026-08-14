@@ -2,6 +2,7 @@ import { useState, useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Search, Ticket, Users, BookOpen, BarChart2, ArrowRight, type LucideIcon } from 'lucide-react';
 import { useApp } from '../context/AppContext';
+import { useUi } from '../context/UiContext';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts';
 
 interface PaletteItem {
@@ -17,7 +18,8 @@ export default function CommandPalette() {
   const [query, setQuery] = useState('');
   const [prevOpen, setPrevOpen] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
-  const { tickets, kbArticles, setActiveTab, setActiveTicketId, customers } = useApp();
+  const { tickets, kbArticles, customers } = useApp();
+  const { setActiveTab, setActiveTicketId } = useUi();
 
   useKeyboardShortcuts([
     { key: 'k', ctrl: true, handler: () => setOpen(o => !o) },

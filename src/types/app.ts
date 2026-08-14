@@ -15,6 +15,9 @@ export enum TicketPriority {
 
 export enum UserRole {
   BU_SUPPORT = 'BU_SUPPORT',
+  BU_SUPPORT_L1 = 'BU_SUPPORT_L1',
+  BU_SUPPORT_L2 = 'BU_SUPPORT_L2',
+  BU_SUPPORT_L3 = 'BU_SUPPORT_L3',
   PARTNER = 'PARTNER',
   EXECUTIVE = 'EXECUTIVE',
   SUPER_ADMIN = 'SUPER_ADMIN',

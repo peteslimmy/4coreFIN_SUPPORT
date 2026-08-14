@@ -8,6 +8,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'audit:view', 'audit:verify', 'reports:view', 'executive:dashboard',
   'partner:rca', 'admin:config', 'admin:users', 'admin:forms', 'admin:access',
   'admin:branding', 'admin:landing_page', 'admin:sla',
+  'users:view',
 ];
 
 export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; label: string }[] }[] = [
@@ -65,6 +66,32 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
   },
 ];
 
+/** Tiered BU support roles. Each level maps 1:1 to the user's registered role. */
+export const BU_SUPPORT_LEVEL_ROLES = ['BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3'] as const;
+
+/** True when the role is a business-unit support account (any tier, or legacy). */
+export function isBuSupportRole(role: string | undefined | null): boolean {
+  return role === 'BU_SUPPORT' || (BU_SUPPORT_LEVEL_ROLES as readonly string[]).includes(role ?? '');
+}
+
+/** True when the role is a payment-partner account. */
+export function isPartnerRole(role: string | undefined | null): boolean {
+  return role === 'PARTNER';
+}
+
+/** True for roles with cross-tenant (global) ticket visibility. */
+export function isGlobalRole(role: string | undefined | null): boolean {
+  return role === 'SUPER_ADMIN' || role === 'EXECUTIVE';
+}
+
+export const BU_SUPPORT_PERMISSIONS: Permission[] = [
+  'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:resolve',
+  'tickets:delete', 'tickets:escalate', 'tickets:merge', 'tickets:unmask', 'tickets:assign',
+  'comments:view', 'comments:create', 'comments:internal',
+  'major-incidents:manage', 'customers:manage', 'notifications:view',
+  'audit:view', 'reports:view', 'admin:config', 'users:view',
+];
+
 export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     id: 'SUPER_ADMIN',
@@ -75,18 +102,36 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     permissions: '*',
   },
   {
-    id: 'BU_SUPPORT',
-    name: 'Business Unit Support',
-    description: 'Ticket operations, config management, and investigation for assigned business unit(s).',
+    id: 'BU_SUPPORT_L1',
+    name: 'Business Unit Support — Level 1',
+    description: 'First-line BU agent. Files and tracks tickets for the assigned business unit, escalates to the payment partner domain within the ticket.',
     isSystem: true,
     buScoped: true,
-    permissions: [
-      'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:resolve',
-      'tickets:delete', 'tickets:escalate', 'tickets:merge', 'tickets:unmask', 'tickets:assign',
-      'comments:view', 'comments:create', 'comments:internal',
-      'major-incidents:manage', 'customers:manage', 'notifications:view',
-      'audit:view', 'reports:view', 'admin:config',
-    ],
+    permissions: [...BU_SUPPORT_PERMISSIONS],
+  },
+  {
+    id: 'BU_SUPPORT_L2',
+    name: 'Business Unit Support — Level 2',
+    description: 'Senior BU agent. Level-2 escalation target within the business unit; broader handling of escalated tickets for the assigned business unit.',
+    isSystem: true,
+    buScoped: true,
+    permissions: [...BU_SUPPORT_PERMISSIONS],
+  },
+  {
+    id: 'BU_SUPPORT_L3',
+    name: 'Business Unit Support — Level 3',
+    description: 'Lead BU agent. Final BU-side escalation tier; owns escalated tickets for the assigned business unit.',
+    isSystem: true,
+    buScoped: true,
+    permissions: [...BU_SUPPORT_PERMISSIONS],
+  },
+  {
+    id: 'BU_SUPPORT',
+    name: 'Business Unit Support (legacy)',
+    description: 'Legacy flat BU role. Migrated accounts map to BU_SUPPORT_L1 when provisioned anew.',
+    isSystem: true,
+    buScoped: true,
+    permissions: [...BU_SUPPORT_PERMISSIONS],
   },
   {
     id: 'EXECUTIVE',

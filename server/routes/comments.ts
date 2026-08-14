@@ -17,7 +17,7 @@ export function createCommentsRouter(): Router {
     const c = req.body;
     const ticket = await getScopedTicket(c.ticketId, req.user!);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-    const entry = { ...c, id: 'cmt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), timestamp: new Date().toISOString(), author: req.user!.name, role: req.user!.role, seen: false, seenBy: [] };
+    const entry = { ...c, id: typeof c.id === 'string' && c.id.trim() ? c.id : 'cmt-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), timestamp: new Date().toISOString(), author: req.user!.name, role: req.user!.role, seen: false, seenBy: [] };
     await insertComment(entry);
     res.status(201).json(entry);
   });

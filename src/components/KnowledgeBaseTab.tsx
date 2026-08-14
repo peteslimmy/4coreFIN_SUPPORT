@@ -3,13 +3,15 @@ import {
   BookOpen, Search, Plus, Trash2, Edit3, Clipboard, Calendar, ArrowRight, User, ChevronLeft
 } from 'lucide-react';
 import { KbArticle } from '../types/admin';
-import { useApp } from '../context/AppContext';
+import { useUi } from '../context/UiContext';
 import Button from './ui/Button';
 import Input from './ui/Input';
 import Select from './ui/Select';
 import Textarea from './ui/Textarea';
 import Badge from './ui/Badge';
 import ConfirmModal from './ui/ConfirmModal';
+import { syncKbArticles } from '../lib/sync';
+import { isBuSupportRole, isGlobalRole } from '../lib/rbac';
 
 interface KnowledgeBaseTabProps {
   articles: KbArticle[];
@@ -24,7 +26,7 @@ function KnowledgeBaseTab({
   currentRole,
   showToast
 }: KnowledgeBaseTabProps) {
-  const { activeTicketId, setActiveTab, setCommentText } = useApp();
+  const { setCommentText, activeTicketId, setActiveTab } = useUi();
 
   const [selectedArticleId, setSelectedArticleId] = useState<string>(articles[0]?.id || '');
   const [searchQuery, setSearchQuery] = useState('');
@@ -76,19 +78,25 @@ function KnowledgeBaseTab({
     const tagsArray = tagInput.split(',').map(t => t.trim().toLowerCase()).filter(t => t.length > 0);
 
     if (editingArticleId) {
-      setArticles(prev => prev.map(art => 
-        art.id === editingArticleId 
-          ? { 
-              ...art, 
-              title: formState.title, 
-              category: formState.category, 
-              partner: formState.partner, 
-              content: formState.content, 
+      const updated = articles.map(art =>
+        art.id === editingArticleId
+          ? {
+              ...art,
+              title: formState.title,
+              category: formState.category,
+              partner: formState.partner,
+              content: formState.content,
               tags: tagsArray,
-              lastUpdated: new Date().toISOString().split('T')[0]
-            } 
+              lastUpdated: new Date().toISOString().split('T')[0],
+            }
           : art
-      ));
+      );
+      setArticles(updated);
+      try {
+        syncKbArticles(updated);
+      } catch {
+        showToast('Failed to update article on server.', 'error');
+      }
       showToast('Article updated successfully.', 'success');
       setEditingArticleId(null);
     } else {
@@ -99,9 +107,15 @@ function KnowledgeBaseTab({
         partner: formState.partner,
         content: formState.content,
         tags: tagsArray,
-        lastUpdated: new Date().toISOString().split('T')[0]
+        lastUpdated: new Date().toISOString().split('T')[0],
       };
-      setArticles(prev => [newArt, ...prev]);
+      const updated = [newArt, ...articles];
+      setArticles(updated);
+      try {
+        syncKbArticles(updated);
+      } catch {
+        showToast('Failed to publish article to server.', 'error');
+      }
       setSelectedArticleId(newArt.id);
       showToast('New Knowledge Base Article published.', 'success');
     }
@@ -129,10 +143,16 @@ function KnowledgeBaseTab({
     setDeleteConfirmArticleId(id);
   };
 
-  const confirmDeleteArticle = () => {
+  const confirmDeleteArticle = async () => {
     if (!deleteConfirmArticleId) return;
-    setArticles(prev => prev.filter(art => art.id !== deleteConfirmArticleId));
-    showToast('Article deleted successfully.', 'success');
+    const filtered = articles.filter(art => art.id !== deleteConfirmArticleId);
+    setArticles(filtered);
+    try {
+      syncKbArticles(filtered);
+      showToast('Article deleted successfully.', 'success');
+    } catch {
+      showToast('Failed to delete article from server.', 'error');
+    }
     if (selectedArticleId === deleteConfirmArticleId) {
       setSelectedArticleId('');
     }
@@ -158,7 +178,7 @@ function KnowledgeBaseTab({
   ];
 
   const partnerOptions = [
-    { value: 'ALL', label: 'All Partners' },
+    { value: 'ALL', label: 'All Payment Partners' },
     { value: 'Parkway', label: 'Parkway' },
     { value: 'PayPal', label: 'PayPal' },
     { value: 'Adyen', label: 'Adyen' },
@@ -192,7 +212,7 @@ function KnowledgeBaseTab({
           </h3>
           <p className="text-xs text-text-muted">Complaint playbooks, known partner issues, and approved mitigation paths</p>
         </div>
-        {['SUPER_ADMIN', 'BU_SUPPORT'].includes(currentRole) && (
+        {(isGlobalRole(currentRole) || isBuSupportRole(currentRole)) && (
           <Button
             onClick={() => {
               setEditingArticleId(null);
@@ -238,7 +258,7 @@ function KnowledgeBaseTab({
                 options={categoryOptions}
               />
               <Select
-                label="Partner"
+                label="Payment Partner"
                 value={partnerFilter}
                 onChange={(e) => setPartnerFilter(e.target.value)}
                 options={partnerOptions}
@@ -369,12 +389,12 @@ function KnowledgeBaseTab({
                     {activeArticle.category}
                   </Badge>
                   <span className="text-xs bg-surface-hover text-text-secondary px-2 py-0.5 rounded font-bold font-mono">
-                    Partner: {activeArticle.partner}
+                    Payment Partner: {activeArticle.partner}
                   </span>
                 </div>
                 
                 {/* Edit/Delete Actions */}
-                {['SUPER_ADMIN', 'BU_SUPPORT'].includes(currentRole) && (
+                {(isGlobalRole(currentRole) || isBuSupportRole(currentRole)) && (
                   <div className="flex items-center gap-1">
                     <button 
                       onClick={() => handleEditArticle(activeArticle)}

@@ -1,20 +1,31 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="https://ai.google.dev/static/site-assets/images/share-ais-513315318.png" />
-</div>
+# 4CoreFinSupport
 
-# Run and deploy your AI Studio app
-
-This contains everything you need to run your app locally.
-
-View your app in AI Studio: https://ai.studio/apps/a5889e17-db70-41de-8b24-27bcd6c7b2a8
+FinTech Incident Control & Payment Operations Intelligence.
 
 ## Run Locally
 
-**Prerequisites:**  Node.js
-
+**Prerequisites:** Node.js
 
 1. Install dependencies:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Copy `.env.example` to `.env` and fill in `SUPABASE_URL`, `SUPABASE_SERVICE_KEY`, `JWT_SECRET`, and `ENCRYPTION_KEY`:
    `npm run dev`
+
+## Scripts
+
+| Command | Description |
+|---|---|
+| `npm run dev` | Start the Express + Vite dev server |
+| `npm run build` | Production build (Vite + server bundle) |
+| `npm run start` | Run the production server (`dist/server.cjs`) |
+| `npm run lint` | ESLint + `tsc --noEmit` |
+| `npm run test` | Unit/integration tests (Vitest) |
+| `npm run test:e2e` | End-to-end tests (Playwright) |
+
+## Documentation
+
+Feature specs and operational runbooks live in [`docs/`](docs/).
+
+## Authentication
+
+All logins use Supabase Auth (`AUTH_PROVIDER=supabase`). The server refuses to boot in production with the legacy `local` provider. See `docs/25_GoLive_QA_and_Auth_Migration.md` for the cutover checklist.

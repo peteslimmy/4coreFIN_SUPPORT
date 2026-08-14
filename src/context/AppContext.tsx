@@ -1,7 +1,7 @@
-import { createContext, useContext, useCallback, useEffect, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { UserRole, TicketStatus, type TicketRecord, type CommentRecord, type AuditLog, type WatcherNotification, type MajorIncidentRecord, type CustomerRecord, type FileEvidence } from '../types/app';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, KbArticle, CategoryRecord } from '../types/admin';
-import type { BuFormConfig } from '../types/forms';
+import type { BuFormConfig, TicketFormConfig } from '../types/forms';
 import type { RoleDefinition, Permission } from '../types/rbac';
 import { getRoles } from '../lib/rbac';
 import { useToast } from '../hooks/useToast';
@@ -10,11 +10,13 @@ import { normalizeStatus } from '../lib/ticketStateMachine';
 import { connectEvents } from '../lib/api';
 import { db } from '../lib/db';
 import { clearAppData } from '../lib/db';
-import { queryClient, queryKeys } from '../lib/queryClient';import type { TransitionRule } from '../lib/ticketStateMachine';
+import { queryClient, queryKeys } from '../lib/queryClient';
+import type { TransitionRule } from '../lib/ticketStateMachine';
 import { useConfigDomain, ConfigProvider } from './ConfigContext';
 import { useAdminDomain, AdminProvider } from './AdminContext';
-import { useAppShellDomain, defaultUser, AppShellProvider } from './AppShellContext';
+import { useAppShellDomain, AppShellProvider } from './AppShellContext';
 import { useTicketDomain, TicketProvider } from './TicketContext';
+import { useUi, UiProvider } from './UiContext';
 
 // Re-export domain hooks for narrow consumers
 export { useConfigContext, ConfigContext, ConfigProvider } from './ConfigContext';
@@ -27,8 +29,12 @@ export interface CurrentUser {
   lastName: string;
   email: string;
   bu: string;
+  partner: string;
+  accountType?: string;
   phone: string;
 }
+
+const defaultUser: CurrentUser = { firstName: '', lastName: '', email: '', bu: '', partner: '', accountType: 'BU', phone: '' };
 
 export interface NotificationConfig {
   id: string;
@@ -46,10 +52,6 @@ export interface AppContextType {
   handleLogin: (email: string, password: string) => Promise<boolean>;
   handleLogout: () => void;
   handleRoleChange: (role: UserRole) => void;
-  activeTab: string;
-  setActiveTab: (tab: string) => void;
-  activeTicketId: string;
-  setActiveTicketId: (id: string) => void;
   tickets: TicketRecord[];
   setTickets: Dispatch<SetStateAction<TicketRecord[]>>;
   comments: CommentRecord[];
@@ -86,19 +88,13 @@ export interface AppContextType {
   setCategories: Dispatch<SetStateAction<CategoryRecord[]>>;
   buFormConfigs: BuFormConfig[];
   setBuFormConfigs: Dispatch<SetStateAction<BuFormConfig[]>>;
+  ticketFormConfigs: TicketFormConfig[];
+  setTicketFormConfigs: Dispatch<SetStateAction<TicketFormConfig[]>>;
   roles: RoleDefinition[];
   setRoles: Dispatch<SetStateAction<RoleDefinition[]>>;
   can: (permission: Permission) => boolean;
   notificationConfigs: NotificationConfig[];
   setNotificationConfigs: Dispatch<SetStateAction<NotificationConfig[]>>;
-  searchQuery: string;
-  setSearchQuery: Dispatch<SetStateAction<string>>;
-  priorityFilter: string;
-  setPriorityFilter: Dispatch<SetStateAction<string>>;
-  statusFilter: string;
-  setStatusFilter: Dispatch<SetStateAction<string>>;
-  commentText: string;
-  setCommentText: Dispatch<SetStateAction<string>>;
   showToast: (message: string, type?: 'success' | 'info' | 'error' | 'warning', duration?: number, action?: { label: string; onClick: () => void }) => void;
   logAuditAction: (ticketId: string | null, action: string, details: string) => Promise<void>;
   saveToStorage: (t?: TicketRecord[], c?: CommentRecord[], a?: AuditLog[], m?: MajorIncidentRecord[], wn?: WatcherNotification[], uList?: UserRecord[], sRules?: SlaRule[], hList?: HolidayRecord[], tTemplates?: TicketTemplate[], kArticles?: KbArticle[]) => void;
@@ -141,6 +137,7 @@ interface LatestState {
   categories: CategoryRecord[];
   evidence: FileEvidence[];
   buFormConfigs: BuFormConfig[];
+  ticketFormConfigs: TicketFormConfig[];
   roles: RoleDefinition[];
 }
 
@@ -164,6 +161,7 @@ interface PersistedState {
   categories?: CategoryRecord[];
   evidence?: FileEvidence[];
   buFormConfigs?: BuFormConfig[];
+  ticketFormConfigs?: TicketFormConfig[];
   roles?: RoleDefinition[];
 }
 
@@ -188,6 +186,7 @@ if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies.m
      if (state.categories) writes.push(db.categories.bulkPut(state.categories));
      if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence));
      if (state.buFormConfigs) writes.push(db.buFormConfigs.bulkPut(state.buFormConfigs));
+     if (state.ticketFormConfigs) writes.push(db.ticketFormConfigs.bulkPut(state.ticketFormConfigs));
      if (state.roles) writes.push(db.roles.bulkPut(state.roles));
      await Promise.all(writes);
    } catch (error) {
@@ -225,6 +224,14 @@ function seedQueryCacheFromBootstrap(data: BootstrapData): void {
 }
 
 export function AppProvider({ children }: { children: ReactNode }) {
+  return (
+    <UiProvider>
+      <AppProviderInner>{children}</AppProviderInner>
+    </UiProvider>
+  );
+}
+
+function AppProviderInner({ children }: { children: ReactNode }) {
   const toastHook = useToast();
   const showToast = useCallback((message: string, type: 'success' | 'info' | 'error' | 'warning' = 'success', duration?: number, action?: { label: string; onClick: () => void }) => {
     toastHook.addToast(message, type, duration, action);
@@ -233,6 +240,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const config = useConfigDomain();
   const admin = useAdminDomain();
   const shell = useAppShellDomain(config.roles);
+  const ui = useUi();
+  const { setActiveTab } = ui;
 
   const lastLocalUpdate = useRef<Record<string, number>>({});
 
@@ -247,7 +256,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     businessUnits: admin.businessUnits, partners: admin.partners,
     businessUnitCodes: admin.businessUnitCodes, paymentChannels: admin.paymentChannels,
     categories: admin.categories, evidence: [], buFormConfigs: config.buFormConfigs,
-    roles: config.roles,
+    ticketFormConfigs: config.ticketFormConfigs, roles: config.roles,
   });
 
   const sanitizeTicket = (ticket: TicketRecord): TicketRecord => {
@@ -282,8 +291,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_major_incidents', JSON.stringify(m !== undefined ? m : latest.majorIncidents));
     localStorage.setItem('4c_watcher_notifications', JSON.stringify(wn !== undefined ? wn : latest.watcherNotifications));
     const sanitizedUsers = uList !== undefined 
-      ? uList.map(u => (({ password_hash: _, ...rest }) => rest)(u as any)) 
-      : latest.users.map(u => (({ password_hash: _, ...rest }) => rest)(u as any));
+      ? uList.map(u => (({ password_hash: _, ...rest }) => rest)(u as UserRecord & { password_hash?: string })) 
+      : latest.users.map(u => (({ password_hash: _, ...rest }) => rest)(u as UserRecord & { password_hash?: string }));
     localStorage.setItem('4c_users', JSON.stringify(sanitizedUsers));
     localStorage.setItem('4c_sla_rules', JSON.stringify(sRules !== undefined ? sRules : latest.slaRules));
     localStorage.setItem('4c_holidays', JSON.stringify(hList !== undefined ? hList : latest.holidays));
@@ -298,6 +307,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_categories', JSON.stringify(catList !== undefined ? catList : latest.categories));
     localStorage.setItem('4c_evidence', JSON.stringify(eList !== undefined ? eList : latest.evidence));
     localStorage.setItem('4c_bu_form_configs', JSON.stringify(fConfigs !== undefined ? fConfigs : latest.buFormConfigs));
+    localStorage.setItem('4c_ticket_form_configs', JSON.stringify(latest.ticketFormConfigs));
     localStorage.setItem('4c_roles', JSON.stringify(rList !== undefined ? rList : latest.roles));
 
     // Mirror to IndexedDB for larger datasets / offline resilience.
@@ -320,6 +330,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       categories: catList !== undefined ? catList : latest.categories,
       evidence: eList !== undefined ? eList : latest.evidence,
       buFormConfigs: fConfigs !== undefined ? fConfigs : latest.buFormConfigs,
+      ticketFormConfigs: latest.ticketFormConfigs,
       roles: rList !== undefined ? rList : latest.roles,
     }).catch(() => {
       // IndexedDB unavailable (private mode / quota) — localStorage already written.
@@ -351,6 +362,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       categories: admin.categories,
       evidence: ticket.evidence,
       buFormConfigs: config.buFormConfigs,
+      ticketFormConfigs: config.ticketFormConfigs,
       roles: config.roles,
     };
   });
@@ -436,24 +448,23 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const handleRoleChange = useCallback((role: UserRole) => {
     if (!import.meta.env.DEV) { showToast('Role switching is disabled in production.', 'error'); return; }
     shell.setCurrentRole(role);
-    let u: CurrentUser = { firstName: 'Sarah', lastName: 'Jenkins', email: 's.jenkins@customer.com', bu: 'POSSAP', phone: '+1-555-0101' };
-    if (role === UserRole.BU_SUPPORT) {
-      u = { firstName: 'Sarah', lastName: 'Jenkins', email: 's.jenkins@customer.com', bu: 'POSSAP', phone: '+1-555-0101' };
-      shell.setActiveTab('tickets');
-    } else if (role === UserRole.PARTNER) {
-      u = { firstName: 'Marcus', lastName: 'Lee', email: 'm.lee@partner.com', bu: 'Parkway', phone: '+1-555-0202' };
-      shell.setActiveTab('partner_portal');
+    let u: CurrentUser;
+    if (role === UserRole.PARTNER) {
+      u = { firstName: 'Marcus', lastName: 'Lee', email: 'm.lee@partner.com', bu: '', partner: 'Parkway', accountType: 'PARTNER', phone: '+1-555-0202' };
+      setActiveTab('payment_partner_portal');
     } else if (role === UserRole.EXECUTIVE) {
-      u = { firstName: 'Elena', lastName: 'Rostova', email: 'e.rostova@exec.com', bu: 'CORPORATE', phone: '+1-555-0303' };
-      shell.setActiveTab('dashboard');
+      u = { firstName: 'Elena', lastName: 'Rostova', email: 'e.rostova@exec.com', bu: 'CORPORATE', partner: '', accountType: 'BU', phone: '+1-555-0303' };
+      setActiveTab('dashboard');
     } else if (role === UserRole.SUPER_ADMIN) {
-      u = { firstName: 'Super', lastName: 'Administrator', email: 'admin@4core.com', bu: 'ALL', phone: '+1-555-0404' };
-      shell.setActiveTab('reference_data');
+      u = { firstName: 'Super', lastName: 'Administrator', email: 'admin@4core.com', bu: 'ALL', partner: '', accountType: 'BU', phone: '+1-555-0404' };
+      setActiveTab('reference_data');
     } else if (role === UserRole.CUSTOMER) {
-      u = { firstName: 'Chidinma', lastName: 'Okafor', email: 'chidinma@example.com', bu: 'POSSAP', phone: '+234-801-234-5678' };
-      shell.setActiveTab('customer_portal');
+      u = { firstName: 'Chidinma', lastName: 'Okafor', email: 'chidinma@example.com', bu: 'POSSAP', partner: '', accountType: 'BU', phone: '+234-801-234-5678' };
+      setActiveTab('customer_portal');
     } else {
-      shell.setActiveTab('tickets');
+      // Any BU_SUPPORT tier (legacy or L1/L2/L3) behaves as a BU account.
+      u = { firstName: 'Sarah', lastName: 'Jenkins', email: 's.jenkins@customer.com', bu: 'POSSAP', partner: '', accountType: 'BU', phone: '+1-555-0101' };
+      setActiveTab('tickets');
     }
     shell.setCurrentUser(u);
     showToast(`Switched perspective to ${role}`, 'info');
@@ -471,14 +482,14 @@ export function AppProvider({ children }: { children: ReactNode }) {
       saveToStorage(ticketList, commentList, updated);
       return updated;
     });
-  }, [showToast, ticketList, commentList, saveToStorage, shell, setTicketAuditLogs]);
+  }, [showToast, ticketList, commentList, saveToStorage, shell, setTicketAuditLogs, setActiveTab]);
 
   // Login handler — calls server API for proper JWT auth
   const handleLogin = useCallback(async (email: string, password: string): Promise<boolean> => {
     try {
       const { user, mustChangePassword } = await api.login(email, password);
       const legacyName = user.name || '';
-      shell.setCurrentUser({ firstName: user.firstName || legacyName.split(' ')[0] || '', lastName: user.lastName || legacyName.split(' ').slice(1).join(' ') || '', email: user.email, bu: user.bu, phone: user.phone || '' });
+      shell.setCurrentUser({ firstName: user.firstName || legacyName.split(' ')[0] || '', lastName: user.lastName || legacyName.split(' ').slice(1).join(' ') || '', email: user.email, bu: user.bu, partner: user.partner || '', accountType: user.accountType || (user.role === UserRole.PARTNER ? 'PARTNER' : 'BU'), phone: user.phone || '' });
       shell.setCurrentRole(user.role as UserRole);
       shell.setMustChangePassword(Boolean(mustChangePassword));
       shell.setIsAuthenticated(true);
@@ -490,15 +501,15 @@ export function AppProvider({ children }: { children: ReactNode }) {
       }
 
       if (user.role === UserRole.EXECUTIVE) {
-        shell.setActiveTab('dashboard');
+        setActiveTab('dashboard');
       } else if (user.role === UserRole.SUPER_ADMIN) {
-        shell.setActiveTab('reference_data');
+        setActiveTab('reference_data');
       } else if (user.role === UserRole.PARTNER) {
-        shell.setActiveTab('partner_portal');
+        setActiveTab('payment_partner_portal');
       } else if (user.role === UserRole.CUSTOMER) {
-        shell.setActiveTab('customer_portal');
+        setActiveTab('customer_portal');
       } else {
-        shell.setActiveTab('tickets');
+        setActiveTab('tickets');
       }
 
       showToast(`Welcome, ${user.firstName || legacyName.split(' ')[0] || 'User'}!`, 'success');
@@ -508,7 +519,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       showToast(message, 'error');
       return false;
     }
-  }, [showToast, shell, hydrateFromBootstrap]);
+  }, [showToast, shell, hydrateFromBootstrap, setActiveTab]);
 
   // Logout handler
   const handleLogout = useCallback(() => {
@@ -518,13 +529,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     shell.setMustChangePassword(false);
     shell.setCurrentUser(defaultUser);
     shell.setCurrentRole(UserRole.BU_SUPPORT);
-    shell.setActiveTab('tickets');
+    setActiveTab('tickets');
     void clearAppData().catch(() => {});
     showToast('Logged out successfully.', 'info');
     if (window.location.pathname !== '/auth/login') {
       window.location.assign('/auth/login');
     }
-  }, [shell, showToast, logAuditAction]);
+  }, [shell, showToast, logAuditAction, setActiveTab]);
 
   // Restore the session on refresh when a server session cookie is present.
   // Runs once on mount: all referenced setters are stable, and re-running on
@@ -546,6 +557,8 @@ export function AppProvider({ children }: { children: ReactNode }) {
           lastName: user.lastName || parts.slice(1).join(' ') || '',
           email: user.email,
           bu: user.bu,
+          partner: user.partner || '',
+          accountType: user.accountType || (user.role === UserRole.PARTNER ? 'PARTNER' : 'BU'),
           phone: user.phone || '',
         });
         try {
@@ -567,12 +580,12 @@ export function AppProvider({ children }: { children: ReactNode }) {
       shell.setMustChangePassword(false);
       shell.setCurrentUser(defaultUser);
       shell.setCurrentRole(UserRole.BU_SUPPORT);
-      shell.setActiveTab('tickets');
+      setActiveTab('tickets');
       showToast('Session expired. Please sign in again.', 'warning');
     };
     window.addEventListener('auth:expired', onAuthExpired);
     return () => window.removeEventListener('auth:expired', onAuthExpired);
-  }, [shell, showToast]);
+  }, [shell, showToast, setActiveTab]);
 
   // Subscribe to SSE real-time events when authenticated
   useEffect(() => {
@@ -619,7 +632,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     saveToStorage();
   }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.businessUnitCodes, admin.partners, admin.paymentChannels, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
 
-  const appContextValue: AppContextType = {
+  const appContextValue: AppContextType = useMemo(() => ({
     isLoading: shell.isLoading,
     isAuthenticated: shell.isAuthenticated,
     mustChangePassword: shell.mustChangePassword,
@@ -628,11 +641,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     currentUser: shell.currentUser,
     handleLogin,
     handleLogout,
-    handleRoleChange,
-    activeTab: shell.activeTab,
-    setActiveTab: shell.setActiveTab,
-    activeTicketId: shell.activeTicketId,
-    setActiveTicketId: shell.setActiveTicketId,
+handleRoleChange,
     tickets: ticket.tickets,
     setTickets: ticket.setTickets,
     comments: ticket.comments,
@@ -669,19 +678,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
     setCategories: admin.setCategories,
     buFormConfigs: config.buFormConfigs,
     setBuFormConfigs: config.setBuFormConfigs,
+    ticketFormConfigs: config.ticketFormConfigs,
+    setTicketFormConfigs: config.setTicketFormConfigs,
     roles: config.roles,
     setRoles: config.setRoles,
     can: shell.can,
     notificationConfigs: config.notificationConfigs,
     setNotificationConfigs: config.setNotificationConfigs,
-    searchQuery: shell.searchQuery,
-    setSearchQuery: shell.setSearchQuery,
-    priorityFilter: shell.priorityFilter,
-    setPriorityFilter: shell.setPriorityFilter,
-    statusFilter: shell.statusFilter,
-    setStatusFilter: shell.setStatusFilter,
-    commentText: shell.commentText,
-    setCommentText: shell.setCommentText,
     showToast,
     logAuditAction,
     saveToStorage,
@@ -694,7 +697,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     getAvailableTicketTransitions: ticket.getAvailableTicketTransitions,
     isTicketTerminal: ticket.isTicketTerminal,
     transitionTicket,
-  };
+  }), [
+    handleLogin, handleLogout, handleRoleChange, showToast, logAuditAction, saveToStorage,
+    shell.isLoading, shell.isAuthenticated, shell.mustChangePassword, shell.setMustChangePassword, shell.currentRole, shell.currentUser, shell.can,
+    ticket.tickets, ticket.comments, ticket.auditLogs, ticket.watcherNotifications, ticket.evidence, ticket.majorIncidents, ticket.getTicketRisk, ticket.getScopedTickets, ticket.getAvailableTicketTransitions, ticket.isTicketTerminal,
+    admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, admin.businessUnits, admin.businessUnitCodes, admin.partners, admin.paymentChannels, admin.categories,
+    config.kbArticles, config.savedReplies, config.customers, config.buFormConfigs, config.ticketFormConfigs, config.roles, config.notificationConfigs,
+    handleCreateTicket, notifyWatchers, transitionTicket,
+    admin.setBusinessUnitCodes, admin.setBusinessUnits, admin.setCategories, admin.setHolidays, admin.setPartners, admin.setPaymentChannels, admin.setSlaRules, admin.setTicketTemplates, admin.setUsers,
+    config.setBuFormConfigs, config.setCustomers, config.setKbArticles, config.setNotificationConfigs, config.setRoles, config.setSavedReplies, config.setTicketFormConfigs,
+    ticket.setAuditLogs, ticket.setComments, ticket.setEvidence, ticket.setMajorIncidents, ticket.setTickets, ticket.setWatcherNotifications,
+  ]);
 
   return (
     <ConfigProvider value={config}>

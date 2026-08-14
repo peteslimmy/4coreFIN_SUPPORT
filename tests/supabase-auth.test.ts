@@ -87,7 +87,7 @@ describe('Supabase Auth provider', () => {
     const res = await fetch(`${base}/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'New Partner', email: 'partner@beta.com', password: 'password123', bu: 'BETA' }),
+      body: JSON.stringify({ name: 'New Payment Partner', email: 'partner@beta.com', password: 'password123', bu: 'BETA' }),
     });
     expect(res.status).toBe(404);
   });
@@ -128,7 +128,7 @@ describe('Supabase Auth admin provisioning', () => {
     const res = await fetch(`${base}/users`, {
       method: 'POST',
       headers: { ...authedHeaders(session, csrf), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'Provisioned', email: 'new@beta.com', role: 'PARTNER', bu: 'BETA', password: 'password123' }),
+      body: JSON.stringify({ name: 'Provisioned', email: 'new@beta.com', role: 'PARTNER', partner: 'BETA', password: 'password123' }),
     });
     expect(res.status).toBe(201);
     const { data } = await supabase.from('users').select('*').eq('email', 'new@beta.com');

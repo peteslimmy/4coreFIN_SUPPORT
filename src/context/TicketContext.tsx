@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useMemo, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import {
   TicketStatus,
   TicketPriority,
@@ -11,14 +11,14 @@ import {
   type FileEvidence,
 } from '../types/app';
 import { computeAuditHash } from '../lib/compliance';
-import { syncAudit, syncNotification, syncTicketPatch, syncCreateTicket } from '../lib/sync';
+import { syncAudit, syncNotification, syncTicketUpdate, syncCreateTicket } from '../lib/sync';
 import { calculateSlaDeadline } from '../lib/slaCalculator';
 import { nextTicketId } from '../lib/buCodes';
+import { useUi } from './UiContext';
 import {
   applyTransition,
   getAvailableTransitions,
   isTerminal,
-  normalizeStatus,
   type TransitionRule,
   TransitionError,
 } from '../lib/ticketStateMachine';
@@ -68,8 +68,17 @@ interface TicketDomainDeps {
 }
 
 export function useTicketDomain({ shell, admin, saveToStorage, showToast }: TicketDomainDeps): TicketDomain {
-  const { currentUser, currentRole, activeTicketId } = shell;
+  const { currentUser, currentRole } = shell;
   const { slaRules, holidays, businessUnitCodes } = admin;
+  const { activeTicketId, setActiveTicketId } = useUi();
+
+  // Keep the latest selection in a ref so transitionTicket's identity stays
+  // stable across ticket clicks (avoiding re-renders of every useApp consumer).
+  // The ref is synced in an effect (never during render).
+  const activeTicketIdRef = useRef(activeTicketId);
+  useEffect(() => {
+    activeTicketIdRef.current = activeTicketId;
+  }, [activeTicketId]);
 
   const [tickets, setTickets] = useState<TicketRecord[]>([]);
   const [comments, setComments] = useState<CommentRecord[]>([]);
@@ -177,19 +186,19 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       const rule: TransitionRule | undefined = available.find(r => r.to === toStatus);
 
       setTickets(ts => ts.map(t => (t.id === ticketId ? updated : t)));
-      if (activeTicketId === ticketId) shell.setActiveTicketId(ticketId);
+      if (activeTicketIdRef.current === ticketId) setActiveTicketId(ticketId);
 
       logAuditAction(
         ticketId,
         `TICKET_${rule?.event || 'STATUS_CHANGE'}`,
         rule ? `Status changed to ${toStatus} via ${rule.label}.` : `Status changed to ${toStatus}.`
       );
-      void syncTicketPatch(ticketId, { status: toStatus });
+      void syncTicketUpdate(ticketId, { status: toStatus });
       notifyWatchers(updated, `Ticket ${ticketId} status updated to ${toStatus}.`);
 
       return updated;
     },
-    [tickets, currentRole, logAuditAction, notifyWatchers, activeTicketId, currentUser.firstName, currentUser.lastName, shell]
+    [tickets, currentRole, logAuditAction, notifyWatchers, currentUser.firstName, currentUser.lastName, setActiveTicketId]
   );
 
   // SLA risk check
@@ -232,19 +241,21 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       return source;
     }
   if (currentRole === UserRole.PARTNER) {
-    const bu = currentUser.bu.toLowerCase();
+    // Payment-partner accounts only see tickets whose partner matches their
+    // account's payment-partner domain (or tickets assigned to that partner team).
+    const mine = (currentUser.partner || currentUser.bu || '').toLowerCase();
     return source.filter(t => {
-      const partner = t.partner.toLowerCase();
-      const agent = t.assignedAgentId?.toLowerCase() || '';
+      const partner = (t.partner || '').toLowerCase();
+      const agent = (t.assignedAgentId || '').toLowerCase();
       return (
-        partner === bu ||
-        agent === bu ||
-        agent.startsWith(bu + ' ')
+        partner === mine ||
+        agent === mine ||
+        agent.startsWith(mine + ' ')
       );
     });
   }
     return source.filter(t => t.businessUnit === currentUser.bu);
-  }, [currentRole, currentUser.bu, tickets]);
+  }, [currentRole, currentUser.bu, currentUser.partner, tickets]);
 
   // Create ticket helper
   const handleCreateTicket = useCallback((ticketData: Partial<TicketRecord>): string => {
@@ -279,7 +290,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       slaDeadline: deadlineDate.toISOString(),
       isEscalated: false,
       escalationCount: 0,
-      assignedAgentId: `${ticketData.partner || 'Parkway'} Partner Team`,
+      assignedAgentId: `${ticketData.partner || 'Parkway'} Payment Partner Team`,
       majorIncidentId: null,
       feedbackScore: null,
       feedbackComment: null,
@@ -314,7 +325,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     return tId;
   }, [currentUser, currentRole, slaRules, holidays, businessUnitCodes, tickets, comments, auditLogs, saveToStorage, showToast]);
 
-  const value: TicketDomain = {
+  const value: TicketDomain = useMemo(() => ({
     tickets, setTickets,
     comments, setComments,
     auditLogs, setAuditLogs,
@@ -329,7 +340,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     isTicketTerminal,
     transitionTicket,
     handleCreateTicket,
-  };
+  }), [tickets, comments, auditLogs, watcherNotifications, evidence, majorIncidents, logAuditAction, notifyWatchers, getTicketRisk, getScopedTickets, getAvailableTicketTransitions, isTicketTerminal, transitionTicket, handleCreateTicket]);
 
   return value;
 }

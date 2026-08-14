@@ -74,7 +74,7 @@ describe('isAtRisk', () => {
 });
 
 describe('computePartnerMetrics', () => {
-  it('computes sla, real mttr, reopen and satisfaction per partner', () => {
+  it('computes sla, real mttr, reopen and satisfaction per payment partner', () => {
     const tickets = [
       makeTicket({ partner: 'Parkway', status: TicketStatus.CLOSED, isEscalated: false, feedbackScore: 5, createdAt: new Date(now - 2 * DAY).toISOString(), rcaDetails: { resolvedAt: new Date(now - 1.5 * DAY).toISOString(), rootCause: '', contributingFactors: '', correctiveActions: '', preventiveActions: '', preventiveOwner: '', preventiveDueDate: '' } }),
       makeTicket({ partner: 'Parkway', status: TicketStatus.ASSIGNED, isEscalated: true, feedbackScore: null }),

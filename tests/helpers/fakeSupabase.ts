@@ -240,11 +240,19 @@ export function createFakeSupabase(seed: TableStore) {
         };
       },
       admin: {
-        createUser: async ({ email }: any) => ({
-          data: { user: { id: 'auth-' + email, email } },
+        createUser: async ({ email, password, email_confirm, user_metadata }: any) => ({
+          data: { user: { id: 'auth-' + email, email, user_metadata } },
           error: null,
         }),
-        updateUserById: async (_id: string, _attrs: any) => ({ data: { user: {} }, error: null }),
+        updateUserById: async (id: string, attrs: any) => {
+          const row = (store.users || []).find((u: any) => u.id === id);
+          if (row) {
+            if (attrs.email) row.email = attrs.email;
+            if (attrs.password) row.password_plaintext = attrs.password;
+            if (attrs.user_metadata?.full_name) row.name = attrs.user_metadata.full_name;
+          }
+          return { data: { user: { id, ...attrs } }, error: null };
+        },
         deleteUser: async (_id: string) => ({ error: null }),
       },
     },

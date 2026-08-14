@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { Plus, Search, Pencil, Trash2 } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Upload } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { syncReferenceCreate, syncReferenceUpdate, syncReferenceDelete } from '../../lib/sync';
+import { toSubmitPayload, syncCategorySla } from '../../lib/bulkImport';
 import type { ReferenceKindDef } from '../../types/reference';
 import Input from '../ui/Input';
 import Select from '../ui/Select';
@@ -10,29 +11,8 @@ import Button from '../ui/Button';
 import Modal from '../ui/Modal';
 import ConfirmModal from '../ui/ConfirmModal';
 import EmptyState from '../ui/EmptyState';
+import BulkImportModal from './BulkImportModal';
 import { useApp } from '../../context/AppContext';
-
-/**
- * Map a row to the payload actually sent to the server. Handles kind-specific
- * transforms (e.g. users store a single `name` column although the form edits
- * first/last name separately, and categories may carry an optional SLA).
- */
-function toSubmitPayload(kind: ReferenceKindDef, item: Record<string, unknown>, editing: boolean): Record<string, unknown> {
-  const payload = { ...item };
-  if (kind.kind === 'users') {
-    const first = String(payload.firstName ?? '').trim();
-    const last = String(payload.lastName ?? '').trim();
-    payload.name = [first, last].filter(Boolean).join(' ');
-    delete payload.firstName;
-    delete payload.lastName;
-  }
-  if (kind.kind === 'categories' && payload.slaHours !== undefined && payload.slaHours !== '') {
-    payload.slaHours = Number(payload.slaHours);
-  } else if (kind.kind === 'categories') {
-    delete payload.slaHours;
-  }
-  return payload;
-}
 
 interface CrudTableProps {
   kind: ReferenceKindDef;
@@ -51,30 +31,8 @@ function defaultValues(def: ReferenceKindDef): Record<string, unknown> {
   return values;
 }
 
-const PRIORITIES = ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'];
-
-/**
- * Keep SLA rules in lockstep with a category's default SLA: when a category is
- * saved with an slaHours value, upsert an sla_rule for that category across all
- * priorities (creating missing rules, updating existing ones to the new value).
- * Called after the category itself has been persisted.
- */
-async function syncCategorySla(category: string, slaHours: number): Promise<void> {
-  const existing = (await api.listReference('slaRules')) as Array<Record<string, unknown>>;
-  const catRules = existing.filter((r) => String(r.category ?? '') === category);
-  const present = new Set(catRules.map((r) => String(r.priority ?? '')));
-  for (const r of catRules) {
-    await syncReferenceUpdate('slaRules', String(r.id), { ...r, durationHours: slaHours });
-  }
-  for (const p of PRIORITIES) {
-    if (!present.has(p)) {
-      await syncReferenceCreate('slaRules', { category, priority: p, durationHours: slaHours });
-    }
-  }
-}
-
 export default function CrudTable({ kind }: CrudTableProps) {
-  const { showToast, currentRole, setBusinessUnits, setBusinessUnitCodes, setPartners, setPaymentChannels, setCategories } = useApp();
+  const { showToast, currentRole, setBusinessUnits, setBusinessUnitCodes, setPartners, setPaymentChannels, setCategories, businessUnits, categories } = useApp();
   const [items, setItems] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +41,7 @@ export default function CrudTable({ kind }: CrudTableProps) {
   const [formError, setFormError] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
 
   const canDelete = !kind.deleteRoles || kind.deleteRoles.includes(currentRole ?? '');
 
@@ -97,11 +56,21 @@ export default function CrudTable({ kind }: CrudTableProps) {
         setBusinessUnits(units);
         setBusinessUnitCodes(Object.fromEntries((rows as Array<Record<string, unknown>>).map((u) => [String(u.name ?? ''), String(u.code ?? '')])));
       } else if (kind.kind === 'paymentChannels') {
-        setPaymentChannels(rows.map((v) => String(v)));
+        setPaymentChannels(rows.map((v) => {
+          if (typeof v === 'string') return v;
+          if (v && typeof v === 'object' && 'value' in v) return String(v.value);
+          return String(v);
+        }));
       } else if (kind.kind === 'partners') {
         setPartners(rows.map((v) => String(v)));
       } else if (kind.kind === 'categories') {
         setCategories(rows as Array<Record<string, unknown>>);
+      }
+      if (kind.kind !== 'categories') {
+        const catRows = await api.listReference('categories').catch(() => []);
+        if (Array.isArray(catRows)) {
+          setCategories(catRows as Array<Record<string, unknown>>);
+        }
       }
     } catch (e) {
       setError((e as Error).message || 'Failed to load');
@@ -110,31 +79,76 @@ export default function CrudTable({ kind }: CrudTableProps) {
     }
   }, [kind.kind, setBusinessUnits, setBusinessUnitCodes, setPaymentChannels, setPartners, setCategories]);
 
+  // Reset local UI state when switching reference kinds (replaces keyed remount).
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reset on kind switch
+    setSearch('');
+    setForm({ open: false, editingId: null, values: defaultValues(kind) });
+    setFormError(null);
+    setDeleteTarget(null);
+    setDeleteError(null);
+    setBulkOpen(false);
+  }, [kind]);
+
+  // Load business units when viewing users to populate the BU dropdown
+  useEffect(() => {
+    if (kind.kind === 'users') {
+      const loadBusinessUnits = async () => {
+        try {
+          const rows = await api.listReference('businessUnits');
+          const units = (rows as Array<Record<string, unknown>>).map((u) => String(u.name ?? ''));
+          setBusinessUnits(units);
+          setBusinessUnitCodes(Object.fromEntries((rows as Array<Record<string, unknown>>).map((u) => [String(u.name ?? ''), String(u.code ?? '')])));
+        } catch (err) {
+          console.error('Failed to load business units for user form:', err);
+        }
+      };
+      loadBusinessUnits();
+    }
+  }, [kind.kind, setBusinessUnits, setBusinessUnitCodes]);
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- mount fetch
     void load();
   }, [load]);
 
+  const isValidRecord = useMemo(() => {
+    if (!kind.isValid) return null;
+    return kind.isValid;
+  }, [kind.isValid]);
+
   const filtered = useMemo(() => {
+    const pool = isValidRecord ? items.filter(isValidRecord) : items;
     const q = search.trim().toLowerCase();
-    if (!q) return items;
-    return items.filter((item) => {
+    if (!q) return pool;
+    return pool.filter((item) => {
       if (kind.stringItems) return String(item).toLowerCase().includes(q);
       const row = item as Record<string, unknown>;
       return Object.values(row).some((v) => String(v ?? '').toLowerCase().includes(q));
     });
-  }, [items, search, kind.stringItems]);
+  }, [items, search, kind.stringItems, isValidRecord]);
 
   const rowLabel = (item: unknown): string => {
-    if (kind.stringItems) return String(item);
+    if (kind.stringItems) {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'value' in item) return String(item.value);
+      return '[Object]';
+    }
     const row = item as Record<string, unknown>;
-    return String(row[kind.fields[0]?.key] ?? row.id ?? '');
+    const v = row[kind.fields[0]?.key] ?? row.id ?? '';
+    return typeof v === 'object' ? '[Object]' : String(v);
   };
 
   const openCreate = () => setForm({ open: true, editingId: null, values: defaultValues(kind) });
   const openEdit = (item: unknown) => {
     if (kind.stringItems) {
-      setForm({ open: true, editingId: String(item), values: { value: String(item) } });
+      if (typeof item === 'string') {
+        setForm({ open: true, editingId: item, values: { value: item } });
+      } else if (item && typeof item === 'object' && 'value' in item) {
+        setForm({ open: true, editingId: String(item.value), values: { value: String(item.value) } });
+      } else {
+        setForm({ open: true, editingId: String(item), values: { value: String(item) } });
+      }
       return;
     }
     const row = item as Record<string, unknown>;
@@ -201,9 +215,9 @@ export default function CrudTable({ kind }: CrudTableProps) {
         if (kind.kind === 'categories' && payload.slaHours && Number(payload.slaHours) > 0) {
           try {
             await syncCategorySla(String(payload.name), Number(payload.slaHours));
-          } catch {
+          } catch (e) {
             // Category saved but SLA sync failed — surface a gentle hint.
-            showToast('Category saved, but SLA sync failed.', 'warning');
+            showToast(`Category saved, but SLA rules sync failed: ${(e as Error).message}`, 'warning');
           }
         }
       }
@@ -235,13 +249,19 @@ export default function CrudTable({ kind }: CrudTableProps) {
 
   const renderCell = (item: unknown, col: { key: string; render?: (item: Record<string, unknown>) => ReactNode }) => {
     if (col.render) return col.render(item as Record<string, unknown>);
-    if (kind.stringItems) return String(item);
+    if (kind.stringItems) {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && 'value' in item) return String((item as Record<string, unknown>).value);
+      return <span className="text-text-muted">[Object]</span>;
+    }
     const row = item as Record<string, unknown>;
     const v = row[col.key];
-    return v === null || v === undefined || v === '' ? <span className="text-text-muted">—</span> : String(v);
+    if (v === null || v === undefined || v === '') return <span className="text-text-muted">—</span>;
+    if (typeof v === 'object') return <span className="text-text-muted">[Object]</span>;
+    return String(v);
   };
 
-  const renderField = (f: ReferenceKindDef['fields'][number]) => {
+   const renderField = (f: ReferenceKindDef['fields'][number]) => {
     const common = {
       id: `ref-${f.key}`,
       label: f.label,
@@ -261,12 +281,16 @@ export default function CrudTable({ kind }: CrudTableProps) {
       );
     }
     if (f.type === 'select') {
+      // Handle dynamic options (functions) or static options
+      const optionsArray = typeof f.options === 'function' 
+        ? f.options({ businessUnits, categories: categories.map((c) => c.name) }) 
+        : (f.options || []);
       return (
         <Select
           key={f.key}
           {...common}
           value={String(value ?? '')}
-          options={(f.options || []).map((o) => ({ value: o, label: o }))}
+          options={optionsArray.map((o) => ({ value: o, label: o }))}
           onChange={(e) => setForm((p) => ({ ...p, values: { ...p.values, [f.key]: e.target.value } }))}
         />
       );
@@ -291,9 +315,16 @@ export default function CrudTable({ kind }: CrudTableProps) {
           <h4 className="text-sm font-bold text-text-primary">{kind.labelPlural}</h4>
           <p className="text-xs text-text-muted">{kind.description}</p>
         </div>
-        <Button onClick={openCreate} size="sm" icon={<Plus className="w-4 h-4" />}>
-          Add {kind.label}
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          {kind.supportBulkImport && (
+            <Button variant="secondary" size="sm" icon={<Upload className="w-4 h-4" />} onClick={() => setBulkOpen(true)}>
+              Import
+            </Button>
+          )}
+          <Button onClick={openCreate} size="sm" icon={<Plus className="w-4 h-4" />}>
+            Add {kind.label}
+          </Button>
+        </div>
       </div>
 
       <div className="relative mb-4">
@@ -332,8 +363,9 @@ export default function CrudTable({ kind }: CrudTableProps) {
                 </td>
               </tr>
             )}
-            {filtered.map((item) => {
-              const id = kind.idOf(item);
+            {filtered.map((item, idx) => {
+              const rawId = kind.idOf(item);
+              const id = typeof rawId === 'string' ? rawId : `${kind.kind}-${idx}`;
               return (
                 <tr key={id} className="border-b border-border-subtle last:border-b-0 hover:bg-surface-hover/40 transition-colors">
                   {kind.columns.map((c) => (
@@ -402,6 +434,14 @@ export default function CrudTable({ kind }: CrudTableProps) {
           <p className="text-sm text-text-muted">{deleteError}</p>
         </Modal>
       )}
+
+      <BulkImportModal
+        open={bulkOpen}
+        onClose={() => setBulkOpen(false)}
+        kind={kind}
+        existingItems={items}
+        onCompleted={() => void load()}
+      />
     </div>
   );
 }

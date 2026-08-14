@@ -1,9 +1,9 @@
-import { createContext, useContext, useState, useEffect, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useState, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { getRoles } from '../lib/rbac';
 import { getDefaultBuFormConfigs } from '../lib/formConfigs';
 import type { KbArticle } from '../types/admin';
 import type { CustomerRecord } from '../types/app';
-import type { BuFormConfig } from '../types/forms';
+import type { BuFormConfig, TicketFormConfig } from '../types/forms';
 import type { RoleDefinition } from '../types/rbac';
 
 export interface NotificationConfig {
@@ -21,6 +21,8 @@ export interface ConfigDomain {
   setCustomers: Dispatch<SetStateAction<CustomerRecord[]>>;
   buFormConfigs: BuFormConfig[];
   setBuFormConfigs: Dispatch<SetStateAction<BuFormConfig[]>>;
+  ticketFormConfigs: TicketFormConfig[];
+  setTicketFormConfigs: Dispatch<SetStateAction<TicketFormConfig[]>>;
   roles: RoleDefinition[];
   setRoles: Dispatch<SetStateAction<RoleDefinition[]>>;
   notificationConfigs: NotificationConfig[];
@@ -58,6 +60,17 @@ export function useConfigDomain(): ConfigDomain {
     }
     return getDefaultBuFormConfigs();
   });
+  const [ticketFormConfigs, setTicketFormConfigs] = useState<TicketFormConfig[]>(() => {
+    const formRaw = localStorage.getItem('4c_ticket_form_configs');
+    if (formRaw !== null) {
+      try {
+        return JSON.parse(formRaw);
+      } catch {
+        // fall through to default
+      }
+    }
+    return [];
+  });
   const [roles, setRoles] = useState<RoleDefinition[]>(() => {
     const rolesRaw = localStorage.getItem('4c_roles');
     if (rolesRaw !== null) {
@@ -92,14 +105,15 @@ export function useConfigDomain(): ConfigDomain {
     load('4c_customers', setCustomers);
   }, []);
 
-  const value: ConfigDomain = {
+  const value: ConfigDomain = useMemo(() => ({
     kbArticles, setKbArticles,
     savedReplies, setSavedReplies,
     customers, setCustomers,
     buFormConfigs, setBuFormConfigs,
+    ticketFormConfigs, setTicketFormConfigs,
     roles, setRoles,
     notificationConfigs, setNotificationConfigs,
-  };
+  }), [kbArticles, savedReplies, customers, buFormConfigs, ticketFormConfigs, roles, notificationConfigs]);
 
   return value;
 }

@@ -6,10 +6,12 @@ import {
 import ProgressWizard from '../../components/ui/ProgressWizard';
 import TicketActivitySection from './TicketActivitySection';
 import type { TicketRecord } from '../../types/app';
-import { TicketStatus, UserRole } from '../../types/app';
+import { TicketStatus, UserRole, TicketPriority } from '../../types/app';
 import { useApp } from '../../context/AppContext';
 import { formatCurrency, formatSlaDuration, getTicketStatusStep, TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
-import { syncTicketPatch, syncKbArticles } from '../../lib/sync';
+import { syncTicketUpdate, syncKbArticles } from '../../lib/sync';
+import { resolveSlaDuration, type SlaSource } from '../../lib/slaCalculator';
+import { getAllTransitionBlockers } from '../../lib/ticketStateMachine';
 
 interface TicketDetailPaneProps {
   activeTicket: TicketRecord;
@@ -69,7 +71,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
 
   const {
     currentRole, currentUser, tickets, setTickets, comments, auditLogs,
-    kbArticles, setKbArticles, buFormConfigs, saveToStorage, showToast, logAuditAction,
+    kbArticles, setKbArticles, buFormConfigs, saveToStorage, showToast, logAuditAction, slaRules,
   } = useApp();
 
   const getPriorityColor = (priority: string) => {
@@ -81,6 +83,12 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
       default: return { bg: 'var(--color-priority-low-bg)', text: 'var(--color-priority-low-text)', border: 'var(--color-priority-low-border)', Icon: Info };
     }
   };
+
+  const slaSource: SlaSource = resolveSlaDuration(
+    activeTicket.category,
+    (activeTicket.priority as TicketPriority) || TicketPriority.HIGH,
+    slaRules
+  ).source;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -135,7 +143,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
                 });
                 setTickets(updated); saveToStorage(updated, comments, auditLogs);
                 const changedTicket = updated.find(t => t.id === activeTicket.id);
-                if (changedTicket) syncTicketPatch(changedTicket.id, { watchers: changedTicket.watchers || [] });
+                if (changedTicket) syncTicketUpdate(changedTicket.id, { watchers: changedTicket.watchers || [] });
                 showToast(isWatching ? 'Unwatched.' : 'Now watching.', 'success');
                 logAuditAction(activeTicket.id, isWatching ? 'TICKET_UNWATCHED_SELF' : 'TICKET_WATCHED_SELF', `${currentUser.firstName + ' ' + currentUser.lastName} ${isWatching ? 'UNWATCHED' : 'WATCHING'}`);
               }} className={`px-2 py-1 rounded-md text-xs font-medium transition focus-ring flex items-center gap-1 cursor-pointer ${(activeTicket.watchers || []).includes(currentUser.email) ? 'bg-accent/15 text-accent-light' : 'text-text-muted hover:text-text-primary hover:bg-surface-hover'}`}>
@@ -156,7 +164,12 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="h-8 w-px bg-border shrink-0 hidden sm:block" />
               <div className="text-right shrink-0">
                 <p className="text-overline">SLA</p>
-                <p className={`text-xs font-mono font-bold ${activeTicket.isEscalated ? 'text-error' : 'text-text-primary'}`}>{slaCountdown}</p>
+                <div className="flex items-center justify-end gap-1.5">
+                  <p className={`text-xs font-mono font-bold ${activeTicket.isEscalated ? 'text-error' : 'text-text-primary'}`}>{slaCountdown}</p>
+                  <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${slaSource === 'rule' ? 'bg-primary-light/50 text-primary border-primary/25' : 'bg-warning-light text-warning border-warning/25'}`} title={slaSource === 'rule' ? 'Deadline set by a configured SLA category rule' : 'No category rule matched; using the priority fallback SLA'}>
+                    {slaSource === 'rule' ? 'Rule' : 'Default'}
+                  </span>
+                </div>
               </div>
             </div>
         </div>
@@ -165,6 +178,16 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
       <div className="bg-surface-elevated border-b border-border py-3 px-6 lg:px-8 shrink-0">
         <div className="max-w-2xl mx-auto">
           <ProgressWizard steps={TICKET_STATUS_ORDER.map(s => ({ label: TICKET_STATUS_LABELS[s] }))} currentStep={getTicketStatusStep(activeTicket.status)} />
+          {(() => {
+            const blockers = getAllTransitionBlockers(activeTicket, currentRole);
+            if (blockers.length === 0) return null;
+            return (
+              <div className="mt-2 flex items-center gap-2 text-[11px] text-warning">
+                <Info className="w-3.5 h-3.5 shrink-0" />
+                <span>Before this ticket can move forward: <strong className="font-semibold">{blockers.join(', ')}</strong></span>
+              </div>
+            );
+          })()}
         </div>
       </div>
 

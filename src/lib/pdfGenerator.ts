@@ -189,12 +189,12 @@ export function downloadExecutivePdfReport(
   doc.setLineWidth(0.4);
   doc.line(15, startY, 195, startY);
 
-  // Vendor Partner SLA Scorecard
+  // Payment Partner SLA Scorecard
   startY += 8;
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(11);
-  doc.text('Vendor Partner SLA Compliance Scorecard', 15, startY);
+  doc.text('Payment Partner SLA Compliance Scorecard', 15, startY);
   startY += 5;
   doc.setFillColor(30, 41, 59);
   doc.rect(15, startY, 180, 8, 'F');
@@ -304,7 +304,7 @@ export function downloadExecutivePdfReport(
   doc.setTextColor(15, 23, 42);
   doc.setFont('helvetica', 'bold');
   doc.setFontSize(10);
-  doc.text('By Partner', 15, startY);
+  doc.text('By Payment Partner', 15, startY);
   drawBarChart(doc, 15, startY + 4, 120, 7, exposureByPartner.map(e => ({ label: e.name, value: e.value, color: [59, 130, 246] })), moneyFmt);
   startY += 6 + exposureByPartner.length * 7 + 8;
   doc.setTextColor(15, 23, 42);

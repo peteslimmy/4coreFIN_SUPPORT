@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, RotateCcw, Calendar, User, FileImage, ChevronRight } from 'lucide-react';
+import { X, RotateCcw, Calendar, User, FileImage } from 'lucide-react';
 import type { ImageVersion } from './types';
 
 interface VersionHistoryTimelineProps {
@@ -20,26 +20,38 @@ export default function VersionHistoryTimeline({
   const [loading, setLoading] = useState(true);
   const [rollingBack, setRollingBack] = useState(false);
 
-  useEffect(() => {
-    fetchVersions();
-  }, [imageId]);
+   useEffect(() => {
+     let isMounted = true;
+     const fetchVersions = async () => {
+       try {
+         setLoading(true);
+         const response = await fetch(`/api/landing-page/images/${imageId}/versions`, {
+           credentials: 'include',
+         });
 
-  const fetchVersions = async () => {
-    try {
-      const response = await fetch(`/api/landing-page/images/${imageId}/versions`, {
-        credentials: 'include',
-      });
+         if (!response.ok) throw new Error('Failed to fetch versions');
 
-      if (!response.ok) throw new Error('Failed to fetch versions');
+         const data = await response.json();
+         if (isMounted) {
+           setVersions(data || []);
+         }
+       } catch (error) {
+         if (isMounted) {
+           console.error('Error fetching versions:', error);
+         }
+       } finally {
+         if (isMounted) {
+           setLoading(false);
+         }
+       }
+     };
 
-      const data = await response.json();
-      setVersions(data || []);
-    } catch (error) {
-      console.error('Error fetching versions:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
+     fetchVersions();
+
+     return () => {
+       isMounted = false;
+     };
+   }, [imageId]);
 
   const handleRollback = async (version: number) => {
     if (!confirm(`Are you sure you want to rollback to version ${version}?`)) {

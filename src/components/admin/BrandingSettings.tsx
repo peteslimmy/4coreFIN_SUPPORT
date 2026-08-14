@@ -1,65 +1,124 @@
-import { useState } from 'react';
+import { useState, useCallback, ChangeEvent } from 'react';
 import { useSettings } from '../../hooks/useSettings';
 import { authorizedFetch } from '../../lib/api';
 import FileUpload from '../ui/FileUpload';
-import { Save } from 'lucide-react';
+import { Save, RefreshCw } from 'lucide-react';
 
 export default function BrandingSettings() {
-  const { settings, updateSetting } = useSettings();
+  const { settings, updateSetting, refresh } = useSettings();
   const [orgName, setOrgName] = useState(settings['branding.org_name'] || '4CoreFin');
   const [saved, setSaved] = useState(false);
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light');
+  const [uploadStatus, setUploadStatus] = useState<{
+    logoLight: 'idle' | 'loading' | 'success' | 'error';
+    logoDark: 'idle' | 'loading' | 'success' | 'error';
+    favicon: 'idle' | 'loading' | 'success' | 'error';
+  }>({
+    logoLight: 'idle',
+    logoDark: 'idle',
+    favicon: 'idle',
+  });
+  const [logoSize, setLogoSize] = useState(Number(settings['branding.logo_size']) || 32);
 
-  const handleUpload = (folder: string, settingKey?: string) => async (files: File[]): Promise<(string | null)[]> => {
-    const results: (string | null)[] = [];
-    for (const file of files) {
-      if (folder === 'landing_page') {
-        // Use the dedicated landing page image upload system instead of generic branding upload
-        const formData = new FormData();
-        formData.append('image', file);
-        formData.append('status', 'published');
-        formData.append('title', 'Landing Page Hero');
-        formData.append('alt_text', 'Enterprise Operations & Compliance Platform');
+  const handleUpload = useCallback(
+    (folder: string, settingKey?: string) => async (files: File[]): Promise<(string | null)[]> => {
+      const results: (string | null)[] = [];
+      for (const file of files) {
+        if (folder === 'landing_page') {
+          // Use the dedicated landing page image upload system instead of generic branding upload
+          const formData = new FormData();
+          formData.append('image', file);
+          formData.append('status', 'published');
+          formData.append('title', 'Landing Page Hero');
+          formData.append('alt_text', 'Enterprise Operations & Compliance Platform');
 
-        const res = await authorizedFetch('/api/landing-page/images', {
-          method: 'POST',
-          body: formData,
-          credentials: 'include',
-        });
+          const res = await authorizedFetch('/api/landing-page/images', {
+            method: 'POST',
+            body: formData,
+            credentials: 'include',
+          });
 
-        if (res.ok) {
-          const data = await res.json();
-          results.push(data.desktop_url || data.storage_path);
-        } else {
-          results.push(null);
-        }
-      } else {
-        const res = await authorizedFetch('/api/admin/branding/upload', {
-          method: 'POST',
-          headers: {
-            'Content-Type': file.type,
-            'X-Filename': file.name,
-            'X-Folder': folder,
-            ...(settingKey ? { 'X-Setting-Key': settingKey } : {}),
-          },
-          body: file,
-        });
-        const data = await res.json();
-        if (res.ok && data.path) {
-          if (settingKey) {
-            const persisted = await updateSetting(settingKey, data.path);
-            if (!persisted) {
-              throw new Error(`Upload succeeded but saving "${settingKey}" failed. Check server logs.`);
-            }
+          if (res.ok) {
+            const data = await res.json();
+            results.push(data.desktop_url || data.storage_path);
+          } else {
+            results.push(null);
           }
-          results.push(`/api/public/branding/${settingKey?.split('.').pop()}`);
         } else {
-          results.push(null);
+          // Set uploading state
+          setUploadStatus(prev => {
+            const key = settingKey?.split('.').pop() as keyof typeof uploadStatus || 'logoLight';
+            return { ...prev, [key]: 'loading' };
+          });
+
+          try {
+            const res = await authorizedFetch('/api/admin/branding/upload', {
+              method: 'POST',
+              headers: {
+                'Content-Type': file.type,
+                'X-Filename': file.name,
+                'X-Folder': folder,
+                ...(settingKey ? { 'X-Setting-Key': settingKey } : {}),
+              },
+              body: file,
+            });
+            const data = await res.json();
+            if (res.ok && data.path) {
+              if (settingKey) {
+                const persisted = await updateSetting(settingKey, data.path);
+                if (!persisted) {
+                  throw new Error(`Upload succeeded but saving "${settingKey}" failed. Check server logs.`);
+                }
+                // Update status to success
+                setUploadStatus(prev => {
+                  const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                  return { ...prev, [key]: 'success' };
+                });
+                // Reset status after 3 seconds
+                setTimeout(() => {
+                  setUploadStatus(prev => {
+                    const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                    return { ...prev, [key]: 'idle' };
+                  });
+                }, 3000);
+              }
+              results.push(`/api/public/branding/${settingKey?.split('.').pop()}`);
+            } else {
+              // Set error status
+              setUploadStatus(prev => {
+                const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                return { ...prev, [key]: 'error' };
+              });
+              // Reset status after 5 seconds
+              setTimeout(() => {
+                setUploadStatus(prev => {
+                  const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                  return { ...prev, [key]: 'idle' };
+                });
+              }, 5000);
+              results.push(null);
+            }
+          } catch {
+            // Set error status
+            setUploadStatus(prev => {
+              const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+              return { ...prev, [key]: 'error' };
+            });
+            // Reset status after 5 seconds
+            setTimeout(() => {
+              setUploadStatus(prev => {
+                const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                return { ...prev, [key]: 'idle' };
+              });
+            }, 5000);
+            results.push(null);
+          }
         }
       }
-    }
-    return results;
-  };
+      return results;
+    },
+    [updateSetting]
+  );
 
   const handleSave = async () => {
     await updateSetting('branding.org_name', orgName);
@@ -67,8 +126,26 @@ export default function BrandingSettings() {
     setTimeout(() => setSaved(false), 2000);
   };
 
+  const handleLogoSizeChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const value = Number(e.target.value);
+    setLogoSize(value);
+    updateSetting('branding.logo_size', String(value));
+  };
+
+  const handleRefresh = useCallback(async () => {
+    await refresh();
+  }, [refresh]);
+
   const logoLight = settings['branding.logo_light'];
   const logoDark = settings['branding.logo_dark'];
+
+  // Add cache-busting timestamp to URLs
+  const getLogoUrl = (logoPath: string | null): string => {
+    if (!logoPath) return '';
+    // Add timestamp to prevent browser caching
+    const timestamp = new Date().getTime();
+    return `${logoPath}?v=${timestamp}`;
+  };
 
   return (
     <div className="space-y-6">
@@ -85,31 +162,98 @@ export default function BrandingSettings() {
 
       {/* Logo Uploads */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <FileUpload
-          label="Logo (Light Mode)"
-          accept="image/png,image/svg+xml,image/webp"
-          maxSize={2 * 1024 * 1024}
-          currentUrls={logoLight ? ['/api/public/branding/logo_light'] : []}
-          onUpload={handleUpload('branding', 'branding.logo_light')}
-        />
-        <FileUpload
-          label="Logo (Dark Mode)"
-          accept="image/png,image/svg+xml,image/webp"
-          maxSize={2 * 1024 * 1024}
-          currentUrls={logoDark ? ['/api/public/branding/logo_dark'] : []}
-          onUpload={handleUpload('branding', 'branding.logo_dark')}
-        />
+        <div className="space-y-4">
+          <FileUpload
+            label="Logo (Light Mode)"
+            accept="image/png,image/svg+xml,image/webp"
+            maxSize={2 * 1024 * 1024}
+            currentUrls={logoLight ? ['/api/public/branding/logo_light'] : []}
+            onUpload={handleUpload('branding', 'branding.logo_light')}
+          />
+          <div className="flex items-center justify-between px-3">
+            <span className="text-xs text-text-muted">
+              {uploadStatus.logoLight === 'loading' && 'Uploading...'}
+              {uploadStatus.logoLight === 'success' && 'Uploaded!'}
+              {uploadStatus.logoLight === 'error' && 'Upload failed'}
+            </span>
+            <button
+              onClick={handleRefresh}
+              className="text-xs text-accent hover:text-accent-light hover:underline"
+              title="Refresh branding settings"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+        <div className="space-y-4">
+          <FileUpload
+            label="Logo (Dark Mode)"
+            accept="image/png,image/svg+xml,image/webp"
+            maxSize={2 * 1024 * 1024}
+            currentUrls={logoDark ? ['/api/public/branding/logo_dark'] : []}
+            onUpload={handleUpload('branding', 'branding.logo_dark')}
+          />
+          <div className="flex items-center justify-between px-3">
+            <span className="text-xs text-text-muted">
+              {uploadStatus.logoDark === 'loading' && 'Uploading...'}
+              {uploadStatus.logoDark === 'success' && 'Uploaded!'}
+              {uploadStatus.logoDark === 'error' && 'Upload failed'}
+            </span>
+            <button
+              onClick={handleRefresh}
+              className="text-xs text-accent hover:text-accent-light hover:underline"
+              title="Refresh branding settings"
+            >
+              <RefreshCw className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Logo Size Control */}
+      <div className="space-y-4">
+        <label className="text-xs font-medium text-text-secondary block mb-1">
+          Logo Size
+        </label>
+        <div className="flex items-center space-x-3">
+          <input
+            type="range"
+            min={16}
+            max={128}
+            step={2}
+            value={logoSize}
+            onChange={handleLogoSizeChange}
+            className="flex-1 h-1"
+          />
+          <span className="text-xs font-mono text-text-secondary">{logoSize}px</span>
+        </div>
       </div>
 
       {/* Favicon */}
-      <FileUpload
-        label="Favicon"
-        accept="image/png,image/x-icon,image/svg+xml"
-        maxSize={500 * 1024}
-        currentUrls={settings['branding.favicon'] ? ['/api/public/branding/favicon'] : []}
-        onUpload={handleUpload('branding', 'branding.favicon')}
-        className="max-w-sm"
-      />
+      <div className="space-y-4">
+        <FileUpload
+          label="Favicon"
+          accept="image/png,image/x-icon,image/svg+xml"
+          maxSize={500 * 1024}
+          currentUrls={settings['branding.favicon'] ? ['/api/public/branding/favicon'] : []}
+          onUpload={handleUpload('branding', 'branding.favicon')}
+          className="max-w-sm"
+        />
+        <div className="flex items-center justify-between px-3">
+          <span className="text-xs text-text-muted">
+            {uploadStatus.favicon === 'loading' && 'Uploading...'}
+            {uploadStatus.favicon === 'success' && 'Uploaded!'}
+            {uploadStatus.favicon === 'error' && 'Upload failed'}
+          </span>
+          <button
+            onClick={handleRefresh}
+            className="text-xs text-accent hover:text-accent-light hover:underline"
+            title="Refresh branding settings"
+          >
+            <RefreshCw className="w-4 h-4" />
+          </button>
+        </div>
+      </div>
 
       {/* Hero Image */}
       <FileUpload
@@ -144,11 +288,12 @@ export default function BrandingSettings() {
           <div className={`flex items-center gap-3 p-3 rounded-lg ${previewMode === 'dark' ? 'bg-surface-card' : 'bg-surface border border-border-subtle'}`}>
             {(previewMode === 'dark' ? (logoDark || logoLight) : logoLight) ? (
               <img
-                src={previewMode === 'dark'
+                src={getLogoUrl(previewMode === 'dark'
                   ? (logoDark ? '/api/public/branding/logo_dark' : '/api/public/branding/logo_light')
-                  : '/api/public/branding/logo_light'}
+                  : '/api/public/branding/logo_light')}
                 alt="Logo preview"
                 className="max-h-10 w-auto object-contain"
+                style={{ height: 'auto', width: 'auto' }}
               />
             ) : (
               <span className={`text-lg font-bold ${previewMode === 'dark' ? 'text-white' : 'text-text-primary'}`}>

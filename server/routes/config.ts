@@ -10,7 +10,7 @@ import { getDefaultBuFormConfigs, mergeConfigs } from '../../src/lib/formConfigs
 import { businessUnitNames } from '../../src/lib/buCodes';
 
 const CONFIG_TABLES = ['sla_rules', 'holidays', 'ticket_templates', 'kb_articles'];
-const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'partners', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules'];
+const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'partners', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules', 'settings'];
 
 export function createConfigRouter(): Router {
   const router = Router();
@@ -24,7 +24,7 @@ export function createConfigRouter(): Router {
     }
     if (CONFIG_KEYS.includes(name)) {
       const value = await getConfig(name, null);
-      return res.json(value);
+      return res.json(value ?? {});
     }
     return res.status(404).json({ error: 'Unknown config name' });
   });

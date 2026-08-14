@@ -80,11 +80,11 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
       {currentUrls && currentUrls.filter(Boolean).length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {currentUrls.filter(Boolean).map((url, i) => (
-            <div key={i} className="relative">
+            <div key={i} className="relative inline-flex">
               <img
                 src={url as string}
                 alt="Saved asset"
-                className="h-12 w-12 object-contain rounded-lg border border-border"
+                className="max-h-12 w-auto object-contain rounded-lg border border-border bg-surface-elevated p-1"
               />
               <span className="absolute -top-1.5 -right-1.5 px-1 py-0.5 bg-surface-elevated border border-border-subtle rounded text-[8px] text-text-muted">
                 saved
@@ -103,7 +103,7 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
             {files.map(f => (
               <div key={f.id} className="relative">
                 {f.preview ? (
-                  <img src={f.preview} alt={f.file.name} className="h-16 w-16 object-cover rounded-lg border border-border" />
+                  <img src={f.preview} alt={f.file.name} className="max-h-16 w-auto object-contain rounded-lg border border-border bg-surface-elevated p-1" />
                 ) : (
                   <div className="h-16 w-16 flex items-center justify-center bg-surface rounded-lg border border-border">
                     <Paperclip className="w-5 h-5 text-text-muted" />

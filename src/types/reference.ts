@@ -20,7 +20,14 @@ export interface ReferenceFieldDef {
   type: 'text' | 'number' | 'email' | 'textarea' | 'select' | 'password';
   required?: boolean;
   placeholder?: string;
-  options?: string[];
+  options?:
+    | string[]
+    | ((
+        context: {
+          businessUnits?: string[];
+          categories?: string[];
+        },
+      ) => string[]);
   /** Only for number fields: a positive-integer spinner. */
   min?: number;
   /** Display-only on the row table. */
@@ -42,6 +49,10 @@ export interface ReferenceKindDef {
   permission?: string;
   /** Roles allowed to delete rows. Defaults to anyone who can view. */
   deleteRoles?: string[];
+  /** Enables the bulk-import (CSV/XLSX) button on this kind. */
+  supportBulkImport?: boolean;
+  /** Optional guard — returns true only for fully populated records worth rendering. */
+  isValid?: (item: Record<string, unknown>) => boolean;
 }
 
 export const ESCALATION_RULES_SEED: EscalationRule[] = [
@@ -95,6 +106,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
     fields: [text('value', 'Channel Name', { required: true, placeholder: 'e.g. POS' })],
     columns: [{ key: 'value', header: 'Channel' }],
     idOf: str,
+    supportBulkImport: true,
   },
   {
     kind: 'partners',
@@ -123,6 +135,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       { key: 'slaHours', header: 'SLA (h)', render: (i) => (i.slaHours ? String(i.slaHours) : '—') },
     ],
     idOf: (i) => String(field(i, 'name', 'id') ?? ''),
+    supportBulkImport: true,
   },
   {
     kind: 'slaRules',
@@ -131,7 +144,13 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
     stringItems: false,
     description: 'Resolution time targets per category and priority.',
     fields: [
-      text('category', 'Category', { required: true }),
+      {
+        key: 'category',
+        label: 'Category',
+        type: 'select',
+        required: true,
+        options: (context) => context.categories ?? [],
+      },
       { key: 'priority', label: 'Priority', type: 'select', required: true, options: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
       { key: 'durationHours', label: 'Duration (hours)', type: 'number', required: true, min: 1 },
     ],
@@ -141,6 +160,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       { key: 'durationHours', header: 'Hours' },
     ],
     idOf: (i) => String(field(i, 'id') ?? ''),
+    deleteRoles: ['SUPER_ADMIN'],
   },
   {
     kind: 'holidays',
@@ -170,7 +190,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       text('name', 'Template Name', { required: true }),
       text('category', 'Category', { required: true }),
       { key: 'priority', label: 'Priority', type: 'select', required: true, options: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] },
-      text('partner', 'Partner'),
+      text('partner', 'Payment Partner'),
       text('amount', 'Amount'),
       text('ticketDescription', 'Description', { type: 'textarea' }),
     ],
@@ -178,7 +198,7 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       { key: 'name', header: 'Name' },
       { key: 'category', header: 'Category' },
       { key: 'priority', header: 'Priority' },
-      { key: 'partner', header: 'Partner' },
+      { key: 'partner', header: 'Payment Partner' },
     ],
     idOf: (i) => String(field(i, 'id') ?? ''),
   },
@@ -247,7 +267,8 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
         required: true,
         options: ['SUPER_ADMIN', 'BU_SUPPORT', 'EXECUTIVE', 'PARTNER', 'CUSTOMER'],
       },
-      text('bu', 'Business Unit', { required: true, placeholder: 'e.g. POSSAP' }),
+       { key: 'bu', label: 'Business Unit', type: 'select', required: true, 
+         options: (context) => context.businessUnits },
       text('phone', 'Phone'),
       { key: 'password', label: 'Password', type: 'password', placeholder: 'Set a new password (min 6 chars)' },
     ],
@@ -256,10 +277,12 @@ export const REFERENCE_KINDS: ReferenceKindDef[] = [
       { key: 'email', header: 'Email' },
       { key: 'role', header: 'Role' },
       { key: 'bu', header: 'Business Unit' },
-      { key: 'phone', header: 'Phone' },
-    ],
-    idOf: (i) => String(field(i, 'id') ?? ''),
-  },
+  { key: 'phone', header: 'Phone' },
+  ],
+  idOf: (i) => String(field(i, '_id', 'id', 'userId') ?? ''),
+  supportBulkImport: true,
+  isValid: (i) => Boolean((i.name ?? '').toString().trim() && (i.email ?? '').toString().trim()),
+},
 ];
 
 export function referenceKind(kind: string): ReferenceKindDef | undefined {

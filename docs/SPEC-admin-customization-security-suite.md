@@ -19,7 +19,7 @@ This document specifies a comprehensive **Admin Customization & Security Suite**
 1. [Database Schema](#1-database-schema)
 2. [Feature 1: Dynamic Branding & Image Uploads](#2-feature-1-dynamic-branding--image-uploads)
 3. [Feature 2: White-Label & Theme Management](#3-feature-2-white-label--theme-management)
-4. [Feature 3: Integrations — SMTP & External API Settings](#4-feature-3-integrations--smtp--external-api-settings)
+4. [Feature 3: Integrations — SMTP & External API Settings](#4-feature-3-integrations---smtp--external-api-settings)
 5. [Feature 4: Authentication UI & Security Enhancements](#5-feature-4-authentication-ui--security-enhancements)
 6. [Feature 5: Profile & Security Customization](#6-feature-5-profile--security-customization)
 7. [API Endpoints](#7-api-endpoints)
@@ -472,7 +472,7 @@ function UserAvatar({ url, name, size = 'md' }) {
 | `POST` | `/api/admin/api-keys/:id/reveal` | Admin | Reveal masked key |
 | `POST` | `/api/admin/webhooks` | Admin | Create webhook |
 | `DELETE` | `/api/admin/webhooks/:id` | Admin | Delete webhook |
-| `POST` | `/api/admin/webhooks/:id/test` | Admin | Send test webhook |
+| `POST` | `/api/admin/webhooks/:id/test` | Admin | Send test webhook *(planned — not yet implemented)* |
 
 ### User Profile
 

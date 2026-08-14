@@ -51,7 +51,7 @@ export function generateConfigCsv(config: BuFormConfig): string {
       f.id,
       f.label,
       f.type,
-      f.options?.join('|') ?? '',
+       (typeof f.options === 'function' ? [] : f.options)?.join('|') ?? '',
       f.placeholder ?? '',
       String(f.required),
       String(f.enabled),

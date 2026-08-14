@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
-import { X, Download, ZoomIn, ZoomOut, Info } from 'lucide-react';
+import { X, Download, ZoomIn, ZoomOut } from 'lucide-react';
 import type { LandingPageImage } from './types';
 
 interface ImagePreviewModalProps {

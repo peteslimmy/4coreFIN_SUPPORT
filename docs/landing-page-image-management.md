@@ -120,7 +120,7 @@ SEO and accessibility editor for:
 - Character counters
 
 #### LandingHero (Updated)
-**File**: `src/components/auth/LandingHero.tsx`
+**File**: `src/pages/LandingPage.tsx`
 
 Updated to use new API:
 - Fetches hero image from `/api/landing-page/images/hero`
@@ -136,10 +136,9 @@ TypeScript interfaces:
 - `LandingPageImage` - Main image record
 - `ImageVersion` - Version history record
 
-### 7. Seed Script
-**File**: `server/seedLandingPage.ts`
+### 7. Initial Image Records
 
-Creates initial draft image record for the landing page.
+The `landing_page_images` table is created by `supabase/migrations/023_landing_page_images.sql` (with supporting versioning/audit tables in `022`). There is no standalone seed script — initial hero image records are created via the admin UI (`LandingPageManager.tsx`) and can be published through `POST /api/landing-page/images/:id/publish`.
 
 ## Security Features
 
@@ -174,12 +173,7 @@ Creates initial draft image record for the landing page.
    supabase migration up
    ```
 
-2. Seed initial data:
-   ```bash
-   npx tsx server/seedLandingPage.ts
-   ```
-
-3. The routes are automatically registered in `server/routes.ts`
+2. The routes are automatically registered in `server/routes.ts`
 
 ### Admin Interface
 

@@ -4,10 +4,14 @@ export interface UserRecord {
   id: string;
   firstName: string;
   lastName: string;
+  name?: string;
   email: string;
   role: string;
   bu: string;
+  partner?: string;
+  accountType?: string;
   phone?: string;
+  isActive?: boolean;
 }
 
 export interface SlaRule {

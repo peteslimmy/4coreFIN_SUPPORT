@@ -412,9 +412,9 @@ export function generateExecutiveInsights(input: {
   if (weakPartners.length > 0) {
     insights.push({
       type: 'warning',
-      title: 'Partner SLA below target',
+      title: 'Payment Partner SLA below target',
       message: `${weakPartners.map(x => `${x.partner} (${x.sla.toFixed(1)}%)`).join(', ')} below the 95% SLA target.`,
-      action: 'View partner scorecard',
+      action: 'View payment partner scorecard',
     });
   }
   if (highValue.length > 0) {

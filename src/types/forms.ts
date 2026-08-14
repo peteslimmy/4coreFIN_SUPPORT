@@ -1,4 +1,4 @@
-export type FormFieldType = 'text' | 'number' | 'currency' | 'select' | 'date' | 'textarea';
+export type FormFieldType = 'text' | 'number' | 'currency' | 'select' | 'date' | 'textarea' | 'file';
 
 export type FormFieldValue = string | number | boolean;
 
@@ -35,6 +35,19 @@ export interface BuFormConfig {
   updatedBy: string;
 }
 
+export interface TicketFormStageConfig {
+  fields: FormFieldDefinition[];
+}
+
+export interface TicketFormConfig {
+  stage1: TicketFormStageConfig;
+  stage2: BuFormConfig;
+  stage3: TicketFormStageConfig;
+  version: number;
+  updatedAt: string;
+  updatedBy: string;
+}
+
 export interface DuplicateCandidate {
   ticketId: string;
   customerName: string;
@@ -65,4 +78,15 @@ export interface MergeSummary {
   unchanged: number;
   errors: string[];
   finalFieldCount: number;
+}
+
+export interface DuplicateCandidate {
+  ticketId: string;
+  customerName: string;
+  status: string;
+  createdAt: string;
+  matchedField: string;
+  matchedValue: string;
+  confidence: number;
+  isExact: boolean;
 }

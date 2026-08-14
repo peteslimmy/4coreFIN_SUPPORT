@@ -5,8 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import StatusBadge from '../../components/ui/StatusBadge';
 import { TicketPriority, TicketStatus } from '../../types/app';
 import { useApp } from '../../context/AppContext';
+import { useUi } from '../../context/UiContext';
 import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, formatSlaDuration } from '../../lib/utils';
-import { syncTicketPatch } from '../../lib/sync';
+import { syncTicketUpdate } from '../../lib/sync';
 
 interface TicketListPaneProps {
   activeTicketId: string;
@@ -19,9 +20,11 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
   const {
     tickets, setTickets, saveToStorage, logAuditAction, showToast,
     transitionTicket, getAvailableTicketTransitions, getScopedTickets,
-    searchQuery, setSearchQuery, statusFilter, setStatusFilter, priorityFilter,
-    currentUser, setActiveTicketId,
+    currentUser,
   } = useApp();
+  const { setActiveTicketId } = useUi();
+
+  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, priorityFilter } = useUi();
 
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
   const [myWatchlistFilter, setMyWatchlistFilter] = useState(false);
@@ -105,7 +108,7 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                 <button onClick={() => {
                   const updated = tickets.map(t => { if (selectedTicketIds.has(t.id)) { return { ...t, isEscalated: true, priority: TicketPriority.CRITICAL } } return t; });
                   setTickets(updated);
-                  selectedTicketIds.forEach(id => { logAuditAction(id, 'BATCH_ESCALATE', 'Batch escalated.'); syncTicketPatch(id, { isEscalated: true, priority: TicketPriority.CRITICAL }); });
+                  selectedTicketIds.forEach(id => { logAuditAction(id, 'BATCH_ESCALATE', 'Batch escalated.'); syncTicketUpdate(id, { isEscalated: true, priority: TicketPriority.CRITICAL }); });
                   setSelectedTicketIds(new Set()); saveToStorage(updated);
                   showToast(`Escalated ${selectedTicketIds.size} tickets.`, 'success');
                 }} className="text-[10px] font-medium text-text-muted hover:text-text-primary px-2 py-1 rounded-md hover:bg-surface-card">Escalate</button>
@@ -166,23 +169,29 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                   }`}
                 >
                   <button onClick={() => setActiveTicketId(t.id)} title={`${t.customerName} · ${t.category} · ${t.assignedAgentId || 'Unassigned'}`} className="w-full text-left p-2.5">
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <span className="font-numeric text-[10px] font-bold text-accent">{t.id}</span>
-                        <StatusBadge status={t.status} size="sm" />
-                      </div>
-                      {slaBreached ? (
-                        <span className="bg-error/10 text-error font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-error/20 uppercase tracking-wider shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
-                      ) : slaAtRisk ? (
-                        <span className="bg-warning/10 text-warning font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-warning/20 uppercase tracking-wider shrink-0">At Risk</span>
-                      ) : (
-                        <span className="bg-success/10 text-success font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-success/20 uppercase tracking-wider shrink-0">On Track</span>
-                      )}
-                    </div>
-                    <div className="flex items-center justify-between gap-2 mt-1">
-                      <p className="text-body-sm font-semibold text-text-primary truncate">{t.customerName}</p>
-                      <p className="text-caption text-text-muted truncate shrink-0 max-w-[45%]">{t.category}</p>
-                    </div>
+                 <div className="flex w-full items-center justify-between gap-2 pb-1">
+                   <div className="flex-1 min-w-0 truncate">
+                     <span className="font-numeric text-[10px] font-bold text-accent">{t.id}</span>
+                   </div>
+                 </div>
+                 <div className="flex items-center justify-between gap-2 mb-1">
+                   <div className="flex items-center gap-2">
+                     <StatusBadge status={t.status} size="sm" />
+                   </div>
+                   <div className="flex items-center gap-2">
+                     {slaBreached ? (
+                       <span className="bg-error/10 text-error font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-error/20 uppercase tracking-wider shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
+                     ) : slaAtRisk ? (
+                       <span className="bg-warning/10 text-warning font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-warning/20 uppercase tracking-wider shrink-0">At risk -{formatSlaDuration(start, now)}</span>
+                     ) : (
+                       <span className="bg-success/10 text-success font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-success/20 uppercase tracking-wider shrink-0">{formatSlaDuration(now, deadlineMs)} left</span>
+                     )}
+                   </div>
+                 </div>
+                 <div className="flex items-center justify-between gap-2">
+                   <p className="text-body-sm font-semibold text-text-primary truncate">{t.customerName}</p>
+                   <p className="text-caption text-text-muted truncate shrink-0 max-w-[45%]">{t.category}</p>
+                 </div>
                   </button>
                 </motion.div>
               );

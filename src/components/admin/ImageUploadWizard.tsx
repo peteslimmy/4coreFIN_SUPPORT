@@ -1,6 +1,6 @@
 import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Upload, X, Check, AlertCircle, Loader2, Image as ImageIcon } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { Upload, X, Check } from 'lucide-react';
 import { useToast } from '../../hooks/useToast';
 
 interface ImageUploadWizardProps {
@@ -92,7 +92,7 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
           validating: false,
         }));
       }
-    } catch (error) {
+    } catch {
       showToast('Failed to validate image', 'error');
       setState(prev => ({
         ...prev,

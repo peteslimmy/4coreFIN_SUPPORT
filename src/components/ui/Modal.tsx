@@ -27,10 +27,12 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
     }
   }, []);
 
-  const onCloseRef = useRef(onClose);
-  const trapFocusRef = useRef(trapFocus);
-  onCloseRef.current = onClose;
-  trapFocusRef.current = trapFocus;
+   const onCloseRef = useRef(onClose);
+   const trapFocusRef = useRef(trapFocus);
+   useEffect(() => {
+     onCloseRef.current = onClose;
+     trapFocusRef.current = trapFocus;
+   }, [onClose, trapFocus]);
 
   useEffect(() => {
     if (!open) return;

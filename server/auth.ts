@@ -5,6 +5,7 @@ import crypto from 'crypto';
 import { supabase, supabaseAuth } from './supabase';
 import { logger, logSecurityEvent } from './logger';
 import type { AuthUser } from './compliance';
+import { isBuSupportRole, isGlobalRole } from './rbac';
 import { tenantIdForBu } from './tenant';
 import { isAccountLocked, recordFailedLogin, clearFailedAttempts } from './services/lockoutService';
 
@@ -189,7 +190,7 @@ export async function findUserByEmail(email: string) {
     .single();
   if (error || !data) return undefined;
   return data as {
-    id: string;
+id: string;
     name: string;
     email: string;
     password_hash: string;
@@ -198,6 +199,10 @@ export async function findUserByEmail(email: string) {
     phone: string;
     tenant_id?: string;
     auth_user_id?: string | null;
+    is_active?: boolean | null;
+    isActive?: boolean;
+    activation_token?: string | null;
+    activated_at?: string | null;
   };
 }
 
@@ -209,7 +214,7 @@ export async function findUserByAuthId(authUserId: string) {
     .maybeSingle();
   if (error || !data) return undefined;
   return data as {
-    id: string;
+id: string;
     name: string;
     email: string;
     password_hash: string;
@@ -218,6 +223,10 @@ export async function findUserByAuthId(authUserId: string) {
     phone: string;
     tenant_id?: string;
     auth_user_id?: string | null;
+    is_active?: boolean | null;
+    isActive?: boolean;
+    activation_token?: string | null;
+    activated_at?: string | null;
   };
 }
 
@@ -229,7 +238,7 @@ export async function findUserById(id: string) {
     .maybeSingle();
   if (error || !data) return undefined;
   return data as {
-    id: string;
+id: string;
     name: string;
     email: string;
     password_hash: string;
@@ -238,6 +247,10 @@ export async function findUserById(id: string) {
     phone: string;
     tenant_id?: string;
     auth_user_id?: string | null;
+    is_active?: boolean | null;
+    isActive?: boolean;
+    activation_token?: string | null;
+    activated_at?: string | null;
   };
 }
 
@@ -355,6 +368,8 @@ export function toAuthUser(row: {
   email: string;
   role: string;
   bu: string;
+  partner?: string;
+  account_type?: string;
   phone?: string;
   tenantId?: string;
   tenant_id?: string;
@@ -367,6 +382,8 @@ export function toAuthUser(row: {
     email: row.email,
     role: row.role,
     bu: row.bu,
+    partner: row.partner || '',
+    accountType: row.account_type || (row.role === 'PARTNER' ? 'PARTNER' : 'BU'),
     phone: row.phone || '',
     tenantId: row.tenantId || row.tenant_id || tenantIdForBu(row.bu),
     mustChangePassword: Boolean(row.must_change_password),
@@ -443,18 +460,24 @@ export function canAccessTicket(
   user: AuthUser,
   ticket: { businessUnit?: string; business_unit?: string; partner?: string; provider?: string; assignedAgentId?: string }
 ): boolean {
-  if (user.role === 'SUPER_ADMIN' || user.role === 'EXECUTIVE') return true;
-  const bu = ticket.businessUnit || ticket.business_unit || '';
-  if (user.role === 'BU_SUPPORT' || user.role === 'CUSTOMER') {
-    return bu === user.bu || user.bu === 'ALL';
+  if (isGlobalRole(user.role)) return true;
+  const bu = (ticket.businessUnit || ticket.business_unit || '').toLowerCase();
+  if (user.role === 'CUSTOMER') {
+    const myBu = user.bu.toLowerCase();
+    return myBu === 'all' || bu === myBu;
+  }
+  if (isBuSupportRole(user.role)) {
+    const myBu = user.bu.toLowerCase();
+    return myBu === 'all' || bu === myBu;
   }
   if (user.role === 'PARTNER') {
-    const partner = ticket.partner || ticket.provider || '';
-    const agent = ticket.assignedAgentId || '';
+    const partner = (ticket.partner || ticket.provider || '').toLowerCase();
+    const mine = (user.partner || user.bu || '').toLowerCase();
+    const agent = (ticket.assignedAgentId || '').toLowerCase();
     return (
-      partner.toLowerCase() === user.bu.toLowerCase() ||
-      agent.toLowerCase() === user.bu.toLowerCase() ||
-      agent.toLowerCase().startsWith(user.bu.toLowerCase() + ' ')
+      partner === mine ||
+      agent === mine ||
+      agent.startsWith(mine + ' ')
     );
   }
   return false;

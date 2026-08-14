@@ -182,14 +182,20 @@ app.use(compression({ threshold: 1024, level: 6 }));
     const stack = (router as any).stack as any[];
     for (const layer of stack) {
       const route = layer?.route;
-      if (!route) continue;
-      for (const h of route.stack) {
-        const orig = h.handle;
-        if (orig.length <= 3) {
-          h.handle = ((fn: any) => (req: any, res: any, next: any) => {
-            Promise.resolve(fn(req, res, next)).catch(next);
-          })(orig);
+      if (route) {
+        for (const h of route.stack) {
+          const orig = h.handle;
+          if (orig.length <= 3) {
+            h.handle = ((fn: any) => (req: any, res: any, next: any) => {
+              Promise.resolve(fn(req, res, next)).catch(next);
+            })(orig);
+          }
         }
+      } else if (layer.handle && Array.isArray(layer.handle.stack)) {
+        // Feature routers are mounted with router.use(...), so they appear as
+        // stacked middleware (no `.route`). Recurse so their handlers get the
+        // same async-rejection guard instead of leaving clients hanging.
+        wrapAsyncHandlers(layer.handle);
       }
     }
     return router;
@@ -336,7 +342,7 @@ Analyze the incident. Map it to one of the available Categories and one of its c
 Ticket ID: ${ticketDetails.id}
 Category: ${ticketDetails.category}
 Sub-type: ${ticketDetails.issueType}
-Partner: ${ticketDetails.partner || ticketDetails.provider}
+Payment Partner: ${ticketDetails.partner || ticketDetails.provider}
 Business Unit: ${ticketDetails.bu}
 Description: ${ticketDetails.description}
 

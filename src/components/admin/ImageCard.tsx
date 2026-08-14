@@ -1,5 +1,5 @@
 import { memo, type ReactNode } from 'react';
-import { Eye, Trash2, RotateCcw, Settings, History, CheckCircle } from 'lucide-react';
+import { Eye, Trash2, RotateCcw, History, CheckCircle } from 'lucide-react';
 import type { LandingPageImage } from './types';
 
 interface ImageCardProps {

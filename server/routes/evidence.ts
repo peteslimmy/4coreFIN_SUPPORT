@@ -58,7 +58,9 @@ export function createEvidenceRouter(): Router {
   });
 
   router.get('/evidence', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
-    const ticketIds = (req.query.ticketId as string | undefined)?.split(',')?.filter(Boolean);
+    const raw = req.query.ticketId;
+    const ticketIds = (Array.isArray(raw) ? raw : typeof raw === 'string' ? raw.split(',') : [])
+      .filter((v): v is string => typeof v === 'string' && v.length > 0);
     const rows = await listEvidence(ticketIds?.length ? ticketIds : undefined, req.user!);
     res.json(rows);
   });

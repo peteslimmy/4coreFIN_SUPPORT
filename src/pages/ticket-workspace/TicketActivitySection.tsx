@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef, useEffect, useState } from "react";
 import { Check, MessageSquare, Send, Bold as BoldIcon, Paperclip, AtSign, CheckCircle2, AlertCircle } from "lucide-react";
 
 import type { CommentRecord, TicketRecord } from "../../types/app";
@@ -42,6 +42,7 @@ export default function TicketActivitySection({
   const activityRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const attachInputRef = useRef<HTMLInputElement>(null);
+  const [textareaFocused, setTextareaFocused] = useState(false);
 
   useEffect(() => {
     const el = activityRef.current;
@@ -114,6 +115,34 @@ export default function TicketActivitySection({
       el.focus();
       el.setSelectionRange(1, 1);
     });
+  };
+
+  const handleTextareaKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === "Escape") {
+      setReplyingTo(null);
+      setShowMentions(false);
+      setCommentText(prev => stripLeadingMention(prev));
+      setTextareaFocused(false);
+      if (textareaRef.current) {
+        textareaRef.current.blur();
+      }
+      e.preventDefault();
+      return;
+    }
+    if (e.key === "Enter" && !e.shiftKey && !isSendingComment) {
+      e.preventDefault();
+      if (commentText.trim()) {
+        onSendComment(e);
+      }
+    }
+    if (e.key === "/" && !textareaFocused) {
+      e.preventDefault();
+      setTextareaFocused(true);
+      if (textareaRef.current) {
+        textareaRef.current.focus();
+      }
+    }
+    onKeyDown?.(e);
   };
 
   const handleAttach = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -275,22 +304,23 @@ export default function TicketActivitySection({
           </div>
         )}
         <form onSubmit={onSendComment} className="relative">
-          <textarea
+<textarea
             ref={textareaRef}
             value={commentText}
             onChange={(e) => {
-                const val = e.target.value;
-                const trimmed = val.trim();
-                setCommentText(val);
-                if (trimmed === "@" || /^@\S*$/.test(trimmed)) {
-                  setShowMentions(true);
-                  setMentionSearch(extractAddressPartial(trimmed));
-                  setMentionIndex(0);
-                } else {
-                  setShowMentions(false);
-                }
-              }}
-            onKeyDown={onKeyDown}
+              const val = e.target.value;
+              const trimmed = val.trim();
+              setCommentText(val);
+              if (trimmed === "@" || /^@\S*$/.test(trimmed)) {
+                setShowMentions(true);
+                setMentionSearch(extractAddressPartial(trimmed));
+                setMentionIndex(0);
+              } else {
+                setShowMentions(false);
+              }
+            }}
+            onKeyDown={(e) => handleTextareaKeyDown(e)}
+            onBlur={() => setTextareaFocused(false)}
             aria-label="Add a comment"
             className="w-full border border-border rounded-lg p-1.5 pr-8 text-[11px] focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring resize-none bg-surface"
             rows={1}

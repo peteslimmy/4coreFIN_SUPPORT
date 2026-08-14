@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { getRoles, hasPermission, hasAnyPermission, isSuperAdminRole, DEFAULT_ROLES } from './rbac';
 
 describe('rbac', () => {
-  it('exposes the five built-in system roles', () => {
-    expect(DEFAULT_ROLES).toHaveLength(5);
+  it('exposes the eight built-in system roles', () => {
+    expect(DEFAULT_ROLES).toHaveLength(8);
     expect(DEFAULT_ROLES.every(r => r.isSystem)).toBe(true);
   });
 
@@ -42,7 +42,7 @@ describe('rbac', () => {
     } as const;
     const roles = getRoles([custom]);
     expect(roles.find(r => r.id === 'COMPLIANCE')).toBeDefined();
-    expect(roles.filter(r => r.isSystem)).toHaveLength(5);
+    expect(roles.filter(r => r.isSystem)).toHaveLength(8);
     const compliance = roles.find(r => r.id === 'COMPLIANCE')!;
     expect(hasPermission(compliance, 'audit:verify')).toBe(true);
     expect(hasPermission(compliance, 'tickets:delete')).toBe(false);

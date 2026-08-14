@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { isBuSupportRole, isGlobalRole } from './rbac';
 
 export interface AuditEntry {
   id: string;
@@ -83,6 +84,8 @@ export type AuthUser = {
   email: string;
   role: string;
   bu: string;
+  partner?: string;
+  accountType?: string;
   phone?: string;
   tenantId?: string;
   mustChangePassword?: boolean; // set when a freshly-provisioned user must set their own password
@@ -93,9 +96,14 @@ export type AuthUser = {
  * SUPER_ADMIN / BU_SUPPORT / EXECUTIVE see more; PARTNER / CUSTOMER / others get masked fields.
  * Unmasking is audited separately via explicit unmask endpoint.
  */
+/** Roles that may see unmasked customer data (global + every BU support tier). */
+function isUnmaskedRole(role: string): boolean {
+  return isGlobalRole(role) || isBuSupportRole(role);
+}
+
 export function applyTicketMasking<T extends Record<string, any>>(ticket: T, user: AuthUser, unmasked = false): T {
   if (unmasked) return ticket;
-  if (user.role === 'SUPER_ADMIN' || user.role === 'BU_SUPPORT' || user.role === 'EXECUTIVE') {
+  if (isUnmaskedRole(user.role)) {
     // Still mask full PAN by default for everyone except explicit unmask
     return {
       ...ticket,

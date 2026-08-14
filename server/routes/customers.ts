@@ -13,6 +13,12 @@ export function createCustomersRouter(): Router {
     res.json(customers);
   });
 
+  router.get('/customers/:id', requireAuth, requirePermission('customers:manage'), async (req: AuthedRequest, res: Response) => {
+    const existing = await getScopedCustomer(req.params.id, req.user!);
+    if (!existing) return res.status(404).json({ error: 'Customer not found' });
+    res.json(existing);
+  });
+
   router.post('/customers', requireAuth, requirePermission('customers:manage'), validateBody(z.object({ id: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), phone: z.string().optional(), businessUnit: z.string().optional(), createdAt: z.string().optional(), totalTickets: z.number().optional(), notes: z.string().optional() })), async (req: AuthedRequest, res: Response) => {
     const c = { ...req.body, email: (req.body.email || '').trim().toLowerCase() };
     const entry = { ...c, id: c.id || 'cst-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), createdAt: c.createdAt || new Date().toISOString(), totalTickets: c.totalTickets || 0 };

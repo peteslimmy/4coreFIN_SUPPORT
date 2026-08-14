@@ -3,7 +3,8 @@ import { Plus, Upload, Ticket, Clock, CheckCircle, Star, Mail, Search, ThumbsUp,
 import { TicketStatus, TicketPriority, type TicketRecord, type AuditLog, type FileEvidence, type CommentRecord } from '../types/app';
 import { calculateSlaDeadline } from '../lib/slaCalculator';
 import { useApp } from '../context/AppContext';
-import { syncCreateTicket, syncTicketPatch, syncEvidenceUpload, syncComment, syncAudit, syncFeedback } from '../lib/sync';
+import { useUi } from '../context/UiContext';
+import { syncCreateTicket, syncTicketUpdate, syncEvidenceUpload, syncComment, syncAudit, syncFeedback } from '../lib/sync';
 import { compressFiles } from '../lib/imageCompression';
 import { parseNaira } from '../lib/currencyFormat';
 import { getBuFormConfig, validateFieldValue } from '../lib/formConfigs';
@@ -47,9 +48,10 @@ export default function CustomerPortalPage() {
   const {
     isLoading, ticketTemplates, partners, categories, currentUser, showToast,
     tickets, setTickets, comments, setAuditLogs, saveToStorage,
-    setActiveTicketId, setActiveTab, slaRules, holidays, currentRole, auditLogs,
+    slaRules, holidays, currentRole, auditLogs,
     setEvidence, evidence, buFormConfigs, setComments, paymentChannels
   } = useApp();
+  const { setActiveTicketId, setActiveTab } = useUi();
 
   const [customerView, setCustomerView] = useState<'file_complaint' | 'my_tickets'>('file_complaint');
   const [customerEmail, setCustomerEmail] = useState('');
@@ -188,7 +190,7 @@ export default function CustomerPortalPage() {
       slaDeadline: deadline,
       isEscalated: false,
       escalationCount: 0,
-      assignedAgentId: `${newTicket.partner} Partner Team`,
+      assignedAgentId: `${newTicket.partner} Payment Partner Team`,
       majorIncidentId: null,
       feedbackScore: null,
       feedbackComment: null,
@@ -280,7 +282,7 @@ export default function CustomerPortalPage() {
     setComments(prev => [mergeComment, ...prev]);
     setAuditLogs(prev => [mergeAudit, ...prev]);
     saveToStorage(updatedTickets, [mergeComment, ...comments], [mergeAudit, ...auditLogs]);
-    syncTicketPatch(existing.id, {
+    syncTicketUpdate(existing.id, {
       description: merged.description,
       amount: merged.amount,
       transactionId: merged.transactionId,

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Shield, FileText, Lock, Eye } from 'lucide-react';
+import { Shield, FileText } from 'lucide-react';
 import AuthLogo from '../components/auth/AuthLogo';
 import PageTransition from '../components/layout/PageTransition';
 

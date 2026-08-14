@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { ClipboardList, Search, CheckCircle, AlertTriangle, BarChart2, Activity, Star, Send, FileText } from 'lucide-react';
 import { TicketStatus, type TicketRecord } from '../types/app';
 import { useApp } from '../context/AppContext';
-import { syncTicketPatch } from '../lib/sync';
+import { syncTicketUpdate } from '../lib/sync';
 import StatusBadge from '../components/ui/StatusBadge';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
@@ -10,7 +10,7 @@ import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 
-export default function PartnerPortalPage() {
+export default function PaymentPartnerPortalPage() {
   const {
     isLoading, setTickets, currentUser, showToast,
     logAuditAction, getScopedTickets, evidence,
@@ -74,13 +74,13 @@ export default function PartnerPortalPage() {
   };
 
   const handleCloseTicket = async (ticket: TicketRecord) => {
-    // Partners resolve; closing for validation is reserved for BU Support.
+    // Payment Partners resolve; closing for validation is reserved for BU Support.
     // Route through the machine so policy is enforced, not silently violated.
     const available = getAvailableTicketTransitions(ticket);
     if (!available.some(r => r.to === TicketStatus.CLOSED)) {
       const allowed = available.map(r => r.label).join(', ') || 'none';
       showToast(
-        `Partners cannot close directly. Available actions from "${ticket.status}": ${allowed || 'none'}. Resolve first; BU Support will close.`,
+        `Payment Partners cannot close directly. Available actions from "${ticket.status}": ${allowed || 'none'}. Resolve first; BU Support will close.`,
         'error'
       );
       return;
@@ -130,10 +130,10 @@ export default function PartnerPortalPage() {
           : t
       )
     );
-    logAuditAction(ticket.id, 'PARTNER_SUBMIT_RCA', `Partner ${currentUser.firstName + ' ' + currentUser.lastName} submitted RCA for ticket ${ticket.id}`);
+    logAuditAction(ticket.id, 'PARTNER_SUBMIT_RCA', `Payment Partner ${currentUser.firstName + ' ' + currentUser.lastName} submitted RCA for ticket ${ticket.id}`);
     try {
       const resolved = await transitionTicket(ticket.id, TicketStatus.RESOLVED);
-      syncTicketPatch(ticket.id, { status: resolved.status, rootCause: resolved.rootCause, correctiveAction: resolved.correctiveAction, rcaDetails: resolved.rcaDetails });
+      syncTicketUpdate(ticket.id, { status: resolved.status, rootCause: resolved.rootCause, correctiveAction: resolved.correctiveAction, rcaDetails: resolved.rcaDetails });
       showToast(`RCA submitted for ${ticket.id}. Ticket moved to RESOLVED.`, 'success');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Could not resolve ticket.';
@@ -148,9 +148,9 @@ export default function PartnerPortalPage() {
     <PageTransition>
       <PageContainer maxWidth="full" className="space-y-6">
         <PageHeader
-          title={`Partner Portal - ${partnerName}`}
+          title={`Payment Partner Portal - ${partnerName}`}
           subtitle="Investigation queue, RCA submission, and resolution dashboard"
-          breadcrumbs={[{ label: 'Home' }, { label: 'Partner Portal' }]}
+          breadcrumbs={[{ label: 'Home' }, { label: 'Payment Partner Portal' }]}
           actions={
             <div className="flex items-center gap-2">
               <ClipboardList className="w-5 h-5 text-accent" />
