@@ -1,0 +1,131 @@
+{
+  "timestamp": "2026-08-15T20:16:14.410Z",
+  "results": [
+    {
+      "id": "SEC-04",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"status\":403,\"body\":{\"error\":\"Invalid CSRF token\"}}"
+    },
+    {
+      "id": "SEC-PARTNER-CREATE",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"status\":201,\"id\":\"usr-1786824953573-svd8u\"}"
+    },
+    {
+      "id": "SEC-BU-CREATE",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"status\":201,\"id\":\"usr-1786824955549-6a37c\"}"
+    },
+    {
+      "id": "SEC-TKT-CREATE",
+      "status": "PASS",
+      "severity": "CRITICAL",
+      "actual": "{\"id\":\"QA_TKT_1786824956974\",\"status\":201,\"serverId\":\"QA_TKT_1786824956974\"}"
+    },
+    {
+      "id": "SEC-18a",
+      "status": "FAIL-BYPASS",
+      "severity": "CRITICAL",
+      "actual": "{\"found\":true,\"pan\":\"4111111111111111\",\"bypassed\":true}"
+    },
+    {
+      "id": "SEC-18b",
+      "status": "FAIL-BYPASS",
+      "severity": "CRITICAL",
+      "actual": "{\"status\":200,\"pan\":\"4111111111111111\",\"bypassed\":true}"
+    },
+    {
+      "id": "SEC-18c",
+      "status": "PASS-MASKED",
+      "severity": "CRITICAL",
+      "actual": "{\"status\":200,\"pan\":\"****1111\"}"
+    },
+    {
+      "id": "SEC-03b",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"status\":200}"
+    },
+    {
+      "id": "SEC-19",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"status\":403}"
+    },
+    {
+      "id": "SEC-21",
+      "status": "PASS-SUPER_ADMIN-GLOBAL",
+      "severity": "HIGH",
+      "actual": "{\"total\":26,\"hasBoth\":true}"
+    },
+    {
+      "id": "SEC-21b",
+      "status": "PASS-ISOLATED",
+      "severity": "HIGH",
+      "actual": "{\"returned\":7,\"hasOwn\":true,\"hasOther\":false}"
+    },
+    {
+      "id": "SEC-30-a",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"appendStatus\":201}"
+    },
+    {
+      "id": "SEC-30-b",
+      "status": "PASS-NO-MUTATION",
+      "severity": "MEDIUM",
+      "actual": "{\"patchStatus\":404}"
+    },
+    {
+      "id": "SEC-02",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"attempts\":[429,429,429,429,429,429],\"locked\":true}"
+    },
+    {
+      "id": "SEC-06",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"id1\":\"usr-1786824955549-6a37c\",\"id2\":\"usr-1786824955549-6a37c\"}"
+    },
+    {
+      "id": "SEC-07",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"logout\":200,\"meAfter\":401}"
+    },
+    {
+      "id": "SEC-46",
+      "status": "PASS",
+      "severity": "MEDIUM",
+      "actual": "{\"ok\":true,\"uptime\":2092.0127573,\"ts\":\"2026-08-15T20:16:14.206Z\",\"dependencies\":{\"supabase\":\"ok\"}}"
+    },
+    {
+      "id": "SEC-08-mask",
+      "status": "PARTIAL",
+      "severity": "HIGH",
+      "actual": "{}"
+    }
+  ],
+  "testData": [
+    {
+      "id": "usr-1786824953573-svd8u",
+      "type": "PARTNER test user"
+    },
+    {
+      "id": "usr-1786824955549-6a37c",
+      "type": "BU_SUPPORT test user"
+    },
+    {
+      "id": "QA_TKT_1786824956974",
+      "type": "PII ticket (POSSAP)"
+    },
+    {
+      "id": "QA_TKT_OTHER_1786824968232",
+      "type": "Isolation ticket (CORPORATE)"
+    }
+  ]
+}

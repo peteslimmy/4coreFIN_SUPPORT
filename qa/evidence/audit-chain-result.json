@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-08-15T20:47:00.357Z",
+  "result": {
+    "valid": true,
+    "brokenIndex": null,
+    "totalChecked": 1000,
+    "chunksProcessed": 1,
+    "durationMs": 790
+  }
+}

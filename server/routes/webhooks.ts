@@ -6,6 +6,7 @@ import { supabase } from '../supabase';
 import { appendAuditLog } from '../repository';
 import { registerDeliveryAttempt } from '../services/webhookDispatcher';
 import { dispatchWebhook } from '../services/webhookDispatcher';
+import { buildId } from '../lib/ids';
 
 export function createWebhooksRouter(): Router {
   const router = Router();
@@ -38,7 +39,7 @@ export function createWebhooksRouter(): Router {
     if (!name || !url) {
       return res.status(400).json({ error: 'name and url are required' });
     }
-    const id = 'wh-' + Date.now();
+    const id = buildId('wh');
     const secret = randomBytes(32).toString('hex');
     const { error } = await supabase.from('webhooks').insert({
       id, name, url, events: events || [], secret,

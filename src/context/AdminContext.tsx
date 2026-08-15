@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, CategoryRecord } from '../types/admin';
+import { normalizeUserRecord } from '../lib/mention';
 
 export interface AdminDomain {
   users: UserRecord[];
@@ -101,7 +102,8 @@ const [users, setUsers] = useState<UserRecord[]>([]);
       const raw = localStorage.getItem(key);
       if (raw !== null) {
         try {
-          setter(JSON.parse(raw));
+          const parsed = JSON.parse(raw);
+          setter((key === '4c_users' ? (parsed as unknown[]).map(normalizeUserRecord) : parsed) as T);
         } catch {
           // If parsing fails, keep existing state
         }

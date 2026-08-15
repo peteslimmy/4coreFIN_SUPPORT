@@ -4,6 +4,7 @@ import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, KbArticle, Cat
 import type { BuFormConfig, TicketFormConfig } from '../types/forms';
 import type { RoleDefinition, Permission } from '../types/rbac';
 import { getRoles } from '../lib/rbac';
+import { normalizeUserRecord } from '../lib/mention';
 import { useToast } from '../hooks/useToast';
 import { api, hasSession, type BootstrapData } from '../lib/api';
 import { normalizeStatus } from '../lib/ticketStateMachine';
@@ -380,7 +381,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     if (data.auditLogs) ticket.setAuditLogs(data.auditLogs);
     if (data.watcherNotifications) ticket.setWatcherNotifications(data.watcherNotifications);
     if (data.majorIncidents) ticket.setMajorIncidents(data.majorIncidents);
-    if (data.users) admin.setUsers(data.users);
+    if (data.users) admin.setUsers(data.users.map(normalizeUserRecord));
     if (data.slaRules) admin.setSlaRules(data.slaRules);
     if (data.holidays) admin.setHolidays(data.holidays);
     if (data.ticketTemplates) admin.setTicketTemplates(data.ticketTemplates);
@@ -402,7 +403,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     localStorage.setItem('4c_audit', JSON.stringify(data.auditLogs || []));
     localStorage.setItem('4c_major_incidents', JSON.stringify(data.majorIncidents || []));
     localStorage.setItem('4c_watcher_notifications', JSON.stringify(data.watcherNotifications || []));
-    localStorage.setItem('4c_users', JSON.stringify(data.users || []));
+    localStorage.setItem('4c_users', JSON.stringify((data.users || []).map(normalizeUserRecord)));
     localStorage.setItem('4c_sla_rules', JSON.stringify(data.slaRules || []));
     localStorage.setItem('4c_holidays', JSON.stringify(data.holidays || []));
     localStorage.setItem('4c_ticket_templates', JSON.stringify(data.ticketTemplates || []));
@@ -424,7 +425,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       auditLogs: data.auditLogs,
       majorIncidents: data.majorIncidents,
       watcherNotifications: data.watcherNotifications,
-      users: data.users,
+      users: data.users.map(normalizeUserRecord),
       slaRules: data.slaRules,
       holidays: data.holidays,
       ticketTemplates: data.ticketTemplates,

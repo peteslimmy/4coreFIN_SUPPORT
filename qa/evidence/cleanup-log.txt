@@ -1,0 +1,25 @@
+gotrue qa_partner_1786821730046@4coreqa.local -> 200
+gotrue qa_partner_1786821855258@4coreqa.local -> 200
+gotrue qa_bu_1786821861974@4coreqa.local -> 200
+gotrue qa_partner2_1786824908145@4coreqa.local -> 200
+gotrue qa_bu_1786824910258@4coreqa.local -> 200
+gotrue qa_partner2_1786824953177@4coreqa.local -> 200
+gotrue qa_bu_1786824955153@4coreqa.local -> 200
+appuser qa_partner_1786821730046@4coreqa.local -> 204
+appuser qa_partner_1786821855258@4coreqa.local -> 204
+appuser qa_bu_1786821861974@4coreqa.local -> 204
+appuser qa_partner2_1786824908145@4coreqa.local -> 204
+appuser qa_bu_1786824910258@4coreqa.local -> 204
+appuser qa_partner2_1786824953177@4coreqa.local -> 204
+appuser qa_bu_1786824955153@4coreqa.local -> 204
+audit refs for QA_TKT_1786824911886: n/a
+audit refs for QA_TKT_OTHER_1786824923036: n/a
+audit refs for QA_TKT_1786824956974: n/a
+audit refs for QA_TKT_OTHER_1786824968232: n/a
+ticket QA_TKT_1786824911886 -> 204
+ticket QA_TKT_OTHER_1786824923036 -> 204
+ticket QA_TKT_1786824956974 -> 204
+ticket QA_TKT_OTHER_1786824968232 -> 204
+customer cust-1786821857497-ka1dh -> 204
+customer cust-1786824912637-bmndd -> 204
+customer cust-1786824923761-k3vdj -> 204

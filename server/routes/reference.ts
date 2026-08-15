@@ -11,6 +11,7 @@ import {
 } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import type { Permission } from '../rbac';
+import { buildId } from '../lib/ids';
 import {
   appendAuditLog,
   listJsonTable,
@@ -205,7 +206,7 @@ const KINDS: Record<string, KindDef> = {
 };
 
 function nextId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+  return buildId(prefix);
 }
 
 /** Resolve a kind name, accepting both the snake_case registry key and the
@@ -362,7 +363,7 @@ export function createReferenceRouter(): Router {
         if (!item.password) {
           return res.status(400).json({ error: 'password: Required' });
         }
-        const userId = item.id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+        const userId = item.id || buildId('usr');
         const accountType = item.accountType || (item.role === 'PARTNER' ? 'PARTNER' : 'BU');
         const passwordHash = hashPassword(item.password);
         // Provision a Supabase Auth identity so the user can actually sign in.

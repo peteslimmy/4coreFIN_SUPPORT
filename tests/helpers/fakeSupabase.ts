@@ -250,6 +250,7 @@ export function createFakeSupabase(seed: TableStore) {
             if (attrs.email) row.email = attrs.email;
             if (attrs.password) row.password_plaintext = attrs.password;
             if (attrs.user_metadata?.full_name) row.name = attrs.user_metadata.full_name;
+            if (attrs.ban_duration !== undefined) row.ban_duration = attrs.ban_duration;
           }
           return { data: { user: { id, ...attrs } }, error: null };
         },

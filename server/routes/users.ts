@@ -4,7 +4,8 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { listUsersPublic, upsertUser, deleteUser, appendAuditLog } from '../repository';
-import { hashPassword, supabaseCreateUser, supabaseUpdateUser, supabaseDeleteUser, findUserById } from '../auth';
+import { hashPassword, supabaseCreateUser, supabaseUpdateUser, supabaseDeleteUser, findUserById, supabaseSetBan } from '../auth';
+import { buildId, buildToken } from '../lib/ids';
 
 export const USER_ROLES = ['SUPER_ADMIN', 'EXECUTIVE', 'BU_SUPPORT', 'BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3', 'PARTNER'] as const;
 
@@ -71,11 +72,11 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
     };
     // Validate role is from schema (not arbitrary input) - role is already validated by schema
     const validatedRole = role;
-    const userId = id || 'usr-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7);
+    const userId = id || buildId('usr');
     const resolvedAccountType = accountType ?? inferAccountType(validatedRole);
     const created = await supabaseCreateUser(email, password, name);
     const passwordHash = hashPassword(password);
-    const activationToken = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+    const activationToken = buildToken(32);
     try {
       await upsertUser({ id: userId, name, email, role: validatedRole, bu, partner, accountType: resolvedAccountType, phone, passwordHash, authUserId: created.id, mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
     } catch (e: any) {
@@ -127,7 +128,11 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
   // Super admin can toggle user activation status
   router.patch('/users/:id/activation', requireAuth, requireRoles('SUPER_ADMIN'), validateBody(z.object({ isActive: z.boolean() })), async (req: AuthedRequest, res: Response) => {
     const { isActive } = req.body as { isActive: boolean };
+    const current = await findUserById(req.params.id);
     await upsertUser({ id: req.params.id, isActive, activationToken: null, activatedAt: isActive ? new Date().toISOString() : null });
+    if (current?.auth_user_id) {
+      await supabaseSetBan(current.auth_user_id, isActive);
+    }
     await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'USER_ACTIVATION_TOGGLED', details: `User ${req.params.id} activation toggled to ${isActive} by ${req.user!.name}` });
     res.json({ ok: true, isActive });
   });

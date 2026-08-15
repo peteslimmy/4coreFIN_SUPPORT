@@ -5,6 +5,7 @@ import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { appendAuditLog, listEvidence, insertEvidence, deleteEvidence, getScopedTicket } from '../repository';
 import { uploadFile, deleteFile } from '../services/storageService';
+import { buildId } from '../lib/ids';
 
 const EVIDENCE_MAX_BYTES = 5 * 1024 * 1024;
 const EVIDENCE_ALLOWED_TYPES = new Set([
@@ -118,7 +119,7 @@ export function createEvidenceRouter(): Router {
         const url = await uploadFile(buffer, fileName, verifiedType, 'evidence');
         if (!url) return res.status(500).json({ error: 'Upload failed' });
         const row = {
-          id: 'ev-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+          id: buildId('ev'),
           ticketId,
           fileName,
           fileSize: buffer.length,

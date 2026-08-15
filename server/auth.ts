@@ -354,6 +354,23 @@ export async function supabaseUpdateUser(
   }
 }
 
+/** Ban or unban a Supabase Auth identity.
+
+    Called alongside the app-level activation toggle so that:
+    - On suspend: the GoTrue identity is also banned (credential logins blocked).
+    - On reactivate: the ban is cleared.
+
+    This is a best-effort sync. If the admin call fails, the app-level
+    is_active gate still protects the account, so we warn and continue. */
+export async function supabaseSetBan(authUserId: string, isActive: boolean): Promise<void> {
+  if (!authUserId) return;
+  const banDuration = isActive ? 'none' : '876000h';
+  const { error } = await supabase.auth.admin.updateUserById(authUserId, { ban_duration: banDuration });
+  if (error) {
+    logger.warn({ err: error, authUserId, banDuration }, 'Failed to sync suspension with Supabase Auth; app-level gate still active');
+  }
+}
+
 /** Delete a Supabase Auth identity. */
 export async function supabaseDeleteUser(authUserId: string): Promise<void> {
   const { error } = await supabase.auth.admin.deleteUser(authUserId);
@@ -421,6 +438,10 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
           return res.status(401).json({ error: 'User no longer exists' });
         }
         req.user = toAuthUser(row);
+        if (row.is_active === false) {
+          clearSession(res);
+          return res.status(401).json({ error: 'Account suspended' });
+        }
         // Server-side gate: a freshly-provisioned user whose password was set by
         // an administrator must choose their own password before using the app.
         // Only the password-change endpoint, /auth/me and logout remain reachable.

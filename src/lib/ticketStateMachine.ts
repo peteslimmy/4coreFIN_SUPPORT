@@ -22,9 +22,6 @@ export const TICKET_STATUS_ORDER: TicketStatus[] = [
   TicketStatus.RECEIPT,
   TicketStatus.ASSIGNED,
   TicketStatus.INVESTIGATE,
-  TicketStatus.WAITING_CUSTOMER,
-  TicketStatus.WAITING_PARTNER,
-  TicketStatus.WAITING_INTERNAL,
   TicketStatus.RESOLVED,
   TicketStatus.CLOSED,
 ];
@@ -33,9 +30,6 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   [TicketStatus.RECEIPT]: 'Receipt',
   [TicketStatus.ASSIGNED]: 'Assigned',
   [TicketStatus.INVESTIGATE]: 'In Review',
-  [TicketStatus.WAITING_CUSTOMER]: 'Waiting Customer',
-  [TicketStatus.WAITING_PARTNER]: 'Waiting Partner',
-  [TicketStatus.WAITING_INTERNAL]: 'Waiting Internal',
   [TicketStatus.RESOLVED]: 'Resolved',
   [TicketStatus.CLOSED]: 'Closed',
 };

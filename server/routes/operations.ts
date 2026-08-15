@@ -8,6 +8,7 @@ import { addSseClient, removeSseClient } from '../broadcast';
 import { listNotifications, insertNotification, markNotificationRead, listMajorIncidents, upsertMajorIncident, getScopedMajorIncident, getScopedTicket, listTickets, listComments, listEvidence, listAuditLogs, listUsersPublic, listCustomers, listJsonTable, getConfig } from '../repository';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { getCachedRoles } from '../middleware/requirePermission';
+import { buildId } from '../lib/ids';
 import { uploadFile } from '../services/storageService';
 import { normalizeBusinessUnits } from '../../src/lib/buCodes';
 
@@ -105,7 +106,7 @@ export function createOperationsRouter(): Router {
     const n = req.body;
     const ticket = await getScopedTicket(n.ticketId, req.user!);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
-    const entry = { ...n, id: n.id || 'wn-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6), timestamp: new Date().toISOString(), recipient: n.recipient || req.user!.email, seen: false };
+    const entry = { ...n, id: n.id || buildId('wn'), timestamp: new Date().toISOString(), recipient: n.recipient || req.user!.email, seen: false };
     await insertNotification(entry);
     res.status(201).json(entry);
   });

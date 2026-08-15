@@ -47,7 +47,7 @@ export default function App() {
   const app = useApp();
   const ui = useUi();
   const {
-    isAuthenticated, currentRole, currentUser, handleRoleChange, handleLogout,
+    isAuthenticated, currentRole, currentUser, handleLogout,
     tickets, setTickets, comments,
     auditLogs, watcherNotifications, setWatcherNotifications,
     majorIncidents, setMajorIncidents,
@@ -231,27 +231,16 @@ permissionTabs.push('ai_chat', 'kb', 'profile_settings');
             </button>
             {userMenuOpen && (
               <div className="absolute right-0 top-full mt-2 w-64 bg-surface-card border border-border rounded-xl shadow-dropdown z-50 overflow-hidden">
-                {users.map(u => (
-                  <button
-                    key={u.id}
-                    onClick={() => { handleRoleChange(u.role as UserRole); setUserMenuOpen(false); }}
-                    className={`w-full flex items-center gap-3 px-4 py-2.5 text-left transition hover:bg-surface-hover cursor-pointer ${
-                      currentUser.email === u.email ? 'bg-accent/10' : ''
-                    }`}
-                  >
-                    <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-surface-hover text-text-muted">
-                      {(u.firstName[0] + u.lastName[0]).toUpperCase()}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="text-xs font-semibold text-text-primary truncate">{u.firstName + ' ' + u.lastName}</p>
-                      <p className="text-caption text-text-muted truncate">{u.email}</p>
-                      <p className="text-caption text-text-muted font-mono">{u.role} · {u.bu}</p>
-                    </div>
-                    {currentUser.email === u.email && (
-                      <span className="text-[10px] bg-accent/15 text-accent px-1.5 py-0.5 rounded-md font-semibold">Active</span>
-                    )}
-                  </button>
-                ))}
+                <div className="flex items-center gap-3 px-4 py-3 bg-surface-hover/50">
+                  <div className="w-8 h-8 rounded-full flex items-center justify-center text-xs font-bold bg-accent/15 text-accent">
+                    {(currentUser.firstName[0] + currentUser.lastName[0]).toUpperCase()}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold text-text-primary truncate">{currentUser.firstName + ' ' + currentUser.lastName}</p>
+                    <p className="text-caption text-text-muted truncate">{currentUser.email}</p>
+                    <p className="text-caption text-text-muted font-mono">{currentRole} · {currentUser.bu || currentUser.partner}</p>
+                  </div>
+                </div>
                 <div className="border-t border-border">
                   <button onClick={handleLogout} className="w-full px-4 py-2.5 text-xs font-semibold text-error hover:bg-error-light transition cursor-pointer text-left">
                     Logout

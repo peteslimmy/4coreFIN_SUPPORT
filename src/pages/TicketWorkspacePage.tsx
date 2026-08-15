@@ -10,7 +10,7 @@ import { useApp } from '../context/AppContext';
 import { useUi } from '../context/UiContext';
 import { syncComment, syncNotification, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
 import { isBuSupportRole } from '../lib/rbac';
-import { isAddressed, applyMention, mentionCandidates, resolveMention } from '../lib/mention';
+import { isAddressed, applyMention, fullNameOf, mentionCandidates, resolveMention } from '../lib/mention';
 import { formatSlaDuration } from '../lib/utils';
 import TicketListPane from './ticket-workspace/TicketListPane';
 import TicketDetailPane from './ticket-workspace/TicketDetailPane';
@@ -328,7 +328,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
             id: 'wn-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
             timestamp: new Date().toISOString(),
             ticketId: activeTicket.id,
-            message: `@${mentioned.firstName} ${mentioned.lastName}, you were mentioned on ticket ${activeTicket.id}.`,
+            message: `@${fullNameOf(mentioned)}, you were mentioned on ticket ${activeTicket.id}.`,
             recipient: mentioned.email,
             seen: false,
           };
@@ -338,7 +338,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
             return updatedWN;
           });
           syncNotification(direct);
-          showToast(`Comment sent to ${mentioned.firstName} ${mentioned.lastName}.`, 'success');
+          showToast(`Comment sent to ${fullNameOf(mentioned)}.`, 'success');
         } else {
           notifyWatchers(activeTicket, `New comment on ticket ${activeTicket.id}`);
           showToast('Comment sent.', 'success');
@@ -361,7 +361,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
 
   const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showMentions) {
-      const filtered = mentionCandidates(users, currentUser.email).filter(u => (u.firstName + ' ' + u.lastName).toLowerCase().includes(mentionSearch));
+      const filtered = mentionCandidates(users, currentUser.email).filter(u => fullNameOf(u).toLowerCase().includes(mentionSearch));
       if (e.key === 'ArrowDown') { e.preventDefault(); setMentionIndex(prev => Math.min(prev + 1, filtered.length - 1)); return; }
       if (e.key === 'ArrowUp') { e.preventDefault(); setMentionIndex(prev => Math.max(prev - 1, 0)); return; }
       if (e.key === 'Escape') { e.preventDefault(); setShowMentions(false); return; }
@@ -369,7 +369,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
         e.preventDefault();
         const target = filtered[mentionIndex];
         if (target) {
-          setCommentText(prev => applyMention(prev, `${target.firstName} ${target.lastName}`));
+          setCommentText(prev => applyMention(prev, fullNameOf(target)));
           setShowMentions(false);
         }
         return;

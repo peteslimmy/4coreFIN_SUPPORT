@@ -7,6 +7,7 @@ import { encrypt, decrypt, maskValue } from '../services/encryptionService';
 import { sendEmail } from '../services/emailService';
 import { appendAuditLog } from '../repository';
 import { supabase } from '../supabase';
+import { buildId } from '../lib/ids';
 
 export function createAdminSettingsRouter(): Router {
   const router = Router();
@@ -198,7 +199,7 @@ export function createAdminSettingsRouter(): Router {
     if (!name || !service || !key) {
       return res.status(400).json({ error: 'name, service, and key are required' });
     }
-    const id = 'ak-' + Date.now();
+    const id = buildId('ak');
     const encryptedKey = encrypt(key);
     const { error } = await supabase.from('api_keys').insert({
       id, name, service, encrypted_key: encryptedKey,

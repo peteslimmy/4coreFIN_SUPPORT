@@ -4,6 +4,7 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { listCustomers, upsertCustomer, deleteCustomer, getScopedCustomer, countTicketsByCustomer, appendAuditLog } from '../repository';
+import { buildId } from '../lib/ids';
 
 export function createCustomersRouter(): Router {
   const router = Router();
@@ -21,7 +22,7 @@ export function createCustomersRouter(): Router {
 
   router.post('/customers', requireAuth, requirePermission('customers:manage'), validateBody(z.object({ id: z.string().optional(), firstName: z.string().optional(), lastName: z.string().optional(), email: z.string().optional(), phone: z.string().optional(), businessUnit: z.string().optional(), createdAt: z.string().optional(), totalTickets: z.number().optional(), notes: z.string().optional() })), async (req: AuthedRequest, res: Response) => {
     const c = { ...req.body, email: (req.body.email || '').trim().toLowerCase() };
-    const entry = { ...c, id: c.id || 'cst-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7), createdAt: c.createdAt || new Date().toISOString(), totalTickets: c.totalTickets || 0 };
+    const entry = { ...c, id: c.id || buildId('cst'), createdAt: c.createdAt || new Date().toISOString(), totalTickets: c.totalTickets || 0 };
     try {
       await upsertCustomer(entry);
     } catch (e: any) {

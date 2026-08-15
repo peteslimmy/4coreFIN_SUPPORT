@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   fullNameOf, isAddressed, applyMention, stripLeadingMention,
-  extractAddressPartial, mentionCandidates, resolveMention,
+  extractAddressPartial, mentionCandidates, resolveMention, normalizeUserRecord,
 } from './mention';
 import type { UserRecord } from '../types/admin';
 
@@ -124,5 +124,39 @@ describe('resolveMention', () => {
 
   it('returns null when there is no mention', () => {
     expect(resolveMention('hi team', users)).toBeNull();
+  });
+});
+
+describe('fullNameOf fallback', () => {
+  it('uses name when firstName/lastName are absent', () => {
+    expect(fullNameOf({ id: 'x', name: 'Ada Lagos', email: 'ada@a.com', role: 'Agent', bu: 'POS' } as unknown as UserRecord)).toBe('Ada Lagos');
+  });
+
+  it('prefers firstName/lastName over name when both are present', () => {
+    expect(fullNameOf({ id: 'x', firstName: 'Ada', lastName: 'Lagos', name: 'Wrong Name', email: 'ada@a.com', role: 'Agent', bu: 'POS' } as unknown as UserRecord)).toBe('Ada Lagos');
+  });
+});
+
+describe('normalizeUserRecord', () => {
+  it('splits name into firstName/lastName when missing', () => {
+    const raw = { id: 'u1', name: 'Ada Lagos', email: 'ada@a.com', role: 'Agent', bu: 'POS' };
+    const out = normalizeUserRecord(raw);
+    expect(out.firstName).toBe('Ada');
+    expect(out.lastName).toBe('Lagos');
+    expect(out.id).toBe('u1');
+  });
+
+  it('preserves existing firstName/lastName and only fills missing parts', () => {
+    const raw = { id: 'u2', firstName: 'Ada', name: 'Ada Lagos', email: 'ada@a.com', role: 'Agent', bu: 'POS' };
+    const out = normalizeUserRecord(raw);
+    expect(out.firstName).toBe('Ada');
+    expect(out.lastName).toBe('Lagos');
+  });
+
+  it('survives a single-word name', () => {
+    const raw = { id: 'u3', name: 'Ada', email: 'ada@a.com', role: 'Agent', bu: 'POS' };
+    const out = normalizeUserRecord(raw);
+    expect(out.firstName).toBe('Ada');
+    expect(out.lastName).toBe('');
   });
 });

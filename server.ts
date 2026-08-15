@@ -15,6 +15,7 @@ import { createReferenceRouter } from "./server/routes/reference";
 import { startSlaJob } from "./server/slaJob";
 import { requireAuth, requireCsrf, type AuthedRequest } from "./server/auth";
 import { logger, requestIdMiddleware } from "./server/logger";
+import { idempotencyMiddleware } from "./server/middleware/idempotency";
 import { cspNonceMiddleware, createCspMiddleware } from "./server/middleware/csp";
 import { removeSseClient, getSseClients, closeAllSseConnections } from "./server/broadcast";
 import swaggerUi from "swagger-ui-express";
@@ -218,6 +219,10 @@ app.use(compression({ threshold: 1024, level: 6 }));
 
   // CSRF defense for state-changing requests (cookies + double-submit token)
   app.use('/api', (req, res, next) => requireCsrf(req as AuthedRequest, res, next));
+
+  // Idempotency for POST/PUT requests that supply an Idempotency-Key header.
+  // Mounted after CSRF so replayed responses can never bypass the CSRF gate.
+  app.use('/api', idempotencyMiddleware);
 
   // Domain REST + auth + SSE
   app.use("/api", wrapAsyncHandlers(createApiRouter()));

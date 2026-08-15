@@ -10,6 +10,7 @@ import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition 
 import { getCachedRoles } from '../middleware/requirePermission';
 import { getConfig } from '../repository';
 import { nextTicketId, normalizeBusinessUnits } from '../../src/lib/buCodes';
+import { buildId } from '../lib/ids';
 import { computeSlaDeadline } from '../../src/lib/slaCalculator';
 import { TicketStatus, TicketPriority, UserRole } from '../../src/types/app';
 import { applyTransition, getAvailableTransitions, getTransitionBlockers } from '../../src/lib/ticketStateMachine';
@@ -22,7 +23,7 @@ async function buildTicketId(businessUnit: string | undefined, existing: string[
   const now = new Date();
   const code = (businessUnit || '').trim() ? (buUnits.find((b) => b.name.toUpperCase() === businessUnit!.toUpperCase())?.code) : undefined;
   if (!code) {
-    return 'tkt-' + now.getTime() + '-' + Math.random().toString(36).slice(2, 7);
+    return buildId('tkt');
   }
   return nextTicketId(businessUnit!, buUnits, existing, now);
 }
@@ -30,15 +31,15 @@ async function buildTicketId(businessUnit: string | undefined, existing: string[
 const createTicketSchema = z.object({
   id: z.string().optional(),
   customerName: z.string().optional(),
-  customerEmail: z.string().optional(),
+  customerEmail: z.string({ error: 'Customer email is required' }).trim().min(1, 'Customer email is required'),
   customerPhone: z.string().optional(),
   customerLastName: z.string().optional(),
   customerId: z.string().optional(),
-  businessUnit: z.string().optional(),
+  businessUnit: z.string({ error: 'Business unit is required' }).trim().min(1, 'Business unit is required'),
   partner: z.string().optional(),
   category: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
-  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED', 'WAITING_CUSTOMER', 'WAITING_PARTNER', 'WAITING_INTERNAL']).optional(),
+  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
   amount: z.number().optional(),
   transactionId: z.string().optional(),
   cardPan: z.string().optional(),
@@ -59,7 +60,7 @@ const createTicketSchema = z.object({
 });
 
 const updateTicketSchema = z.object({
-  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED', 'WAITING_CUSTOMER', 'WAITING_PARTNER', 'WAITING_INTERNAL']).optional(),
+  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   category: z.string().optional(),
   description: z.string().optional(),
@@ -84,7 +85,7 @@ const updateTicketSchema = z.object({
   customFields: z.record(z.string(), z.any()).optional(),
   duplicateOf: z.string().optional(),
   event: z.string().optional(),
-  from: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED', 'WAITING_CUSTOMER', 'WAITING_PARTNER', 'WAITING_INTERNAL']).optional(),
+  from: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
 });
 
 export function createTicketsRouter(): Router {
@@ -93,9 +94,15 @@ export function createTicketsRouter(): Router {
   router.get('/tickets', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
     const limit = req.query.limit ? Math.min(Number(req.query.limit) || 20, 200) : undefined;
     const offset = req.query.offset ? Math.max(Number(req.query.offset) || 0, 0) : undefined;
+    const roles = getCachedRoles(res);
+    const wantsUnmask = req.query.unmask === 'true';
+    const canUnmask = hasPermissionForRoleId(roles, req.user!.role, 'tickets:unmask');
+    if (wantsUnmask && !canUnmask) {
+      return res.status(403).json({ error: 'Requires permission: tickets:unmask' });
+    }
     const tickets = await listTickets(req.user!, {
       includeDeleted: req.query.includeDeleted === 'true',
-      unmask: req.query.unmask === 'true',
+      unmask: wantsUnmask && canUnmask,
       limit,
       offset,
       status: req.query.status as string | undefined,
@@ -110,7 +117,13 @@ export function createTicketsRouter(): Router {
   });
 
   router.get('/tickets/:id', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
-    const ticket = await getTicket(req.params.id, req.user!, req.query.unmask === 'true');
+    const roles = getCachedRoles(res);
+    const wantsUnmask = req.query.unmask === 'true';
+    const canUnmask = hasPermissionForRoleId(roles, req.user!.role, 'tickets:unmask');
+    if (wantsUnmask && !canUnmask) {
+      return res.status(403).json({ error: 'Requires permission: tickets:unmask' });
+    }
+    const ticket = await getTicket(req.params.id, req.user!, wantsUnmask && canUnmask);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     res.json(ticket);
   });

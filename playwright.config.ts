@@ -9,6 +9,9 @@ const PORT = Number(process.env.E2E_PORT) || 3998;
 
 export default defineConfig({
   testDir: './e2e',
+  // e2e/audit contains stale AS-IS capture specs that assert previously-fixed
+  // broken behavior (PATCH hangs, empty user list). Excluded from the go-live gate.
+  testIgnore: ['**/audit/**'],
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

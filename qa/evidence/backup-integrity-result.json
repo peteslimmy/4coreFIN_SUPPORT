@@ -1,0 +1,127 @@
+{
+  "timestamp": "2026-08-15T20:45:17.542Z",
+  "overallSuccess": true,
+  "results": [
+    {
+      "success": true,
+      "table": "users",
+      "expectedCount": 22,
+      "actualCount": 22,
+      "checksumMatch": true,
+      "durationMs": 999
+    },
+    {
+      "success": true,
+      "table": "customers",
+      "expectedCount": 8,
+      "actualCount": 8,
+      "checksumMatch": true,
+      "durationMs": 948
+    },
+    {
+      "success": true,
+      "table": "tickets",
+      "expectedCount": 28,
+      "actualCount": 28,
+      "checksumMatch": true,
+      "durationMs": 926
+    },
+    {
+      "success": true,
+      "table": "comments",
+      "expectedCount": 10,
+      "actualCount": 10,
+      "checksumMatch": true,
+      "durationMs": 922
+    },
+    {
+      "success": true,
+      "table": "audit_logs",
+      "expectedCount": 2294,
+      "actualCount": 2294,
+      "checksumMatch": true,
+      "durationMs": 1186
+    },
+    {
+      "success": true,
+      "table": "watcher_notifications",
+      "expectedCount": 591,
+      "actualCount": 591,
+      "checksumMatch": true,
+      "durationMs": 970
+    },
+    {
+      "success": true,
+      "table": "major_incidents",
+      "expectedCount": 2,
+      "actualCount": 2,
+      "checksumMatch": true,
+      "durationMs": 884
+    },
+    {
+      "success": true,
+      "table": "evidence",
+      "expectedCount": 0,
+      "actualCount": 0,
+      "checksumMatch": true,
+      "durationMs": 911
+    },
+    {
+      "success": true,
+      "table": "sla_rules",
+      "expectedCount": 12,
+      "actualCount": 12,
+      "checksumMatch": true,
+      "durationMs": 930
+    },
+    {
+      "success": true,
+      "table": "holidays",
+      "expectedCount": 3,
+      "actualCount": 3,
+      "checksumMatch": true,
+      "durationMs": 925
+    },
+    {
+      "success": true,
+      "table": "ticket_templates",
+      "expectedCount": 0,
+      "actualCount": 0,
+      "checksumMatch": true,
+      "durationMs": 933
+    },
+    {
+      "success": true,
+      "table": "kb_articles",
+      "expectedCount": 2,
+      "actualCount": 2,
+      "checksumMatch": true,
+      "durationMs": 906
+    },
+    {
+      "success": true,
+      "table": "app_config",
+      "expectedCount": 9,
+      "actualCount": 9,
+      "checksumMatch": true,
+      "durationMs": 866
+    },
+    {
+      "success": true,
+      "table": "idempotency_keys",
+      "expectedCount": 0,
+      "actualCount": 0,
+      "checksumMatch": true,
+      "durationMs": 914
+    },
+    {
+      "success": true,
+      "table": "audit_logs_chain",
+      "expectedCount": 1000,
+      "actualCount": 1000,
+      "checksumMatch": true,
+      "durationMs": 628
+    }
+  ],
+  "totalDurationMs": 13849
+}

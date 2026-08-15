@@ -5,6 +5,7 @@ import { canAccessTicket } from './auth';
 import { tenantIdForBu, GLOBAL_TENANT_ID } from './tenant';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
+import { buildId } from './lib/ids';
 
 // ─── Tenant scoping helpers ────────────────────────────────────────────
 
@@ -332,7 +333,7 @@ export async function appendAuditLog(input: {
 }): Promise<AuditEntry> {
   const previousHash = await getLatestAuditHash();
   const entry: AuditEntry = {
-    id: 'aud-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    id: buildId('aud'),
     timestamp: new Date().toISOString(),
     ticketId: input.ticketId,
     actor: input.actor,
@@ -714,7 +715,7 @@ export async function findOrCreateCustomer(opts: {
   if (!lastName) lastName = '';
 
   const row = {
-    id: 'cust-' + Date.now() + '-' + Math.random().toString(36).slice(2, 7),
+    id: buildId('cust'),
     first_name: firstName,
     last_name: lastName,
     email,

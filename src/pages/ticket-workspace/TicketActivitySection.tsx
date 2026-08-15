@@ -78,7 +78,7 @@ export default function TicketActivitySection({
       }
       if (part.startsWith("@")) {
         const name = part.slice(1).trim();
-        const known = users.find(u => (u.firstName + " " + u.lastName).toLowerCase() === name.toLowerCase());
+        const known = users.find(u => fullNameOf(u).toLowerCase() === name.toLowerCase());
         return known ?
           <span key={i} className="text-accent font-semibold bg-accent/10 px-0.5 rounded">{part}</span>
           :

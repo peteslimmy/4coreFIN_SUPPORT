@@ -44,14 +44,14 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
 | Field | Value |
 |-------|-------|
 | Email | `peteslimmy@gmail.com` |
-| Password | `@Pete12345678` |
+| Password | *(set at provisioning; rotated via Supabase Auth — never stored in docs)* |
 | App Role | SUPER_ADMIN |
 | BU | POSSAP |
 | Tenant | tnt-POSSAP |
 | Supabase Auth UID | `22e671bd-c547-4595-a333-e20f29953cce` |
 | App User ID | `usr-pete-admin` |
 
-> ⚠️ Change the default password `@Pete12345678` immediately after first login.
+> ⚠️ Rotate this account's password immediately if it was ever shared or committed. Credentials must never be recorded in documentation or version control.
 
 ## 5. Dev-account removal checklist (MANUAL, Supabase Dashboard)
 

@@ -18,8 +18,3 @@ export function uid(prefix: string): string {
   }
   return timestampedId(prefix);
 }
-
-/** Human-friendlier ID for records surfaced in UI (audit logs, tickets). */
-export function makeTimestampedId(prefix: string): string {
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
-}

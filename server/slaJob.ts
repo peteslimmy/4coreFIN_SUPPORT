@@ -3,6 +3,7 @@ import { resolveSlaDuration } from '../src/lib/slaCalculator';
 import { TicketPriority } from '../src/types/app';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
+import { buildId } from './lib/ids';
 
 const FALLBACK_RISK_FRACTION = 0.25;
 const MIN_RISK_HOURS = 0.5;
@@ -72,7 +73,7 @@ export async function runSlaCheck() {
         for (const recipient of recipients) {
           if (await alreadyNotified(activeKeys, t.id, 'SLA_BREACH', recipient)) continue;
           await insertNotification({
-            id: 'wn-sla-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            id: buildId('wn-sla'),
             timestamp: new Date().toISOString(),
             ticketId: t.id,
             message: `[SLA_BREACH] Ticket ${t.id} breached SLA deadline (${t.priority} / ${t.category}). Immediate action required.`,
@@ -99,7 +100,7 @@ export async function runSlaCheck() {
         for (const recipient of recipients) {
           if (await alreadyNotified(activeKeys, t.id, 'SLA_AT_RISK', recipient)) continue;
           await insertNotification({
-            id: 'wn-risk-' + Date.now() + '-' + Math.random().toString(36).slice(2, 6),
+            id: buildId('wn-risk'),
             timestamp: new Date().toISOString(),
             ticketId: t.id,
             message: `[SLA_AT_RISK] Ticket ${t.id} is at risk — ${hoursLeft.toFixed(1)}h remaining before SLA breach.`,

@@ -3,7 +3,8 @@ import { z } from 'zod';
 // ── Shared request/response validation schemas ──────────────────────────
 // These mirror the payload shapes accepted by the Express API. Schemas are
 // deliberately permissive (optional/loose where the server applies defaults)
-// so validation only rejects genuinely malformed input.
+// so validation only rejects genuinely malformed input. Unknown keys are
+// stripped (Zod default) — never passed through to persistence.
 
 export const emailSchema = z.string().email();
 
@@ -11,6 +12,8 @@ export const loginSchema = z.object({
   email: z.string().email().trim(),
   password: z.string().min(1),
 });
+
+const ticketStatusSchema = z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']);
 
 export const ticketCreateSchema = z.object({
   id: z.string().optional(),
@@ -23,7 +26,7 @@ export const ticketCreateSchema = z.object({
   partner: z.string().optional(),
   category: z.string().optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
-  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
+  status: ticketStatusSchema.optional(),
   amount: z.number().optional(),
   transactionId: z.string().optional(),
   cardPan: z.string().optional(),
@@ -33,7 +36,7 @@ export const ticketCreateSchema = z.object({
   assignedAgentId: z.string().optional(),
   majorIncidentId: z.string().nullable().optional(),
   watchers: z.array(z.string()).optional(),
-  submittedBy: z.enum(['BU_SUPPORT', 'CUSTOMER']).optional(),
+  submittedBy: z.enum(['BU_SUPPORT', 'PARTNER', 'CUSTOMER']).optional(),
   submittedByName: z.string().optional(),
   submittedByPhone: z.string().optional(),
   rootCause: z.string().optional(),
@@ -41,10 +44,10 @@ export const ticketCreateSchema = z.object({
   rcaDetails: z.record(z.string(), z.unknown()).optional(),
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   duplicateOf: z.string().nullable().optional(),
-}).passthrough();
+});
 
 export const ticketPatchSchema = z.object({
-  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
+  status: ticketStatusSchema.optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   category: z.string().optional(),
   description: z.string().optional(),
@@ -68,20 +71,20 @@ export const ticketPatchSchema = z.object({
   isDeleted: z.boolean().optional(),
   customFields: z.record(z.string(), z.union([z.string(), z.number(), z.boolean()])).optional(),
   duplicateOf: z.string().optional(),
-}).passthrough();
+});
 
 export const commentCreateSchema = z.object({
   ticketId: z.string().min(1),
   message: z.string().min(1),
   isInternal: z.boolean().optional(),
   parentCommentId: z.string().optional(),
-}).passthrough();
+});
 
 export const notificationCreateSchema = z.object({
   ticketId: z.string().optional(),
   message: z.string().optional(),
   recipient: z.string().optional(),
-}).passthrough();
+});
 
 export const majorIncidentCreateSchema = z.object({
   id: z.string().optional(),
@@ -97,7 +100,7 @@ export const majorIncidentCreateSchema = z.object({
   timeline: z.array(z.unknown()).optional(),
   notifications: z.array(z.unknown()).optional(),
   pir: z.record(z.string(), z.unknown()).optional(),
-}).passthrough();
+});
 
 export const customerCreateSchema = z.object({
   id: z.string().optional(),
@@ -109,7 +112,7 @@ export const customerCreateSchema = z.object({
   createdAt: z.string().optional(),
   totalTickets: z.number().optional(),
   notes: z.string().optional(),
-}).passthrough();
+});
 
 export const userCreateSchema = z.object({
   id: z.string().optional(),
@@ -119,7 +122,7 @@ export const userCreateSchema = z.object({
   bu: z.string().min(1),
   phone: z.string().optional(),
   password: z.string().min(8),
-}).passthrough();
+});
 
 export const userUpdateSchema = z.object({
   name: z.string().optional(),
@@ -128,11 +131,11 @@ export const userUpdateSchema = z.object({
   bu: z.string().optional(),
   phone: z.string().optional(),
   password: z.string().min(8).optional(),
-}).passthrough();
+});
 
 export const unmaskSchema = z.object({
   field: z.string().optional(),
-}).passthrough();
+});
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type TicketCreateInput = z.infer<typeof ticketCreateSchema>;

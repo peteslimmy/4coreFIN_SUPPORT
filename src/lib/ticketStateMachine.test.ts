@@ -56,9 +56,6 @@ describe('ticketStateMachine', () => {
       TicketStatus.RECEIPT,
       TicketStatus.ASSIGNED,
       TicketStatus.INVESTIGATE,
-      TicketStatus.WAITING_CUSTOMER,
-      TicketStatus.WAITING_PARTNER,
-      TicketStatus.WAITING_INTERNAL,
       TicketStatus.RESOLVED,
       TicketStatus.CLOSED,
     ]);
@@ -68,11 +65,8 @@ describe('ticketStateMachine', () => {
     expect(getTicketStatusStep(TicketStatus.RECEIPT)).toBe(0);
     expect(getTicketStatusStep(TicketStatus.ASSIGNED)).toBe(1);
     expect(getTicketStatusStep(TicketStatus.INVESTIGATE)).toBe(2);
-    expect(getTicketStatusStep(TicketStatus.WAITING_CUSTOMER)).toBe(3);
-    expect(getTicketStatusStep(TicketStatus.WAITING_PARTNER)).toBe(4);
-    expect(getTicketStatusStep(TicketStatus.WAITING_INTERNAL)).toBe(5);
-    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(6);
-    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(7);
+    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(3);
+    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(4);
     expect(getTicketStatusStep('BOGUS')).toBe(0);
   });
 

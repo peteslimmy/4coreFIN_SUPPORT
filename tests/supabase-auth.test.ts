@@ -18,9 +18,9 @@ const ALPHA = 'tnt-ALPHA';
 function seedStore(): TableStore {
   return {
     users: [
-      // auth_user_id matches what the fake's signInWithPassword returns ('auth-<email>').
       { id: 'usr-su', name: 'Sarah', email: 'sarah@alpha.com', password_hash: 'x', password_plaintext: 'whatever', role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA, auth_user_id: 'auth-sarah@alpha.com' },
       { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: 'x', password_plaintext: 'whatever', role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA, auth_user_id: 'auth-admin@4core.com' },
+      { id: 'usr-suspended', name: 'Suspended', email: 'suspended@alpha.com', password_hash: 'x', password_plaintext: 'whatever', role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA, auth_user_id: 'auth-suspended@alpha.com', is_active: false },
     ],
     tickets: [],
     comments: [],
@@ -105,6 +105,16 @@ describe('Supabase Auth provider', () => {
     expect(isSupabaseAuth()).toBe(true);
   });
 });
+
+  it('rejects login for a suspended app user', async () => {
+    Object.assign(supabase, createFakeSupabase(seedStore()));
+    const res = await fetch(`${base}/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'suspended@alpha.com', password: 'whatever' }),
+    });
+    expect(res.status).toBe(403);
+  });
 
 function authedHeaders(sessionCookie: string, csrfCookie: string) {
   const headers: Record<string, string> = { Cookie: `${sessionCookie}; ${csrfCookie}` };
@@ -276,5 +286,94 @@ describe('Supabase password flows', () => {
       body: JSON.stringify({ token: 'not-a-real-token-recognized-by-getUser', newPassword: 'ResetPass1!' }),
     });
     expect(res.status).toBe(400);
+  });
+});
+
+describe('Supabase Auth activation toggle — GoTrue ban sync', () => {
+  const SUS_ID = 'usr-suspended';
+  const SUS_AUTH_ID = 'auth-suspended@alpha.com';
+  const ADMIN_ID = 'usr-admin';
+
+  async function getAuthModule() {
+    return await import('../server/auth');
+  }
+
+  beforeEach(async () => {
+    const authModule = await getAuthModule();
+    const original = authModule.findUserById;
+    Object.defineProperty(authModule, 'findUserById', {
+      ...(original as PropertyDescriptor),
+      writable: true,
+    });
+  });
+
+  afterEach(async () => {
+    const authModule = await getAuthModule();
+    Object.defineProperty(authModule, 'findUserById', {
+      writable: false,
+      configurable: false,
+    });
+  });
+
+  it('bans the Supabase Auth identity when a user is suspended and clears it on reactivation', async () => {
+    const banUpdate = vi.fn(async (id: string, attrs: any) => {
+      const row = (store.users || []).find((u: any) => u.auth_user_id === id);
+      if (row && attrs.ban_duration !== undefined) row.ban_duration = attrs.ban_duration;
+      return { data: { user: { id } }, error: null };
+    });
+
+    const store = {
+      users: [
+        { id: SUS_ID, name: 'Suspended', email: 'suspended@alpha.com', password_hash: 'x', password_plaintext: 'whatever', role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: 'tnt-ALPHA', auth_user_id: SUS_AUTH_ID, is_active: false },
+        { id: ADMIN_ID, name: 'Admin', email: 'admin@4core.com', password_hash: 'x', password_plaintext: 'whatever', role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: 'tnt-ALPHA', auth_user_id: 'auth-admin@4core.com', is_active: true },
+        ...seedStore().users.filter((u: any) => u.id !== ADMIN_ID && u.id !== SUS_ID),
+      ],
+      tickets: [], comments: [], evidence: [], audit_logs: [],
+      watcher_notifications: [], major_incidents: [], customers: [],
+      app_config: [{ key: 'businessUnits', value: ['ALPHA', 'BETA'] }],
+      sla_rules: [], holidays: [], ticket_templates: [], kb_articles: [],
+    } as TableStore;
+
+    const tSupabase = {
+      ...createFakeSupabase(store),
+      auth: {
+        ...createFakeSupabase(store).auth,
+        admin: { ...createFakeSupabase(store).auth.admin, updateUserById: banUpdate },
+      },
+    };
+    Object.assign(supabase, tSupabase);
+
+    const authModule = await getAuthModule();
+    authModule.findUserById = async (id: string) => {
+      const row = store.users.find((u: any) => u.id === id);
+      return (row as any) || undefined;
+    };
+
+    const loginRes = await fetch(`${base}/auth/login`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: 'admin@4core.com', password: 'whatever' }),
+    });
+    expect(loginRes.status).toBe(200);
+    const cs = (name: string) => (loginRes.headers.get('set-cookie') || '').split(',').map((c) => c.split(';')[0].trim()).find((c) => c.startsWith(`${name}=`)) || '';
+    const sessionC = cs('4c_session');
+    const csrfFull = cs('4c_csrf');
+    const csrfV = csrfFull.split('=')[1];
+    const sessVal = sessionC.slice('4c_session='.length);
+
+    const resSuspend = await fetch(`${base}/users/${SUS_ID}/activation`, {
+      method: 'PATCH',
+      headers: { Cookie: `4c_session=${sessVal}; 4c_csrf=${csrfV}`, 'X-CSRF-Token': csrfV, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: false }),
+    });
+    expect(resSuspend.status).toBe(200);
+    expect(banUpdate).toHaveBeenLastCalledWith(SUS_AUTH_ID, { ban_duration: '876000h' });
+
+    const resActivate = await fetch(`${base}/users/${SUS_ID}/activation`, {
+      method: 'PATCH',
+      headers: { Cookie: `4c_session=${sessVal}; 4c_csrf=${csrfV}`, 'X-CSRF-Token': csrfV, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isActive: true }),
+    });
+    expect(resActivate.status).toBe(200);
+    expect(banUpdate).toHaveBeenLastCalledWith(SUS_AUTH_ID, { ban_duration: 'none' });
   });
 });

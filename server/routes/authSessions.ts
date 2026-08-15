@@ -16,6 +16,7 @@ export function createAuthSessionsRouter(): Router {
       const { id: authUserId } = await supabaseSignIn(email, password, ip, userAgent);
       const userRow = (await findUserByAuthId(authUserId)) ?? (await findUserByEmail(email));
       if (!userRow) return res.status(401).json({ error: 'Account not provisioned in app' });
+      if (userRow.is_active === false) return res.status(403).json({ error: 'Account suspended' });
       const authUser = toAuthUser(userRow);
       issueSession(res, authUser);
       res.json({ user: authUser, mustChangePassword: Boolean(authUser.mustChangePassword) });

@@ -1,0 +1,121 @@
+{
+  "timestamp": "2026-08-15T19:24:33.572Z",
+  "results": [
+    {
+      "id": "SEC-04",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"status\":403,\"body\":{\"error\":\"Invalid CSRF token\"}}"
+    },
+    {
+      "id": "SEC-PARTNER-CREATE",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"status\":201,\"id\":\"usr-1786821855637-f0szy\"}"
+    },
+    {
+      "id": "SEC-TKT-CREATE",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"id\":\"QA_TEST_TKT_1786821856787\",\"status\":500}"
+    },
+    {
+      "id": "SEC-18",
+      "status": "PASS",
+      "severity": "CRITICAL",
+      "actual": "{\"status\":403,\"bypassed\":false}"
+    },
+    {
+      "id": "SEC-03b",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"status\":400,\"body\":{\"error\":\"body: Invalid input: expected object, received string\"}}"
+    },
+    {
+      "id": "SEC-21",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"totalReturned\":22,\"hasOwn\":false,\"hasOther\":false}"
+    },
+    {
+      "id": "SEC-21b",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"returned\":0,\"hasOwn\":false,\"hasOther\":false}"
+    },
+    {
+      "id": "SEC-19",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"status\":403}"
+    },
+    {
+      "id": "SEC-30",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"appendStatus\":201,\"updateStatus\":404}"
+    },
+    {
+      "id": "SEC-02",
+      "status": "FAIL",
+      "severity": "HIGH",
+      "actual": "{\"attempts\":[401,401,401,401,401,423],\"lockedOut\":false}"
+    },
+    {
+      "id": "SEC-46",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"ok\":true,\"uptime\":10363.7413246,\"ts\":\"2026-08-15T19:24:33.066Z\",\"dependencies\":{\"supabase\":\"ok\"}}"
+    },
+    {
+      "id": "SEC-06",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"id1\":\"QA_TEST_USR_20260815_201550\",\"id2\":\"QA_TEST_USR_20260815_201550\"}"
+    },
+    {
+      "id": "SEC-07",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"logoutStatus\":200,\"meAfterStatus\":401}"
+    },
+    {
+      "id": "SEC-08",
+      "status": "PASS",
+      "severity": "HIGH",
+      "actual": "{\"status\":401}"
+    }
+  ],
+  "testData": [
+    {
+      "id": "usr-QA_TEST_USR_20260815_201550",
+      "type": "SUPER_ADMIN user",
+      "cleanup": "DELETE from users + supabaseDeleteUser"
+    },
+    {
+      "id": "usr-1786821855637-f0szy",
+      "type": "PARTNER user",
+      "cleanup": "DELETE from users + supabaseDeleteUser"
+    },
+    {
+      "id": "usr-1786821862348-1r0r1",
+      "type": "BU_SUPPORT user",
+      "cleanup": "DELETE from users + supabaseDeleteUser"
+    },
+    {
+      "id": "QA_TEST_TKT_1786821856787",
+      "type": "Ticket with PII",
+      "cleanup": "DELETE from tickets"
+    },
+    {
+      "id": "QA_TEST_TKT_OTHER_1786821860407",
+      "type": "Ticket IDEC BU",
+      "cleanup": "DELETE from tickets"
+    },
+    {
+      "id": "auth-qa_test_auth_20260815_201550",
+      "type": "GoTrue auth identity",
+      "cleanup": "supabaseDeleteUser"
+    }
+  ]
+}
