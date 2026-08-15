@@ -1,5 +1,4 @@
 import { Router } from 'express';
-import { randomBytes } from 'crypto';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } from '../services/settingsService';
@@ -232,45 +231,6 @@ export function createAdminSettingsRouter(): Router {
       action: 'ADMIN_API_KEY_REVEALED', details: `Revealed API key: ${req.params.id}`,
     });
     res.json({ key: revealed });
-  });
-
-  // ── Admin: Webhooks ──────────────────────────────────────────
-  router.get('/admin/webhooks', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res) => {
-    const { data, error } = await supabase
-      .from('webhooks')
-      .select('id, name, url, events, is_active, last_fired_at, created_at')
-      .order('created_at', { ascending: false });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data);
-  });
-
-  router.post('/admin/webhooks', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
-    const { name, url, events } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: 'name and url are required' });
-    }
-    const id = 'wh-' + Date.now();
-    const secret = randomBytes(32).toString('hex');
-    const { error } = await supabase.from('webhooks').insert({
-      id, name, url, events: events || [], secret,
-      created_by: req.user!.id,
-    });
-    if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'ADMIN_WEBHOOK_CREATED', details: `Created webhook: ${name}`,
-    });
-    res.status(201).json({ id, name, url, events, is_active: true, secret });
-  });
-
-  router.delete('/admin/webhooks/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
-    const { error } = await supabase.from('webhooks').delete().eq('id', req.params.id);
-    if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'ADMIN_WEBHOOK_DELETED', details: `Deleted webhook: ${req.params.id}`,
-    });
-    res.json({ ok: true });
   });
 
   return router;

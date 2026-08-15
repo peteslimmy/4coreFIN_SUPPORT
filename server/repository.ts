@@ -1,8 +1,10 @@
 import { supabase } from './supabase';
 import { computeAuditHash, type AuditEntry, type AuthUser, applyTicketMasking } from './compliance';
+import { encrypt, decrypt } from './services/encryptionService';
 import { canAccessTicket } from './auth';
 import { tenantIdForBu, GLOBAL_TENANT_ID } from './tenant';
 import { broadcast } from './broadcast';
+import { dispatchWebhook } from './services/webhookDispatcher';
 
 // ─── Tenant scoping helpers ────────────────────────────────────────────
 
@@ -51,10 +53,39 @@ function toSnake(obj: Record<string, any>): Record<string, any> {
 
 // ─── Tickets ───────────────────────────────────────────────────────────
 
-export async function listTickets(user: AuthUser, opts?: { includeDeleted?: boolean; unmask?: boolean }) {
-  let query = supabase.from('tickets').select('*').order('created_at', { ascending: false });
+export async function listTickets(
+  user: AuthUser,
+  opts?: {
+    includeDeleted?: boolean;
+    unmask?: boolean;
+    limit?: number;
+    offset?: number;
+    status?: string;
+    priority?: string;
+    businessUnit?: string;
+    partner?: string;
+    search?: string;
+  }
+): Promise<any[]> {
+  let query = supabase.from('tickets').select('*', { count: 'exact' }).order('created_at', { ascending: false });
   if (!opts?.includeDeleted) {
     query = query.eq('is_deleted', false);
+  }
+  if (opts?.status) {
+    query = query.eq('status', opts.status);
+  }
+  if (opts?.priority) {
+    query = query.eq('priority', opts.priority);
+  }
+  if (opts?.businessUnit) {
+    query = query.eq('business_unit', opts.businessUnit);
+  }
+  if (opts?.partner) {
+    query = query.ilike('partner', `%${opts.partner}%`);
+  }
+  if (opts?.search) {
+    const term = `%${opts.search}%`;
+    query = query.or(`customer_name.ilike.${term},customer_email.ilike.${term},description.ilike.${term},id.ilike.${term}`);
   }
   const tenantId = tenantScope(user);
   if (tenantId) {
@@ -62,12 +93,26 @@ export async function listTickets(user: AuthUser, opts?: { includeDeleted?: bool
   } else if (isPartner(user)) {
     query = query.ilike('partner', partnerNameFor(user));
   }
-  const { data, error } = await query;
+  if (opts?.limit) {
+    query = query.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  }
+  const { data, error, count } = await query;
   if (error || !data) return [];
-  return data
+  const rows = data as any[];
+  const total = typeof count === 'number' ? count : rows.length;
+  const mapped = rows
     .map(toCamel)
+    .map((t) => ({
+      ...t,
+      customerEmail: tryDecrypt(t.customerEmail),
+      customerPhone: tryDecrypt(t.customerPhone),
+      cardPan: tryDecrypt(t.cardPan),
+      submittedByPhone: tryDecrypt(t.submittedByPhone),
+    } as Record<string, any>))
     .filter((t) => canAccessTicket(user, t))
     .map((t) => applyTicketMasking(t, user, !!opts?.unmask));
+  for (const t of mapped) { (t as any)._totalCount = total; }
+  return mapped;
 }
 
 export async function getTicketRaw(id: string): Promise<any | null> {
@@ -80,6 +125,14 @@ export async function getTicketRaw(id: string): Promise<any | null> {
  * Load a single ticket enforcing the authenticated user's scope at the query
  * level. Returns null when the ticket is not in the user's scope.
  */
+function tryDecrypt(encryptedText: string): string {
+  try {
+    return decrypt(encryptedText);
+  } catch {
+    return encryptedText;
+  }
+}
+
 export async function getScopedTicket(id: string, user: AuthUser): Promise<any | null> {
   let query = supabase.from('tickets').select('*').eq('id', id);
   const tenantId = tenantScope(user);
@@ -90,7 +143,15 @@ export async function getScopedTicket(id: string, user: AuthUser): Promise<any |
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
-  const ticket = toCamel(data);
+  let ticket = toCamel(data);
+  // Decrypt PII fields so the app sees plaintext; compliance masking is applied separately.
+  ticket = {
+    ...ticket,
+    customerEmail: tryDecrypt(ticket.customerEmail),
+    customerPhone: tryDecrypt(ticket.customerPhone),
+    cardPan: tryDecrypt(ticket.cardPan),
+    submittedByPhone: tryDecrypt(ticket.submittedByPhone),
+  };
   if (!canAccessTicket(user, ticket)) return null;
   return ticket;
 }
@@ -102,12 +163,17 @@ export async function getTicket(id: string, user: AuthUser, unmask = false): Pro
 }
 
 export async function upsertTicket(ticket: any) {
+  // Encrypt PII at rest before persisting. The encrypted format is
+  // iv:tag:cipherhex; Supabase stores it as text, and read paths will
+  // decrypt after fetch so the app always sees unmasked plaintext.
+  const enc = (v: string | undefined | null) => v ? encrypt(String(v)) : '';
+
   const tenantId = ticket.tenantId || (await ensureTenantForBu(ticket.businessUnit));
   const row = toSnake({
     id: ticket.id,
     customerName: ticket.customerName || '',
-    customerEmail: ticket.customerEmail || '',
-    customerPhone: ticket.customerPhone || '',
+    customerEmail: enc(ticket.customerEmail),
+    customerPhone: enc(ticket.customerPhone),
     customerLastName: ticket.customerLastName || '',
     customerId: ticket.customerId || null,
     businessUnit: ticket.businessUnit,
@@ -119,7 +185,7 @@ export async function upsertTicket(ticket: any) {
     status: ticket.status,
     amount: ticket.amount || 0,
     transactionId: ticket.transactionId || '',
-    cardPan: ticket.cardPan || '',
+    cardPan: enc(ticket.cardPan),
     bankName: ticket.bankName || '',
     description: ticket.description || '',
     createdAt: ticket.createdAt,
@@ -134,7 +200,7 @@ export async function upsertTicket(ticket: any) {
     correctiveAction: ticket.correctiveAction || null,
     submittedBy: ticket.submittedBy || 'BU_SUPPORT',
     submittedByName: ticket.submittedByName || '',
-    submittedByPhone: ticket.submittedByPhone || '',
+    submittedByPhone: enc(ticket.submittedByPhone),
     isDeleted: !!ticket.isDeleted,
     watchers: ticket.watchers || [],
     rcaDetails: ticket.rcaDetails || null,
@@ -145,6 +211,26 @@ export async function upsertTicket(ticket: any) {
   const { error } = await supabase.from('tickets').upsert(row, { onConflict: 'id' });
   if (error) throw new Error(`upsertTicket failed: ${error.message}`);
   broadcast('ticket_updated', { id: ticket.id }, row.tenant_id);
+
+  // Keep the customer's total_tickets counter in sync with live ticket state.
+  if (ticket.customerId) {
+    await recalcCustomerTotalTickets(ticket.customerId);
+  }
+
+  dispatchWebhook('ticket.updated', { id: ticket.id, status: ticket.status, priority: ticket.priority }).catch(() => {});
+}
+
+export async function recalcCustomerTotalTickets(customerId: string): Promise<void> {
+  const { data: cust } = await supabase.from('customers').select('email,business_unit').eq('id', customerId).single();
+  if (!cust) return;
+  const custEmail = (cust.email || '').toLowerCase();
+  const custBu = (cust.business_unit || '').toUpperCase();
+
+  let q = supabase.from('tickets').select('customer_id,customer_email,business_unit', { count: 'exact', head: false }).eq('is_deleted', false);
+  const { count } = await q.or(`customer_id.eq.${customerId},and(customer_email.eq.${custEmail},business_unit.eq.${custBu})`);
+  const total = typeof count === 'number' ? count : 0;
+  const { error: updErr } = await supabase.from('customers').update({ total_tickets: total }).eq('id', customerId);
+  if (updErr) console.error('recalcCustomerTotalTickets failed:', updErr.message);
 }
 
 // ─── Comments ──────────────────────────────────────────────────────────
@@ -444,12 +530,17 @@ export async function listMajorIncidents(user?: AuthUser) {
     .select('*')
     .order('created_at', { ascending: false });
   if (user) {
-    const tenantId = tenantScope(user);
-    if (tenantId) {
-      query = query.eq('tenant_id', tenantId);
-    } else if (isPartner(user)) {
+const tenantId = tenantScope(user);
+  if (tenantId) {
+    query = query.eq('tenant_id', tenantId);
+  } else if (isPartner(user)) {
+    // Prefer partner_org_id FK if set (migration 035); fall back to partner name string match
+    if (user.partner_org_id !== undefined) {
+      query = query.eq('partner_org_id', user.partner_org_id);
+    } else {
       query = query.ilike('partner', partnerNameFor(user));
     }
+  }
   }
   const { data, error } = await query;
   if (error || !data) return [];
@@ -901,8 +992,8 @@ export async function countActiveTicketsByCategoryAndPriority(category: string, 
   const { data, error } = await supabase
     .from('tickets')
     .select('id')
-    .eq('category', category)
-    .eq('priority', priority)
+    .ilike('category', category.trim())
+    .ilike('priority', priority.trim())
     .eq('is_deleted', false);
   if (error || !data) return 0;
   return data.length;
@@ -975,6 +1066,28 @@ export async function removeConfigItem(key: string, id: string): Promise<any[]> 
   return next;
 }
 
+// ─── Reference data: custom kinds (user-created) ─────────────────────
+
+export interface CustomReferenceKind {
+  kind: string;
+  label: string;
+  labelPlural: string;
+  description: string;
+  stringItems: true;
+}
+
+export async function listCustomReferenceKinds(): Promise<CustomReferenceKind[]> {
+  return (await getConfig<CustomReferenceKind[]>('customReferenceKinds', [])) ?? [];
+}
+
+export async function addCustomReferenceKind(def: CustomReferenceKind): Promise<void> {
+  const kinds = await listCustomReferenceKinds();
+  if (kinds.some((k) => String(k.kind ?? '').trim().toLowerCase() === String(def.kind).trim().toLowerCase())) {
+    throw new Error(`A reference kind "${def.kind}" already exists`);
+  }
+  await setConfig('customReferenceKinds', [...kinds, def]);
+}
+
 // ─── Reference data: JSON-table (row) manipulation ────────────────────
 
 export async function insertJsonTableRow(table: string, item: any) {
@@ -1005,3 +1118,24 @@ export async function deleteJsonTableRow(table: string, id: string) {
   const { error } = await supabase.from(table as any).delete().eq('id', id);
   if (error) throw new Error(`deleteJsonTableRow failed (${table}): ${error.message}`);
 }
+
+// ─── Business Hours ─────────────────────────────────────────────────────
+
+export async function listBusinessHours(tenantId?: string): Promise<any[]> {
+  let query = supabase.from('business_hours').select('*');
+  if (tenantId) query = query.eq('tenant_id', tenantId);
+  const { data, error } = await query.order('tenant_id').order('day_of_week');
+  if (error) throw new Error(`listBusinessHours failed: ${error.message}`);
+  return data ?? [];
+}
+
+export async function upsertBusinessHours(rows: any[]): Promise<void> {
+  for (const row of rows) {
+    const { error } = await supabase.from('business_hours').upsert(row, { onConflict: 'tenant_id,day_of_week' });
+    if (error) throw new Error(`upsertBusinessHours failed: ${error.message}`);
+  }
+}
+
+// Re-export webhook helpers from the dispatcher so callers can import them through
+// the conventional `repository` entry-point without needing to know the service layer.
+export { dispatchWebhook, registerDeliveryAttempt } from './services/webhookDispatcher';

@@ -1,5 +1,11 @@
 import { openTicketsForSla, insertNotification, appendAuditLog, listNotifications, getConfig } from './repository';
+import { resolveSlaDuration } from '../src/lib/slaCalculator';
+import { TicketPriority } from '../src/types/app';
 import { broadcast } from './broadcast';
+import { dispatchWebhook } from './services/webhookDispatcher';
+
+const FALLBACK_RISK_FRACTION = 0.25;
+const MIN_RISK_HOURS = 0.5;
 
 let timer: NodeJS.Timeout | null = null;
 const notifiedMap = new Map<string, number>(); // key -> timestamp
@@ -59,6 +65,9 @@ export async function runSlaCheck() {
       }
       if (t.assignedAgentId) recipients.add(`${(t.partner || 'ops').toLowerCase()}-ops@4core.local`);
 
+      const slaDuration = resolveSlaDuration(t.category || '', t.priority as TicketPriority, []).durationHours;
+      const riskThreshold = Math.max(slaDuration * FALLBACK_RISK_FRACTION, MIN_RISK_HOURS);
+
       if (hoursLeft < 0 && !t.isEscalated) {
         for (const recipient of recipients) {
           if (await alreadyNotified(activeKeys, t.id, 'SLA_BREACH', recipient)) continue;
@@ -85,7 +94,8 @@ export async function runSlaCheck() {
         }
         breachCount++;
         broadcast('sla_breach', { ticketId: t.id, slaDeadline: t.slaDeadline }, t.tenant_id);
-      } else if (hoursLeft >= 0 && hoursLeft < 3) {
+        dispatchWebhook('sla.breach', { ticketId: t.id, priority: t.priority, category: t.category, slaDeadline: t.slaDeadline }).catch(() => {});
+      } else if (hoursLeft >= 0 && hoursLeft < riskThreshold) {
         for (const recipient of recipients) {
           if (await alreadyNotified(activeKeys, t.id, 'SLA_AT_RISK', recipient)) continue;
           await insertNotification({
