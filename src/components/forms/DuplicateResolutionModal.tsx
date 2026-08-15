@@ -12,9 +12,10 @@ interface DuplicateResolutionModalProps {
   incoming: { customerName: string; category: string; amount: number; evidenceCount: number };
   onResolve: (choice: DuplicateChoice, candidate?: DuplicateCandidate) => void;
   onCancel: () => void;
+  isSubmitting?: boolean;
 }
 
-export default function DuplicateResolutionModal({ open, candidates, incoming, onResolve, onCancel }: DuplicateResolutionModalProps) {
+export default function DuplicateResolutionModal({ open, candidates, incoming, onResolve, onCancel, isSubmitting }: DuplicateResolutionModalProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const selected = candidates.find(c => c.ticket.id === selectedId) || candidates[0] || null;
 
@@ -28,18 +29,19 @@ export default function DuplicateResolutionModal({ open, candidates, incoming, o
         <div className="flex justify-between gap-3 w-full flex-wrap">
           <button
             onClick={onCancel}
-            className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring"
+            disabled={isSubmitting}
+            className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring disabled:opacity-50 disabled:pointer-events-none"
           >
             Cancel
           </button>
           <div className="flex gap-3">
-            <Button variant="outlined" icon={<Copy className="w-4 h-4" />} onClick={() => onResolve('create')}>
+            <Button variant="outlined" icon={<Copy className="w-4 h-4" />} onClick={() => onResolve('create')} disabled={isSubmitting}>
               Create New Ticket
             </Button>
             <Button
               variant="primary"
               icon={<GitMerge className="w-4 h-4" />}
-              disabled={!selected}
+              disabled={!selected || isSubmitting}
               onClick={() => selected && onResolve('merge', selected)}
             >
               Merge Into Existing

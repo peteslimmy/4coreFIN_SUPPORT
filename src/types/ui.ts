@@ -197,6 +197,7 @@ export interface EmptyStateProps {
 export interface ProgressWizardStep {
   label: string;
   status?: 'completed' | 'active' | 'pending' | 'error' | 'terminal';
+  errorCount?: number;
 }
 
 export interface ProgressWizardProps {

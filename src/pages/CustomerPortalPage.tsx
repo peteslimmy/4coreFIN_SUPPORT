@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Plus, Upload, Ticket, Clock, CheckCircle, Star, Mail, Search, ThumbsUp, FileText, X, Download } from 'lucide-react';
 import { TicketStatus, TicketPriority, type TicketRecord, type AuditLog, type FileEvidence, type CommentRecord } from '../types/app';
 import { calculateSlaDeadline } from '../lib/slaCalculator';
@@ -23,6 +23,7 @@ import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import SliderForm from '../components/ui/SliderForm';
+import Modal from '../components/ui/Modal';
 
 interface NewTicketForm {
   category: string; priority: string;
@@ -72,6 +73,9 @@ export default function CustomerPortalPage() {
   const [pendingRecord, setPendingRecord] = useState<TicketRecord | null>(null);
   const [dupCandidates, setDupCandidates] = useState<DuplicateCandidate[]>([]);
   const [dupModalOpen, setDupModalOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [successRecord, setSuccessRecord] = useState<TicketRecord | null>(null);
+  const [draftSavedAt, setDraftSavedAt] = useState<number | null>(null);
 
   const [prevConfig, setPrevConfig] = useState(buFormConfig);
   if (prevConfig !== buFormConfig) {
@@ -150,6 +154,67 @@ export default function CustomerPortalPage() {
   };
 
   const clearError = (field: string) => setFormErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
+
+  const DRAFT_KEY = 'complaint_draft_v1';
+
+  useEffect(() => {
+    if (customerView !== 'file_complaint') return;
+    const timer = setTimeout(() => {
+      try {
+        localStorage.setItem(DRAFT_KEY, JSON.stringify({ newTicket, txValues, savedAt: Date.now() }));
+        setDraftSavedAt(Date.now());
+      } catch {
+        // silent — storage may be unavailable
+      }
+    }, 800);
+    return () => clearTimeout(timer);
+  }, [customerView, newTicket, txValues]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      try {
+        const raw = localStorage.getItem(DRAFT_KEY);
+        if (!raw) return;
+        const draft = JSON.parse(raw);
+        if (draft.newTicket) setNewTicket(draft.newTicket);
+        if (draft.txValues) setTxValues(draft.txValues);
+        if (draft.savedAt) setDraftSavedAt(draft.savedAt);
+      } catch {
+        // ignore corrupt draft
+      }
+    });
+  }, []);
+
+  const clearDraft = () => {
+    localStorage.removeItem(DRAFT_KEY);
+    setDraftSavedAt(null);
+  };
+
+  const stepErrorCounts = useMemo(() => {
+    const counts: Record<number, number> = {};
+    Object.values(txErrors).forEach(v => { if (v) counts[1] = (counts[1] || 0) + 1; });
+    if (formErrors.description) counts[2] = (counts[2] || 0) + 1;
+    return counts;
+  }, [txErrors, formErrors]);
+
+  const handleStepValidate = (stepIndex: number) => {
+    if (stepIndex === 1) {
+      const errs: Record<string, string> = {};
+      for (const f of buFormConfig.fields) {
+        if (!f.enabled) continue;
+        const err = validateFieldValue(f, txValues[f.id]);
+        if (err) errs[f.id] = err;
+      }
+      setTxErrors(errs);
+      return Object.keys(errs).length === 0;
+    }
+    if (stepIndex === 2) {
+      const descOk = newTicket.description.trim().length > 0;
+      if (!descOk) setFormErrors(prev => ({ ...prev, description: 'Incident description is required' }));
+      return descOk;
+    }
+    return true;
+  };
 
   const buildRecord = (): TicketRecord => {
     const tId = generateTicketId(currentUser.bu);
@@ -299,36 +364,50 @@ export default function CustomerPortalPage() {
     showToast(`Merged duplicate into ${existing.id}.`, 'success');
   };
 
-  const handleResolveDuplicate = (choice: DuplicateChoice, candidate?: DuplicateCandidate) => {
+  const handleResolveDuplicate = async (choice: DuplicateChoice, candidate?: DuplicateCandidate) => {
     if (!pendingRecord) return;
     setDupModalOpen(false);
-    if (choice === 'create') {
-      void performCreate(pendingRecord);
-    } else if (choice === 'merge' && candidate) {
-      void performMerge(candidate.ticket, pendingRecord);
+    try {
+      if (choice === 'create') {
+        await performCreate(pendingRecord);
+        setSuccessRecord(pendingRecord);
+      } else if (choice === 'merge' && candidate) {
+        await performMerge(candidate.ticket, pendingRecord);
+        setSuccessRecord(candidate.ticket);
+      }
+      clearDraft();
+    } finally {
+      setIsSubmitting(false);
+      setPendingRecord(null);
+      setDupCandidates([]);
     }
-    setPendingRecord(null);
-    setDupCandidates([]);
   };
 
-  const handleCreateTicket = async (e?: React.FormEvent) => {
-    e?.preventDefault();
+  const handleFormSubmit = async () => {
     if (!validate()) {
       showToast('Please fill in all required fields. Errors are highlighted below.', 'error');
       return;
     }
+    setIsSubmitting(true);
+    try {
+      const record = buildRecord();
+      const candidates = detectDuplicates(txValues, buFormConfig, tickets, currentUser.bu);
 
-    const record = buildRecord();
-    const candidates = detectDuplicates(txValues, buFormConfig, tickets, currentUser.bu);
+      if (candidates.length > 0) {
+        setPendingRecord(record);
+        setDupCandidates(candidates);
+        setDupModalOpen(true);
+        return;
+      }
 
-    if (candidates.length > 0) {
-      setPendingRecord(record);
-      setDupCandidates(candidates);
-      setDupModalOpen(true);
-      return;
+      await performCreate(record);
+      setSuccessRecord(record);
+      clearDraft();
+    } catch {
+      // errors surfaced via toasts inside performCreate
+    } finally {
+      setIsSubmitting(false);
     }
-
-    await performCreate(record);
   };
 
   return (
@@ -418,12 +497,20 @@ export default function CustomerPortalPage() {
             )}
           </div>
 
+          {draftSavedAt && customerView === 'file_complaint' && (
+            <div className="flex items-center gap-1.5 text-xs text-text-muted mb-4">
+              <CheckCircle className="w-3.5 h-3.5 text-success" />
+              Draft saved locally
+            </div>
+          )}
+
           <SliderForm
             steps={[
               {
                 label: 'Details',
                 title: 'Incident Details',
                 subtitle: 'Select the partner and issue category.',
+                errorCount: stepErrorCounts[0] || 0,
                 content: (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input label="Mapped Business Unit (Auto-detected)" value={currentUser.bu} disabled />
@@ -436,6 +523,7 @@ export default function CustomerPortalPage() {
                 label: 'Transaction',
                 title: 'Transaction Information',
                 subtitle: 'Provide transaction details for the payment incident.',
+                errorCount: stepErrorCounts[1] || 0,
                 content: (
                   <div className="space-y-4">
                     <DynamicFormStep
@@ -472,6 +560,7 @@ export default function CustomerPortalPage() {
                 label: 'Submit',
                 title: 'Description & Evidence',
                 subtitle: 'Describe the issue and attach supporting documents.',
+                errorCount: stepErrorCounts[2] || 0,
                 content: (
                   <div className="space-y-4">
                     <Textarea label="Incident Description" value={newTicket.description} onChange={(e) => { setNewTicket(prev => ({ ...prev, description: e.target.value })); clearError('description'); }} rows={4} placeholder="Please provide explicit details of failed checkout, terminal responses, errors..." required error={formErrors.description} />
@@ -512,8 +601,9 @@ export default function CustomerPortalPage() {
                 ),
               },
             ]}
-            onSubmit={() => handleCreateTicket()}
-            submitLabel="Transmit Complaint to Incident Control Desk"
+            onSubmit={handleFormSubmit}
+            onStepValidate={handleStepValidate}
+            submitLabel={isSubmitting ? 'Creating Ticket\u2026' : 'Transmit Complaint to Incident Control Desk'}
           />
         </div>
       )}
@@ -716,8 +806,51 @@ export default function CustomerPortalPage() {
           evidenceCount: uploadedFiles.length,
         }}
         onResolve={handleResolveDuplicate}
-        onCancel={() => { setDupModalOpen(false); setPendingRecord(null); setDupCandidates([]); }}
+        onCancel={() => { setDupModalOpen(false); setIsSubmitting(false); setPendingRecord(null); setDupCandidates([]); }}
+        isSubmitting={isSubmitting}
       />
+      {successRecord && (
+        <Modal
+          open={!!successRecord}
+          onClose={() => { setSuccessRecord(null); setActiveTab('tickets'); }}
+          title="Complaint Submitted Successfully"
+          size="md"
+          footer={
+            <div className="flex justify-between gap-3 w-full flex-wrap">
+              <button
+                onClick={() => { setSuccessRecord(null); setActiveTab('tickets'); }}
+                className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring"
+              >
+                View My Tickets
+              </button>
+              <button
+                onClick={() => setSuccessRecord(null)}
+                className="px-4 py-2 text-sm font-bold text-white bg-primary hover:bg-primary-dark rounded-lg transition-all duration-200 focus-ring"
+              >
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-3 text-sm">
+            <p className="text-text-secondary">Your complaint has been logged and routed to the relevant team.</p>
+            <div className="bg-surface-elevated border border-border rounded-lg p-3 space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-text-muted">Ticket ID</span>
+                <span className="font-mono font-bold text-text-primary">{successRecord.id}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">SLA Deadline</span>
+                <span className="font-semibold text-text-primary">{new Date(successRecord.slaDeadline).toLocaleString()}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Status</span>
+                <span className="font-semibold text-text-primary">{successRecord.status}</span>
+              </div>
+            </div>
+          </div>
+        </Modal>
+      )}
       </PageContainer>
     </PageTransition>
   );

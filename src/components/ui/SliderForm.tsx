@@ -9,6 +9,7 @@ export interface SliderFormStep {
   title: string;
   subtitle?: string;
   content: ReactNode;
+  errorCount?: number;
 }
 
 interface SliderFormProps {
@@ -16,6 +17,7 @@ interface SliderFormProps {
   className?: string;
   onSubmit?: () => void;
   submitLabel?: string;
+  onStepValidate?: (stepIndex: number) => boolean;
 }
 
 const slideVariants = {
@@ -24,7 +26,7 @@ const slideVariants = {
   exit: (direction: number) => ({ x: direction > 0 ? -300 : 300, opacity: 0 }),
 };
 
-export default function SliderForm({ steps, className = '', onSubmit, submitLabel = 'Submit' }: SliderFormProps) {
+export default function SliderForm({ steps, className = '', onSubmit, submitLabel = 'Submit', onStepValidate }: SliderFormProps) {
   const [currentStep, setCurrentStep] = useState(0);
   const [direction, setDirection] = useState(0);
 
@@ -33,6 +35,7 @@ export default function SliderForm({ steps, className = '', onSubmit, submitLabe
 
   const goNext = () => {
     if (isLast) return;
+    if (onStepValidate && !onStepValidate(currentStep)) return;
     setDirection(1);
     setCurrentStep(prev => prev + 1);
   };
@@ -46,7 +49,7 @@ export default function SliderForm({ steps, className = '', onSubmit, submitLabe
   return (
     <div className={className}>
       <ProgressWizard
-        steps={steps.map((s, i) => ({ label: s.label, status: i < currentStep ? 'completed' : i === currentStep ? 'active' : 'pending' }))}
+        steps={steps.map((s, i) => ({ label: s.label, status: i < currentStep ? 'completed' : i === currentStep ? 'active' : 'pending', errorCount: s.errorCount }))}
         currentStep={currentStep}
         className="mb-6"
       />

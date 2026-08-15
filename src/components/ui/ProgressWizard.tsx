@@ -53,11 +53,14 @@ export default function ProgressWizard({ steps, currentStep, className = '' }: P
           <div key={i} className="flex items-center flex-1 last:flex-none" role="listitem">
             <div className="flex flex-col items-center">
               <div
-                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-300 ${styles.circle}`}
+                className={`w-8 h-8 rounded-full border-2 flex items-center justify-center text-xs font-bold transition-all duration-300 relative ${styles.circle}`}
                 aria-current={resolvedStatus === 'active' || resolvedStatus === 'terminal' ? 'step' : undefined}
                 aria-label={`${step.label}: ${resolvedStatus}`}
               >
                 {Icon ? <Icon className="w-4 h-4" /> : i + 1}
+                {resolvedStatus === 'active' && step.errorCount && step.errorCount > 0 && (
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-error text-white text-[9px] font-bold flex items-center justify-center leading-none">{step.errorCount}</span>
+                )}
               </div>
               <span className={`text-[11px] mt-1.5 text-center max-w-[96px] leading-tight ${styles.label}`}>
                 {step.label}
