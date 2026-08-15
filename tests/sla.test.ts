@@ -44,6 +44,13 @@ describe('SLA Calculator', () => {
     const info = computeSlaDeadline(new Date(), 'Duplicate Debit', TicketPriority.HIGH, rules, []);
     expect(info.source).toBe('rule');
   });
+
+  it('matches priority case-insensitively', () => {
+    const rules = [{ id: 's3', category: 'Duplicate Debit', priority: 'high' as TicketPriority, durationHours: 5 }];
+    const info = computeSlaDeadline(new Date(), 'Duplicate Debit', TicketPriority.HIGH, rules, []);
+    expect(info.source).toBe('rule');
+    expect(info.durationHours).toBe(5);
+  });
 });
 
 describe('Compliance', () => {

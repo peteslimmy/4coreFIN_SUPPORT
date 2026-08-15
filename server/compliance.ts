@@ -89,6 +89,7 @@ export type AuthUser = {
   phone?: string;
   tenantId?: string;
   mustChangePassword?: boolean; // set when a freshly-provisioned user must set their own password
+  partner_org_id?: number; // FK to partner_organizations; set when org model is wired
 };
 
 /**

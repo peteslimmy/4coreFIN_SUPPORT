@@ -21,6 +21,8 @@ import {
   addConfigItem,
   updateConfigItem,
   removeConfigItem,
+  listCustomReferenceKinds,
+  addCustomReferenceKind,
   countTicketsByBu,
   countTicketsByPartner,
   countTicketsByCategory,
@@ -207,17 +209,40 @@ function nextId(prefix: string): string {
 }
 
 /** Resolve a kind name, accepting both the snake_case registry key and the
- * camelCase UI label (e.g. slaRules → sla_rules). */
-function resolveKind(raw: string): KindDef | undefined {
+ * camelCase UI label (e.g. slaRules → sla_rules), including user-created
+ * custom kinds stored in app_config. */
+async function customKindMap(): Promise<Record<string, KindDef>> {
+  const custom = await listCustomReferenceKinds();
+  const out: Record<string, KindDef> = {};
+  for (const ck of custom) {
+    const kind = String(ck?.kind ?? '').trim();
+    if (!kind) continue;
+    out[kind] = {
+      storage: 'config',
+      label: ck.label || kind,
+      schema: z.string().min(1).trim(),
+      idOf: (i) => String(i),
+    };
+  }
+  return out;
+}
+
+async function resolveKind(raw: string): Promise<KindDef | undefined> {
   if (KINDS[raw]) return KINDS[raw];
   const snake = raw.replace(/[A-Z]/g, (m) => '_' + m.toLowerCase());
-  return KINDS[snake];
+  if (KINDS[snake]) return KINDS[snake];
+  const custom = await customKindMap();
+  return custom[raw] ?? custom[snake];
 }
 
 /** Canonical snake_case registry key for a given raw kind label. */
-function canonicalKind(raw: string): string {
-  const def = resolveKind(raw);
-  return def ? Object.keys(KINDS).find((k) => KINDS[k] === def)! : raw;
+async function canonicalKind(raw: string): Promise<string> {
+  const def = await resolveKind(raw);
+  if (!def) return raw;
+  const staticKey = Object.keys(KINDS).find((k) => KINDS[k] === def);
+  if (staticKey) return staticKey;
+  const custom = await customKindMap();
+  return Object.keys(custom).find((k) => custom[k] === def) ?? raw;
 }
 
 /** Enforce a unique BU code across the stored business unit list. */
@@ -240,22 +265,76 @@ export function createReferenceRouter(): Router {
 
   router.use(requireAuth);
 
-  function requireKindPermission(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
-    req.params.kind = canonicalKind(req.params.kind);
-    return requirePermission(KINDS[req.params.kind]?.permission ?? 'admin:config')(req, res, next);
+  async function requireKindPermission(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
+    try {
+      req.params.kind = await canonicalKind(req.params.kind);
+      const def = await resolveKind(req.params.kind);
+      return requirePermission(def?.permission ?? 'admin:config')(req, res, next);
+    } catch (e) {
+      next(e);
+    }
   }
 
-  function requireKindDeleteRole(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
-    const roles = KINDS[req.params.kind]?.deleteRoles;
-    if (roles && !roles.includes(req.user!.role)) {
-      return res.status(403).json({ error: `Requires role: ${roles.join(' or ')}` });
+  async function requireKindDeleteRole(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
+    try {
+      const roles = (await resolveKind(req.params.kind))?.deleteRoles;
+      if (roles && !roles.includes(req.user!.role)) {
+        return res.status(403).json({ error: `Requires role: ${roles.join(' or ')}` });
+      }
+      next();
+    } catch (e) {
+      next(e);
     }
-    next();
   }
+
+  // ── Custom kinds ───────────────────────────────────────────────────
+  router.get('/kinds', requirePermission('admin:config'), async (_req: AuthedRequest, res: Response) => {
+    res.json(await listCustomReferenceKinds());
+  });
+
+  router.post('/kinds', requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+    const body = (req.body ?? {}) as Record<string, unknown>;
+    const kind = String(body.kind ?? body.name ?? '').trim();
+    const label = String(body.label ?? '').trim();
+    if (!kind) return res.status(400).json({ error: 'kind: Required' });
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(kind)) {
+      return res.status(400).json({ error: 'kind: Use letters, numbers and underscores (no spaces, e.g. payment_providers)' });
+    }
+    if (KINDS[kind]) return res.status(409).json({ error: `"${kind}" is a built-in reference kind` });
+    if (!label) return res.status(400).json({ error: 'label: Required' });
+
+    const def = {
+      kind,
+      label,
+      labelPlural: String(body.labelPlural ?? label).trim(),
+      description: String(body.description ?? '').trim(),
+      stringItems: true as const,
+    };
+
+    try {
+      await addCustomReferenceKind(def);
+    } catch (e: any) {
+      return res.status(409).json({ error: e.message || 'Create failed' });
+    }
+
+    const items = Array.isArray(body.items)
+      ? (body.items as unknown[]).map((i) => String(i ?? '').trim()).filter(Boolean)
+      : [];
+    for (const item of items) {
+      try {
+        await addConfigItem(kind, item);
+      } catch {
+        // Item already present — keep going.
+      }
+    }
+
+    await audit(req.user!.name, req.user!.role, 'REFERENCE_KIND_CREATED', `Created reference kind "${label}" (${kind}) with ${items.length} item(s).`);
+    res.status(201).json({ ...def, items });
+  });
 
   // ── List ────────────────────────────────────────────────────────────
   router.get('/:kind', requireKindPermission, async (req: AuthedRequest, res: Response) => {
-    const def = KINDS[req.params.kind];
+    const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
     const items =
       def.storage === 'table'
@@ -268,7 +347,7 @@ export function createReferenceRouter(): Router {
 
   // ── Create ──────────────────────────────────────────────────────────
   router.post('/:kind', requireKindPermission, async (req: AuthedRequest, res: Response) => {
-    const def = KINDS[req.params.kind];
+    const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 
     const parsed = def.schema.safeParse(req.body);
@@ -296,6 +375,18 @@ export function createReferenceRouter(): Router {
         if (req.params.kind === 'sla_rules' && !(await categoryExists((item as any).category))) {
           return res.status(400).json({ error: 'category: Category must exist in the categories list' });
         }
+        if (req.params.kind === 'sla_rules') {
+          const existing = await listJsonTable('sla_rules').then((rules) =>
+            rules.find(
+              (r) =>
+                String(r.category) === String((item as any).category) &&
+                String(r.priority) === String((item as any).priority)
+            )
+          );
+          if (existing) {
+            return res.status(409).json({ error: `SLA rule "${existing.category} / ${existing.priority}" already exists` });
+          }
+        }
         await insertJsonTableRow(req.params.kind, item);
       } else {
         if (typeof item !== 'string' && !def.idOf(item)) {
@@ -316,7 +407,7 @@ export function createReferenceRouter(): Router {
 
   // ── Update ──────────────────────────────────────────────────────────
   router.patch('/:kind/:id', requireKindPermission, async (req: AuthedRequest, res: Response) => {
-    const def = KINDS[req.params.kind];
+    const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 
     try {
@@ -385,7 +476,7 @@ export function createReferenceRouter(): Router {
 
   // ── Delete ──────────────────────────────────────────────────────────
   router.delete('/:kind/:id', requireKindPermission, requireKindDeleteRole, async (req: AuthedRequest, res: Response) => {
-    const def = KINDS[req.params.kind];
+    const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 
     if (def.checkDelete) {

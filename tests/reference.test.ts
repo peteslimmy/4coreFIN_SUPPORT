@@ -371,6 +371,93 @@ describe('Reference data — unknown kind & audits', () => {
   });
 });
 
+describe('Reference data — custom kinds', () => {
+  it('rejects unauthenticated /kinds', async () => {
+    const res = await fetch(`${base}/reference/kinds`);
+    expect(res.status).toBe(401);
+  });
+
+  it('lists custom kinds (empty by default)', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/kinds`, { headers: authedHeaders(s, false) });
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual([]);
+  });
+
+  it('creates a custom kind and seeds its items', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/kinds`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'paymentProviders', label: 'Payment Provider', labelPlural: 'Payment Providers', description: 'd', items: ['Paystack', 'Flutterwave'] }),
+    });
+    expect(res.status).toBe(201);
+
+    const kindsRes = await fetch(`${base}/reference/kinds`, { headers: authedHeaders(s, false) });
+    expect(await kindsRes.json()).toEqual([
+      { kind: 'paymentProviders', label: 'Payment Provider', labelPlural: 'Payment Providers', description: 'd', stringItems: true },
+    ]);
+
+    const itemsRes = await fetch(`${base}/reference/paymentProviders`, { headers: authedHeaders(s, false) });
+    expect(await itemsRes.json()).toEqual(['Paystack', 'Flutterwave']);
+  });
+
+  it('adds items to an existing custom kind through normal CRUD', async () => {
+    const s = await login('admin@4core.com');
+    await fetch(`${base}/reference/kinds`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'paymentProviders', label: 'Payment Provider' }),
+    });
+    const create = await fetch(`${base}/reference/paymentProviders`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify('Paga'),
+    });
+    expect(create.status).toBe(201);
+    const itemsRes = await fetch(`${base}/reference/paymentProviders`, { headers: authedHeaders(s, false) });
+    expect(await itemsRes.json()).toEqual(['Paga']);
+  });
+
+  it('rejects a duplicate custom kind with 409', async () => {
+    const s = await login('admin@4core.com');
+    const body = { kind: 'paymentProviders', label: 'Payment Provider' };
+    await fetch(`${base}/reference/kinds`, { method: 'POST', headers: { ...authedHeaders(s), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    const res = await fetch(`${base}/reference/kinds`, { method: 'POST', headers: { ...authedHeaders(s), 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects a built-in kind name with 409', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/kinds`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'partners', label: 'Partners' }),
+    });
+    expect(res.status).toBe(409);
+  });
+
+  it('rejects a kind key with spaces with 400', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/reference/kinds`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'payment provider', label: 'Payment Provider' }),
+    });
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects a non-admin from creating kinds (403)', async () => {
+    const s = await login('rep@provider.com');
+    const res = await fetch(`${base}/reference/kinds`, {
+      method: 'POST',
+      headers: { ...authedHeaders(s), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'x', label: 'X' }),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
 describe('Reference data — users kind', () => {
   it('rejects a user that has admin:config but not admin:users (BU_SUPPORT)', async () => {
     const s = await login('alice@alpha.com');

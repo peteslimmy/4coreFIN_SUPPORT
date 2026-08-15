@@ -458,7 +458,7 @@ export function requireRoles(...roles: string[]) {
 /** Scope tickets by tenant/partner for the authenticated user. */
 export function canAccessTicket(
   user: AuthUser,
-  ticket: { businessUnit?: string; business_unit?: string; partner?: string; provider?: string; assignedAgentId?: string }
+  ticket: { businessUnit?: string; business_unit?: string; partner?: string; provider?: string; assignedAgentId?: string; partner_org_id?: number }
 ): boolean {
   if (isGlobalRole(user.role)) return true;
   const bu = (ticket.businessUnit || ticket.business_unit || '').toLowerCase();
@@ -474,6 +474,12 @@ export function canAccessTicket(
     const partner = (ticket.partner || ticket.provider || '').toLowerCase();
     const mine = (user.partner || user.bu || '').toLowerCase();
     const agent = (ticket.assignedAgentId || '').toLowerCase();
+    const ticketPartnerOrgId = ticket.partner_org_id;
+    const mineOrgId = user.partner_org_id; // will be set when partner_organizations table is wired
+    // Prefer FK-based org matching; fall back to string partner matching
+    if (ticketPartnerOrgId !== undefined && mineOrgId !== undefined) {
+      return ticketPartnerOrgId === mineOrgId;
+    }
     return (
       partner === mine ||
       agent === mine ||

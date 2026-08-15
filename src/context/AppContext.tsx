@@ -183,7 +183,7 @@ if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies.m
       if (state.businessUnits) writes.push(db.businessUnits.bulkPut(state.businessUnits.map(s => ({ id: s }))));
       if (state.partners) writes.push(db.partners.bulkPut(state.partners.map(s => ({ id: s }))));
       if (state.paymentChannels) writes.push(db.paymentChannels.bulkPut(state.paymentChannels.map(s => ({ id: s }))));
-     if (state.categories) writes.push(db.categories.bulkPut(state.categories));
+     if (state.categories) writes.push(db.categories.bulkPut(state.categories.map(c => ({ ...c, id: c.name }))));
      if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence));
      if (state.buFormConfigs) writes.push(db.buFormConfigs.bulkPut(state.buFormConfigs));
      if (state.ticketFormConfigs) writes.push(db.ticketFormConfigs.bulkPut(state.ticketFormConfigs));

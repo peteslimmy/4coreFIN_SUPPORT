@@ -1,30 +1,30 @@
 -- 4CoreFinSupport — Data Retention Policy
 -- Migration 021: Automated data cleanup for compliance
-
+--
 -- Data retention periods:
--- - Audit logs: 7 years (compliance requirement)
+-- - Audit logs: 10 years (GAID-aligned)
 -- - Soft-deleted tickets: 2 years
--- - Comments: 7 years
--- - Evidence records: 7 years
+-- - Comments: 10 years
+-- - Evidence records: 10 years
 
 CREATE OR REPLACE FUNCTION cleanup_expired_data() RETURNS void AS $$
 BEGIN
-  -- Delete audit logs older than 7 years
+  -- Delete audit logs older than 10 years (GAID compliance)
   DELETE FROM audit_logs 
-  WHERE timestamp < NOW() - INTERVAL '7 years';
+  WHERE timestamp < NOW() - INTERVAL '10 years';
   
   -- Delete soft-deleted tickets older than 2 years
   DELETE FROM tickets 
   WHERE is_deleted = true 
     AND created_at < NOW() - INTERVAL '2 years';
   
-  -- Delete comments older than 7 years
+  -- Delete comments older than 10 years
   DELETE FROM comments 
-  WHERE timestamp < NOW() - INTERVAL '7 years';
+  WHERE timestamp < NOW() - INTERVAL '10 years';
   
-  -- Delete evidence older than 7 years
+  -- Delete evidence older than 10 years
   DELETE FROM evidence 
-  WHERE uploaded_at < NOW() - INTERVAL '7 years';
+  WHERE uploaded_at < NOW() - INTERVAL '10 years';
   
   -- Vacuum tables to reclaim space
   VACUUM ANALYZE audit_logs;

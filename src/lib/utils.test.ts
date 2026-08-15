@@ -7,14 +7,16 @@ describe('getTicketStatusStep', () => {
     expect(getTicketStatusStep(TicketStatus.RECEIPT)).toBe(0);
     expect(getTicketStatusStep(TicketStatus.ASSIGNED)).toBe(1);
     expect(getTicketStatusStep(TicketStatus.INVESTIGATE)).toBe(2);
-    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(3);
-    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(4);
+    expect(getTicketStatusStep(TicketStatus.WAITING_CUSTOMER)).toBe(3);
+    expect(getTicketStatusStep(TicketStatus.WAITING_PARTNER)).toBe(4);
+    expect(getTicketStatusStep(TicketStatus.WAITING_INTERNAL)).toBe(5);
+    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(6);
+    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(7);
   });
 
   it('maps to lowercase/alt strings via the canonical order', () => {
-    // status strings are uppercase enums; lowercase should NOT match -> falls back to 0
-    expect(getTicketStatusStep('CLOSED')).toBe(4);
-    expect(getTicketStatusStep('RESOLVED')).toBe(3);
+    expect(getTicketStatusStep('CLOSED')).toBe(7);
+    expect(getTicketStatusStep('RESOLVED')).toBe(6);
     expect(getTicketStatusStep('closed' as unknown as TicketStatus)).toBe(0);
   });
 
@@ -24,11 +26,13 @@ describe('getTicketStatusStep', () => {
   });
 
   it('keeps the order in sync with the UI progress steps', () => {
-    // Must match TicketWorkspacePage ProgressWizard labels
     expect(TICKET_STATUS_ORDER).toEqual([
       'RECEIPT',
       'ASSIGNED',
       'INVESTIGATE',
+      'WAITING_CUSTOMER',
+      'WAITING_PARTNER',
+      'WAITING_INTERNAL',
       'RESOLVED',
       'CLOSED',
     ]);

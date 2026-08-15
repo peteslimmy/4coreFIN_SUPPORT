@@ -7,6 +7,7 @@ import { runSlaCheck } from '../slaJob';
 import { addSseClient, removeSseClient } from '../broadcast';
 import { listNotifications, insertNotification, markNotificationRead, listMajorIncidents, upsertMajorIncident, getScopedMajorIncident, getScopedTicket, listTickets, listComments, listEvidence, listAuditLogs, listUsersPublic, listCustomers, listJsonTable, getConfig } from '../repository';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
+import { getCachedRoles } from '../middleware/requirePermission';
 import { uploadFile } from '../services/storageService';
 import { normalizeBusinessUnits } from '../../src/lib/buCodes';
 
@@ -15,7 +16,7 @@ export function createOperationsRouter(): Router {
 
   // ── Bootstrap ──
   router.get('/bootstrap', requireAuth, async (req: AuthedRequest, res: Response) => {
-    const roles = getRoles(await getConfig<RoleDefinition[]>('roles', []));
+    const roles = getCachedRoles(res) ?? getRoles(await getConfig<RoleDefinition[]>('roles', []));
     const can = (permission: Permission) => hasPermissionForRoleId(roles, req.user!.role, permission);
 
     // Optional ?scope=tickets,comments,evidence,... lets clients fetch only the
@@ -55,7 +56,10 @@ export function createOperationsRouter(): Router {
       data.notificationConfigs = await getConfig('notificationConfigs', []);
       data.escalationRules = await getConfig('escalationRules', []);
     }
-    if (wants('roles')) data.roles = getRoles(await getConfig<RoleDefinition[]>('roles', []));
+    if (wants('roles')) {
+      const cached = getCachedRoles(res);
+      data.roles = cached ?? getRoles(await getConfig<RoleDefinition[]>('roles', []));
+    }
 
     res.json(data);
   });

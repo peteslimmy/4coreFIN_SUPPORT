@@ -4,7 +4,7 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { requireAdmin } from '../middleware/requireAdmin';
-import { listJsonTable, replaceJsonTable, getConfig, setConfig, appendAuditLog } from '../repository';
+import { listJsonTable, replaceJsonTable, getConfig, setConfig, appendAuditLog, listBusinessHours, upsertBusinessHours } from '../repository';
 import { DEFAULT_ROLES, getRoles } from '../rbac';
 import { getDefaultBuFormConfigs, mergeConfigs } from '../../src/lib/formConfigs';
 import { businessUnitNames } from '../../src/lib/buCodes';
@@ -206,6 +206,38 @@ export function createConfigRouter(): Router {
   router.put('/categories', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
     await setConfig('categories', req.body);
     res.json(req.body);
+  });
+
+  // ── Business Hours ────────────────────────────────────────────────────
+  router.get('/business-hours', requireAuth, requirePermission('admin:sla'), async (req: AuthedRequest, res: Response) => {
+    const tenantId = (req.query.tenantId as string | undefined) || req.user!.tenantId;
+    const rows = await listBusinessHours(tenantId || undefined);
+    res.json(rows);
+  });
+
+  router.put('/business-hours', requireAuth, requirePermission('admin:sla'), validateBody(z.object({
+    tenantId: z.string().min(1),
+    tzName: z.string().min(1).default('UTC'),
+    days: z.array(z.object({
+      dayOfWeek: z.number().int().min(0).max(6),
+      openTime: z.string().regex(/^\d{2}:\d{2}$/),
+      closeTime: z.string().regex(/^\d{2}:\d{2}$/),
+      isActive: z.boolean().default(true),
+    })),
+  })), async (req: AuthedRequest, res: Response) => {
+    const { tenantId, tzName, days } = req.body as { tenantId: string; tzName: string; days: any[] };
+    const rows = days.map((d: any) => ({
+      tenant_id: tenantId,
+      day_of_week: d.dayOfWeek,
+      open_time_local: d.openTime,
+      close_time_local: d.closeTime,
+      tz_name: tzName,
+      is_active: d.isActive ?? true,
+    }));
+    await upsertBusinessHours(rows);
+    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'BUSINESS_HOURS_UPDATED', details: `Updated business hours for tenant ${tenantId}` });
+    const updated = await listBusinessHours(tenantId);
+    res.json(updated);
   });
 
   return router;

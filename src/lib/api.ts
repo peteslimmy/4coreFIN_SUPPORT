@@ -291,6 +291,10 @@ export const api = {
   deleteReference: (kind: string, id: string) =>
     apiFetch(`/api/reference/${kind}/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
+  listReferenceKinds: () => apiFetch<unknown[]>('/api/reference/kinds'),
+  createReferenceKind: (def: unknown) =>
+    apiFetch('/api/reference/kinds', { method: 'POST', body: JSON.stringify(def) }),
+
   uploadEvidence: (ticketId: string, blob: Blob, fileName: string, fileType: string) =>
     apiFetch<FileEvidence>('/api/evidence/upload', {
       method: 'POST',

@@ -365,7 +365,8 @@ export default function CrudTable({ kind }: CrudTableProps) {
             )}
             {filtered.map((item, idx) => {
               const rawId = kind.idOf(item);
-              const id = typeof rawId === 'string' ? rawId : `${kind.kind}-${idx}`;
+              const validId = typeof rawId === 'string' && rawId !== '' && rawId !== '[object Object]' && rawId !== '[Object]';
+              const id = validId ? rawId : `${kind.kind}-${idx}`;
               return (
                 <tr key={id} className="border-b border-border-subtle last:border-b-0 hover:bg-surface-hover/40 transition-colors">
                   {kind.columns.map((c) => (

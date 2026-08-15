@@ -35,8 +35,8 @@ describe('ProgressWizard ticket status mapping', () => {
     expect(step.querySelector('[aria-current="step"]')).toBeNull();
   });
 
-  it('getTicketStatusStep returns the Closed index (4) for CLOSED', () => {
-    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(4);
-    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(3);
+  it('getTicketStatusStep returns the Closed index (7) for CLOSED', () => {
+    expect(getTicketStatusStep(TicketStatus.CLOSED)).toBe(7);
+    expect(getTicketStatusStep(TicketStatus.RESOLVED)).toBe(6);
   });
 });
