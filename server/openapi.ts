@@ -404,8 +404,15 @@ export const openApiSpec = {
       },
       post: {
         tags: ['Users'],
-        summary: 'Create a user (admin)',
+        summary: 'Create a user (admin). Sends a welcome email with temporary credentials.',
         responses: { '201': { description: 'User created' } },
+      },
+    },
+    '/users/generate-password': {
+      post: {
+        tags: ['Users'],
+        summary: 'Generate a secure random temporary password (admin)',
+        responses: { '200': { description: 'Generated password' } },
       },
     },
     '/users/{id}': {
@@ -420,6 +427,14 @@ export const openApiSpec = {
         summary: 'Delete a user (super admin)',
         parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
         responses: { '200': { description: 'User deleted' } },
+      },
+    },
+    '/users/{id}/resend-invite': {
+      post: {
+        tags: ['Users'],
+        summary: 'Re-send the welcome email with a rotated temporary password (super admin)',
+        parameters: [{ name: 'id', in: 'path', required: true, schema: { type: 'string' } }],
+        responses: { '200': { description: 'Welcome email re-sent' } },
       },
     },
     '/major-incidents': {

@@ -1,5 +1,7 @@
-import { openTicketsForSla, insertNotification, appendAuditLog, listNotifications, getConfig } from './repository';
-import { resolveSlaDuration } from '../src/lib/slaCalculator';
+import { audit, AuditAction } from './auditEvents';
+import { openTicketsForSla, insertNotification, getConfig } from './repository';
+import { supabase } from './supabase';
+import { resolveSlaDuration, effectiveSlaDeadline } from '../src/lib/slaCalculator';
 import { TicketPriority } from '../src/types/app';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
@@ -7,53 +9,73 @@ import { buildId } from './lib/ids';
 
 const FALLBACK_RISK_FRACTION = 0.25;
 const MIN_RISK_HOURS = 0.5;
+const NOTIFICATION_TTL_MS = 6 * 3600000; // 6 hours
 
 let timer: NodeJS.Timeout | null = null;
-const notifiedMap = new Map<string, number>(); // key -> timestamp
-const NOTIFICATION_TTL = 6 * 3600000; // 6 hours
 
-function pruneNotifiedMap() {
-  const now = Date.now();
-  for (const [key, ts] of notifiedMap) {
-    if (now - ts > NOTIFICATION_TTL) notifiedMap.delete(key);
+// ─── Alert dedupe ──────────────────────────────────────────────────────
+// The sla_notification_log table (migration 047) makes suppression durable:
+// a server restart no longer re-fires every alert. The UNIQUE(kind, ticket_id,
+// recipient) constraint means an insert only succeeds for first-time alerts.
+// The in-memory map remains as a fallback when the table is unavailable.
+
+const memoryClaims = new Map<string, number>();
+
+/** Try to claim an alert slot. Returns true when this call is the first. */
+async function claimAlert(kind: string, ticketId: string, recipient: string): Promise<boolean> {
+  try {
+    const builder: any = supabase
+      .from('sla_notification_log')
+      .insert({ kind, ticket_id: ticketId, recipient });
+    if (typeof builder?.onConflict === 'function') {
+      const { data, error } = await builder
+        .onConflict('kind,ticket_id,recipient')
+        .ignoreDuplicates(true)
+        .select();
+      if (!error) return Array.isArray(data) && data.length > 0;
+    }
+  } catch {
+    // Table/client capability missing — fall through to memory dedupe.
   }
-}
-
-async function alreadyNotified(activeKeys: Set<string>, ticketId: string, kind: string, recipient: string): Promise<boolean> {
-  return notifiedMap.has(`${kind}:${ticketId}:${recipient}`) || activeKeys.has(`${kind}:${ticketId}:${recipient}`);
-}
-
-function markNotified(ticketId: string, kind: string, recipient: string) {
   const key = `${kind}:${ticketId}:${recipient}`;
-  notifiedMap.set(key, Date.now());
+  if (memoryClaims.has(key)) return false;
+  memoryClaims.set(key, Date.now());
+  return true;
+}
+
+/** Prune claim rows (and memory entries) older than the TTL. */
+async function pruneClaims(): Promise<void> {
+  const cutoff = new Date(Date.now() - NOTIFICATION_TTL_MS).toISOString();
+  try {
+    const builder: any = supabase.from('sla_notification_log').delete();
+    if (typeof builder?.lt === 'function') {
+      await builder.lt('notified_at', cutoff);
+    }
+  } catch {
+    // Table unavailable — nothing to prune server-side.
+  }
+  const now = Date.now();
+  for (const [key, ts] of memoryClaims) {
+    if (now - ts > NOTIFICATION_TTL_MS) memoryClaims.delete(key);
+  }
 }
 
 export async function runSlaCheck() {
-  pruneNotifiedMap();
+  await pruneClaims();
   const tickets = await openTicketsForSla();
   const configs = await getConfig<Array<{ id: string; stage: string; email: string }>>('notificationConfigs', []);
-
-  // Snapshot recent notifications once so duplicate detection does not trigger a
-  // full-table scan per (ticket × recipient × kind) on every run.
-  const activeKeys = new Set<string>();
-  const recent = await listNotifications();
-  const now = Date.now();
-  for (const n of recent) {
-    if (now - new Date(n.timestamp).getTime() < 6 * 3600000) {
-      for (const kind of ['SLA_BREACH', 'SLA_AT_RISK']) {
-        if (n.message.includes(kind)) activeKeys.add(`${kind}:${n.ticketId}:${n.recipient}`);
-      }
-    }
-  }
 
   let breachCount = 0;
   let riskCount = 0;
   let scanned = 0;
+  const now = Date.now();
 
   for (const t of tickets) {
     scanned++;
     try {
-      const deadline = new Date(t.slaDeadline).getTime();
+      // Waiting tickets are excluded upstream; the effective deadline shifts
+      // previously-paused tickets forward by their accumulated pause span.
+      const deadline = effectiveSlaDeadline(t as any).getTime();
       if (!Number.isFinite(deadline)) continue;
       const hoursLeft = (deadline - now) / 3600000;
       const recipients = new Set<string>();
@@ -71,7 +93,7 @@ export async function runSlaCheck() {
 
       if (hoursLeft < 0 && !t.isEscalated) {
         for (const recipient of recipients) {
-          if (await alreadyNotified(activeKeys, t.id, 'SLA_BREACH', recipient)) continue;
+          if (!(await claimAlert('SLA_BREACH', t.id, recipient))) continue;
           await insertNotification({
             id: buildId('wn-sla'),
             timestamp: new Date().toISOString(),
@@ -80,25 +102,24 @@ export async function runSlaCheck() {
             recipient,
             seen: false,
           });
-          markNotified(t.id, 'SLA_BREACH', recipient);
         }
         // Audit the breach once per ticket, not on every monitor tick.
-        if (!(await alreadyNotified(activeKeys, t.id, 'SLA_BREACH', '__audit__'))) {
-          await appendAuditLog({
+        if (await claimAlert('SLA_BREACH', t.id, '__audit__')) {
+          await audit({
+            event: 'SLA_BREACH_DETECTED',
             ticketId: t.id,
             actor: 'SYSTEM',
             role: 'SYSTEM',
-            action: 'SLA_BREACH_DETECTED',
+            action: AuditAction.SLA_BREACH_DETECTED,
             details: `Automated SLA monitor detected breach for ticket ${t.id}. Deadline was ${t.slaDeadline}.`,
           });
-          markNotified(t.id, 'SLA_BREACH', '__audit__');
         }
         breachCount++;
         broadcast('sla_breach', { ticketId: t.id, slaDeadline: t.slaDeadline }, t.tenant_id);
         dispatchWebhook('sla.breach', { ticketId: t.id, priority: t.priority, category: t.category, slaDeadline: t.slaDeadline }).catch(() => {});
       } else if (hoursLeft >= 0 && hoursLeft < riskThreshold) {
         for (const recipient of recipients) {
-          if (await alreadyNotified(activeKeys, t.id, 'SLA_AT_RISK', recipient)) continue;
+          if (!(await claimAlert('SLA_AT_RISK', t.id, recipient))) continue;
           await insertNotification({
             id: buildId('wn-risk'),
             timestamp: new Date().toISOString(),
@@ -107,7 +128,6 @@ export async function runSlaCheck() {
             recipient,
             seen: false,
           });
-          markNotified(t.id, 'SLA_AT_RISK', recipient);
         }
         riskCount++;
         broadcast('sla_at_risk', { ticketId: t.id, hoursLeft }, t.tenant_id);

@@ -6,10 +6,10 @@ import ErrorBoundary from './components/ui/ErrorBoundary';
 import PageErrorBoundary from './components/ui/PageErrorBoundary';
 import Sidebar from './components/Sidebar';
 import { KbArticle } from './types/admin';
-import { TicketPriority, UserRole, type MajorIncidentRecord, type WatcherNotification } from './types/app';
+import { UserRole, type WatcherNotification } from './types/app';
 import { useApp } from './context/AppContext';
 import { useUi } from './context/UiContext';
-import { syncMajorIncident, syncTicketUpdate, syncKbArticles } from './lib/sync';
+import { syncKbArticles } from './lib/sync';
 import OnboardingTour from './components/onboarding/OnboardingTour';
 import CommandPalette from './components/CommandPalette';
 import BrandLogo from './components/BrandLogo';
@@ -80,48 +80,46 @@ export default function App() {
     });
   };
 
-  const handleDeclareMajorIncident = (formData: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => {
-    const data = formData;
-    if (!data.name.trim() || !data.description.trim()) {
+  const handleDeclareMajorIncident = async (formData: {
+    name: string; description: string; partner: string; category: string; severity: string; initialNotification: string;
+    affectedPartners?: string[]; affectedBus?: string[]; impact?: { description: string; customerCount?: string; amount?: string };
+    expectedRto?: string; severityJustification?: string; recipient?: string; links?: string[];
+  }): Promise<string | undefined> => {
+    if (!formData.name.trim() || !formData.description.trim()) {
       showToast('Please provide a name and description for the Major Incident.', 'error');
-      return;
+      return undefined;
     }
-    const miId = 'MI-' + Math.floor(Math.random() * 900 + 100);
-    const newMI: MajorIncidentRecord = {
-      id: miId,
-      name: data.name,
-      description: data.description,
-      partner: data.partner,
-      category: data.category,
-      severity: data.severity,
-      active: true,
-      ticketCount: 1,
-      createdAt: new Date().toISOString(),
-      status: 'INVESTIGATING',
-      timeline: [{ id: 'tl-' + Date.now(), timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole === UserRole.PARTNER ? 'Payment Partner' : 'BU Support', message: `Major Incident declared. Severity set to ${data.severity}. System monitors deployed.` }],
-      notifications: [{ id: 'not-' + Date.now(), timestamp: new Date().toISOString(), channel: data.initialNotification, recipient: data.initialNotification === 'Slack/Teams Webhook' ? '#ops-severity-1-war-room' : 'executive-alerts@company.com', subject: `CRITICAL OUTAGE WARNING: ${data.name}`, status: 'SENT' }],
-      pir: { rootCauseSummary: '', timelineSummary: '', impactSummary: '', preventiveOwner: '', preventiveDueDate: '', draft: true, lastUpdated: new Date().toISOString(), lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName }
-    };
-    const updatedMIs = [newMI, ...majorIncidents];
-    setMajorIncidents(updatedMIs);
-    const updatedTickets = tickets.map(t => {
-      if (t.id === activeTicketId) {
-        logAuditAction(t.id, 'MAJOR_INCIDENT_DECLARED', `Declared Major Incident: ${newMI.name}. Auto-linked ticket.`);
-        return { ...t, majorIncidentId: miId, priority: TicketPriority.CRITICAL };
+    try {
+      const { api } = await import('./lib/api');
+      const created = await api.createMajorIncident({
+        name: formData.name.trim(),
+        description: formData.description.trim(),
+        partner: formData.partner || '',
+        category: formData.category || '',
+        severity: formData.severity,
+        affectedPartners: formData.affectedPartners || [],
+        affectedBus: formData.affectedBus || [],
+        ...(formData.severityJustification ? { severityJustification: formData.severityJustification } : {}),
+        ...(formData.expectedRto ? { expectedRto: formData.expectedRto } : {}),
+        initialNotification: formData.initialNotification,
+        recipient: formData.initialNotification && /executive|email/i.test(formData.initialNotification) ? 'executive-alerts@company.com' : undefined,
+        links: formData.links?.length ? formData.links : (activeTicketId ? [activeTicketId] : []),
+      });
+      setMajorIncidents(prev => [created, ...prev.filter(m => m.id !== created.id)]);
+      if (activeTicketId) {
+        const upd = tickets.map(t => t.id === activeTicketId ? { ...t, majorIncidentId: created.id, priority: 'CRITICAL' } : t);
+        setTickets(upd);
+        const targetTicket = upd.find(t => t.id === activeTicketId);
+        if (targetTicket) {
+          logAuditAction(targetTicket.id, 'MAJOR_INCIDENT_DECLARED', `Declared Major Incident: ${created.name}. Auto-linked ticket.`);
+          notifyWatchers(targetTicket, `Ticket ${targetTicket.id} has been automatically linked to Major Incident ${created.id} (${created.name}) and upgraded to CRITICAL priority.`, upd);
+        }
       }
-      return t;
-    });
-    setTickets(updatedTickets);
-    setSelectedMajorIncidentId(miId);
-    syncMajorIncident(newMI);
-    const linkedTicket = updatedTickets.find(t => t.id === activeTicketId);
-    if (linkedTicket) syncTicketUpdate(linkedTicket.id, { majorIncidentId: miId, priority: TicketPriority.CRITICAL });
-    showToast(`Major Incident ${miId} declared and active!`, 'success');
-    const targetTicket = updatedTickets.find(t => t.id === activeTicketId);
-    if (targetTicket) {
-      notifyWatchers(targetTicket, `Ticket ${targetTicket.id} has been automatically linked to Major Incident ${miId} (${newMI.name}) and upgraded to CRITICAL priority.`, updatedTickets);
-    } else {
-      saveToStorage(updatedTickets, comments, auditLogs, updatedMIs);
+      showToast(`Major Incident ${created.id} declared and active!`, 'success');
+      return created.id;
+    } catch (e: any) {
+      showToast(e?.message || 'Declaration failed. Please try again.', 'error');
+      return undefined;
     }
   };
 
@@ -162,7 +160,7 @@ export default function App() {
 [UserRole.BU_SUPPORT_L1]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
 [UserRole.BU_SUPPORT_L2]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
 [UserRole.BU_SUPPORT_L3]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-[UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'kb', 'profile_settings'],
+[UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'major_incidents', 'kb', 'profile_settings'],
 [UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
 [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'payment_partner_portal', 'profile_settings'],
 

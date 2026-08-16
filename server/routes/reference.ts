@@ -11,9 +11,9 @@ import {
 } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import type { Permission } from '../rbac';
-import { buildId } from '../lib/ids';
+import { buildId, buildToken } from '../lib/ids';
+import { sendUserInvite } from '../services/emailService';
 import {
-  appendAuditLog,
   listJsonTable,
   insertJsonTableRow,
   updateJsonTableRow,
@@ -34,6 +34,7 @@ import {
   upsertUser,
   deleteUser,
 } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { normalizeBusinessUnits } from '../../src/lib/buCodes';
 
 type KindStorage = 'table' | 'config' | 'users';
@@ -257,10 +258,6 @@ async function assertUniqueBuCode(code: string | undefined, excludeId?: string) 
   }
 }
 
-function audit(actorName: string, actorRole: string, action: string, details: string) {
-  return appendAuditLog({ ticketId: null, actor: actorName, role: actorRole, action, details });
-}
-
 export function createReferenceRouter(): Router {
   const router = Router();
 
@@ -329,7 +326,7 @@ export function createReferenceRouter(): Router {
       }
     }
 
-    await audit(req.user!.name, req.user!.role, 'REFERENCE_KIND_CREATED', `Created reference kind "${label}" (${kind}) with ${items.length} item(s).`);
+    await audit({ event: 'REFERENCE_KIND_CREATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.REFERENCE_KIND_CREATED, details: `Created reference kind "${label}" (${kind}) with ${items.length} item(s).` });
     res.status(201).json({ ...def, items });
   });
 
@@ -366,11 +363,24 @@ export function createReferenceRouter(): Router {
         const userId = item.id || buildId('usr');
         const accountType = item.accountType || (item.role === 'PARTNER' ? 'PARTNER' : 'BU');
         const passwordHash = hashPassword(item.password);
+        const activationToken = buildToken(32);
         // Provision a Supabase Auth identity so the user can actually sign in.
         const identity = await supabaseCreateUser(item.email, item.password, item.name);
         const { password: _pw, id: _id, ...rest } = item;
-        await upsertUser({ ...rest, accountType, id: userId, passwordHash, authUserId: identity.id, mustChangePassword: true });
-        item = { ...rest, accountType, id: userId };
+        await upsertUser({ ...rest, accountType, id: userId, passwordHash, authUserId: identity.id, mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
+        // Best-effort welcome email with the temporary credentials. A failure
+        // (e.g. SMTP not configured) is surfaced in the response but does not
+        // roll back the account — the admin can resend the invitation later.
+        const invite = await sendUserInvite({
+          to: item.email,
+          name: item.name,
+          email: item.email,
+          loginUrl: `${req.protocol}://${req.get('host')}/auth/login`,
+          tempPassword: item.password,
+          sentBy: req.user?.name,
+        });
+        await audit({ event: invite.ok ? 'USER_INVITED' : 'USER_INVITE_FAILED', actor: req.user!.name, role: req.user!.role, action: invite.ok ? AuditAction.USER_INVITED : 'USER_INVITE_FAILED' as AuditAction, details: `Created ${def.label}: ${userId} — welcome email ${invite.ok ? 'sent' : `failed (${invite.error || 'unknown'})`}` });
+        item = { ...rest, accountType, id: userId, activationPending: true, invitationSent: invite.ok };
       } else if (def.storage === 'table') {
         if (!def.idOf(item)) item = { ...item, id: nextId(req.params.kind.replace(/_/g, '-')) };
         if (req.params.kind === 'sla_rules' && !(await categoryExists((item as any).category))) {
@@ -402,7 +412,7 @@ export function createReferenceRouter(): Router {
       return res.status(409).json({ error: e.message || 'Create failed' });
     }
 
-    await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_CREATED`, `Created ${def.label}: ${def.idOf(item) || item}`);
+    await audit({ event: `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_CREATED`, actor: req.user!.name, role: req.user!.role, action: (`REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_CREATED`) as AuditAction, details: `Created ${def.label}: ${def.idOf(item) || item}` });
     res.status(201).json(item);
   });
 
@@ -431,7 +441,7 @@ export function createReferenceRouter(): Router {
           });
         }
         await upsertUser({ ...rest, id: req.params.id, passwordHash: password ? hashPassword(password) : undefined });
-        await audit(req.user!.name, req.user!.role, `REFERENCE_USERS_UPDATED`, `Updated ${def.label}: ${req.params.id}`);
+        await audit({ event: `REFERENCE_USERS_UPDATED`, actor: req.user!.name, role: req.user!.role, action: ('REFERENCE_USERS_UPDATED') as AuditAction, details: `Updated ${def.label}: ${req.params.id}` });
         return res.json({ ...rest, id: req.params.id });
       }
 
@@ -448,7 +458,7 @@ export function createReferenceRouter(): Router {
           return res.status(400).json({ error: 'category: Category must exist in the categories list' });
         }
         await updateJsonTableRow(req.params.kind, req.params.id, merged.data);
-        await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, `Updated ${def.label}: ${req.params.id}`);
+await audit({ event: `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, actor: req.user!.name, role: req.user!.role, action: (`REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`) as AuditAction, details: `Updated ${def.label}: ${req.params.id}` });
         return res.json(merged.data);
       }
 
@@ -465,7 +475,7 @@ export function createReferenceRouter(): Router {
         await assertUniqueBuCode((merged.data as any)?.code, req.params.id);
       }
       await updateConfigItem(req.params.kind, req.params.id, merged.data);
-      await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, `Updated ${def.label}: ${req.params.id}`);
+      await audit({ event: `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`, actor: req.user!.name, role: req.user!.role, action: (`REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_UPDATED`) as AuditAction, details: `Updated ${def.label}: ${req.params.id}` });
       return res.json(merged.data);
     } catch (e: any) {
       if (/already registered|already been registered/i.test(e?.message || '')) {
@@ -503,7 +513,7 @@ export function createReferenceRouter(): Router {
       return res.status(500).json({ error: e.message || 'Delete failed' });
     }
 
-    await audit(req.user!.name, req.user!.role, `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_DELETED`, `Deleted ${def.label}: ${req.params.id}`);
+    await audit({ event: `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_DELETED`, actor: req.user!.name, role: req.user!.role, action: (`REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase()}_DELETED`) as AuditAction, details: `Deleted ${def.label}: ${req.params.id}` });
     res.json({ ok: true });
   });
 

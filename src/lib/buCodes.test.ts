@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { suggestBuCode, normalizeBusinessUnits, buCodeFor, nextTicketId, yymmdd } from './buCodes';
+import { suggestBuCode, normalizeBusinessUnits, buCodeFor, nextTicketId } from './buCodes';
 
 describe('suggestBuCode', () => {
   it('derives an uppercase code from the name', () => {
@@ -41,13 +41,13 @@ describe('nextTicketId', () => {
   const buRaw = [{ name: 'POSSAP', code: 'POS' }];
   const date = new Date(2026, 7, 7);
 
-  it('uses BUCODE-yymmdd-NNN format', () => {
-    expect(nextTicketId('POSSAP', buRaw, [], date)).toBe(`POS-${yymmdd(date)}-001`);
+  it('uses BUCODE-YYMMMDD-NNN format', () => {
+    expect(nextTicketId('POSSAP', buRaw, [], date)).toBe('POS-26AUG07-001');
   });
 
   it('increments the sequence based on existing ids', () => {
-    const existing = [`POS-${yymmdd(date)}-001`, `POS-${yymmdd(date)}-002`];
-    expect(nextTicketId('POSSAP', buRaw, existing, date)).toBe(`POS-${yymmdd(date)}-003`);
+    const existing = ['POS-26AUG07-001', 'POS-26AUG07-002'];
+    expect(nextTicketId('POSSAP', buRaw, existing, date)).toBe('POS-26AUG07-003');
   });
 
   it('falls back to legacy TKT-<ms> when the BU has no code', () => {

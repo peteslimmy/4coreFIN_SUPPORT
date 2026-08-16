@@ -103,6 +103,9 @@ describe('UiContext decoupling', () => {
 
 describe('UiContext behavior', () => {
   it('shares state across consumers within UiProvider', async () => {
+    // URL state persists across renders in the shared jsdom window — start
+    // from a clean app URL so the provider's initial state is deterministic.
+    window.history.replaceState(null, '', '/app/tickets');
     render(
       <UiProvider>
         <UiWriter />
@@ -110,7 +113,8 @@ describe('UiContext behavior', () => {
       </UiProvider>
     );
 
-    expect(screen.getByTestId('reader').textContent).toBe('||RET-20260717-001');
+    // No selection until a ticket is chosen (or restored from the URL).
+    expect(screen.getByTestId('reader').textContent).toBe('||');
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('fire'));

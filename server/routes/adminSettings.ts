@@ -5,7 +5,7 @@ import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } f
 import { uploadFileToStorage, deleteFile } from '../services/storageService';
 import { encrypt, decrypt, maskValue } from '../services/encryptionService';
 import { sendEmail } from '../services/emailService';
-import { appendAuditLog } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
 import { buildId } from '../lib/ids';
 
@@ -50,11 +50,11 @@ export function createAdminSettingsRouter(): Router {
     } catch (e: any) {
       return res.status(500).json({ error: e.message });
     }
-    await appendAuditLog({
-      ticketId: null,
+    await audit({
+      event: 'ADMIN_SETTING_UPDATED',
       actor: req.user!.name,
       role: req.user!.role,
-      action: 'ADMIN_SETTING_UPDATED',
+      action: AuditAction.ADMIN_SETTINGS_UPDATED,
       details: `Updated setting: ${key}`,
     });
     res.json({ ok: true, key, value: key === 'smtp.password' ? '••••••••' : value });
@@ -73,11 +73,11 @@ export function createAdminSettingsRouter(): Router {
     }
 
     await setSettings(settings, req.user!.id);
-    await appendAuditLog({
-      ticketId: null,
+    await audit({
+      event: 'ADMIN_SETTINGS_BULK_UPDATED',
       actor: req.user!.name,
       role: req.user!.role,
-      action: 'ADMIN_SETTINGS_BULK_UPDATED',
+      action: AuditAction.ADMIN_SETTINGS_UPDATED,
       details: `Updated ${Object.keys(settings).length} settings`,
     });
     res.json({ ok: true });
@@ -134,13 +134,13 @@ export function createAdminSettingsRouter(): Router {
           }
         }
 
-        await appendAuditLog({
-          ticketId: null,
-          actor: req.user!.name,
-          role: req.user!.role,
-          action: 'ADMIN_BRANDING_UPLOAD',
-          details: `Uploaded branding asset: ${filename}${settingKey ? ` (${settingKey})` : ''}`,
-        });
+await audit({
+      event: 'ADMIN_BRANDING_UPLOAD',
+      actor: req.user!.name,
+      role: req.user!.role,
+      action: AuditAction.ADMIN_BRANDING_UPLOADED,
+      details: `Uploaded branding asset: ${filename}${settingKey ? ` (${settingKey})` : ''}`,
+    });
         res.json({ path });
       } catch (e: any) {
         res.status(500).json({ error: e.message });
@@ -171,13 +171,7 @@ export function createAdminSettingsRouter(): Router {
         return res.status(500).json({ error: `SMTP test failed: ${result.error}` });
       }
 
-      await appendAuditLog({
-        ticketId: null,
-        actor: req.user!.name,
-        role: req.user!.role,
-        action: 'ADMIN_SMTP_TEST',
-        details: `SMTP test email sent to ${req.user!.email} via ${settings['smtp.host']}:${settings['smtp.port']}`,
-      });
+      await audit({ event: 'ADMIN_SMTP_TESTED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ADMIN_SMTP_TESTED, details: `SMTP test email sent to ${req.user!.email} via ${settings['smtp.host']}:${settings['smtp.port']}` });
       res.json({ ok: true, message: 'SMTP test email sent successfully' });
     } catch (e: any) {
       res.status(500).json({ error: e.message });
@@ -206,20 +200,14 @@ export function createAdminSettingsRouter(): Router {
       created_by: req.user!.id,
     });
     if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'ADMIN_API_KEY_CREATED', details: `Created API key: ${name} (${service})`,
-    });
+    await audit({ event: 'ADMIN_API_KEY_CREATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ADMIN_API_KEY_CREATED, details: `Created API key: ${name} (${service})` });
     res.status(201).json({ id, name, service, is_active: true });
   });
 
   router.delete('/admin/api-keys/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
     const { error } = await supabase.from('api_keys').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'ADMIN_API_KEY_DELETED', details: `Deleted API key: ${req.params.id}`,
-    });
+    await audit({ event: 'ADMIN_API_KEY_DELETED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ADMIN_API_KEY_DELETED, details: `Deleted API key: ${req.params.id}` });
     res.json({ ok: true });
   });
 
@@ -227,10 +215,7 @@ export function createAdminSettingsRouter(): Router {
     const { data, error } = await supabase.from('api_keys').select('encrypted_key').eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Not found' });
     const revealed = decrypt(data.encrypted_key);
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'ADMIN_API_KEY_REVEALED', details: `Revealed API key: ${req.params.id}`,
-    });
+    await audit({ event: 'ADMIN_API_KEY_REVEALED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ADMIN_API_KEY_REVEALED, details: `Revealed API key: ${req.params.id}` });
     res.json({ key: revealed });
   });
 

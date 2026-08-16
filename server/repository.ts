@@ -30,6 +30,18 @@ export function partnerNameFor(user: AuthUser): string {
   return (user.partner || user.bu || '').toLowerCase();
 }
 
+/**
+ * Apply partner scoping to a ticket query. Prefers the partner_org_id FK
+ * (migration 044) and falls back to case-insensitive name matching for rows
+ * or accounts that have not been migrated yet. Returns the query for chaining.
+ */
+function scopeTicketsToPartner(query: any, user: AuthUser) {
+  if (user.partnerOrgId != null) {
+    return query.eq('partner_org_id', user.partnerOrgId);
+  }
+  return query.ilike('partner', partnerNameFor(user));
+}
+
 // ─── Helpers ───────────────────────────────────────────────────────────
 
 /** Convert snake_case DB row to camelCase for frontend compatibility */
@@ -92,7 +104,7 @@ export async function listTickets(
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', partnerNameFor(user));
+    query = scopeTicketsToPartner(query, user);
   }
   if (opts?.limit) {
     query = query.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
@@ -140,7 +152,7 @@ export async function getScopedTicket(id: string, user: AuthUser): Promise<any |
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', partnerNameFor(user));
+    query = scopeTicketsToPartner(query, user);
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -163,6 +175,25 @@ export async function getTicket(id: string, user: AuthUser, unmask = false): Pro
   return applyTicketMasking(ticket, user, unmask);
 }
 
+// ─── Partner organization resolution ───────────────────────────────────
+
+const partnerOrgIdCache = new Map<string, number | null>();
+
+/** Look up (and cache) the partner_organizations id for a partner name. */
+export async function resolvePartnerOrgId(partner: string): Promise<number | null> {
+  const name = String(partner || '').trim().toLowerCase();
+  if (!name) return null;
+  if (partnerOrgIdCache.has(name)) return partnerOrgIdCache.get(name)!;
+  const { data } = await supabase
+    .from('partner_organizations')
+    .select('id')
+    .ilike('name', name)
+    .maybeSingle();
+  const id = (data?.id as number | undefined) ?? null;
+  partnerOrgIdCache.set(name, id);
+  return id;
+}
+
 export async function upsertTicket(ticket: any) {
   // Encrypt PII at rest before persisting. The encrypted format is
   // iv:tag:cipherhex; Supabase stores it as text, and read paths will
@@ -170,6 +201,8 @@ export async function upsertTicket(ticket: any) {
   const enc = (v: string | undefined | null) => v ? encrypt(String(v)) : '';
 
   const tenantId = ticket.tenantId || (await ensureTenantForBu(ticket.businessUnit));
+  // Resolve the partner organization FK (stamps partner_org_id on write).
+  const partnerOrgId = ticket.partnerOrgId ?? (ticket.partner ? await resolvePartnerOrgId(ticket.partner) : null);
   const row = toSnake({
     id: ticket.id,
     customerName: ticket.customerName || '',
@@ -180,6 +213,7 @@ export async function upsertTicket(ticket: any) {
     businessUnit: ticket.businessUnit,
     tenantId,
     partner: ticket.partner || '',
+    partnerOrgId,
     category: ticket.category,
     issueType: ticket.category || '',
     priority: ticket.priority,
@@ -191,6 +225,8 @@ export async function upsertTicket(ticket: any) {
     description: ticket.description || '',
     createdAt: ticket.createdAt,
     slaDeadline: ticket.slaDeadline,
+    slaPausedMs: ticket.slaPausedMs || 0,
+    slaPauseStartedAt: ticket.slaPauseStartedAt || null,
     isEscalated: !!ticket.isEscalated,
     escalationCount: ticket.escalationCount || 0,
     assignedAgentId: ticket.assignedAgentId || '',
@@ -222,13 +258,17 @@ export async function upsertTicket(ticket: any) {
 }
 
 export async function recalcCustomerTotalTickets(customerId: string): Promise<void> {
-  const { data: cust } = await supabase.from('customers').select('email,business_unit').eq('id', customerId).single();
-  if (!cust) return;
-  const custEmail = (cust.email || '').toLowerCase();
-  const custBu = (cust.business_unit || '').toUpperCase();
-
-  let q = supabase.from('tickets').select('customer_id,customer_email,business_unit', { count: 'exact', head: false }).eq('is_deleted', false);
-  const { count } = await q.or(`customer_id.eq.${customerId},and(customer_email.eq.${custEmail},business_unit.eq.${custBu})`);
+  // customer_email is encrypted per-row (migration 031) so plaintext equality
+  // never matches; count by the reliable customer_id join key only.
+  const { count, error } = await supabase
+    .from('tickets')
+    .select('id', { count: 'exact', head: true })
+    .eq('customer_id', customerId)
+    .eq('is_deleted', false);
+  if (error) {
+    console.error('recalcCustomerTotalTickets failed:', error.message);
+    return;
+  }
   const total = typeof count === 'number' ? count : 0;
   const { error: updErr } = await supabase.from('customers').update({ total_tickets: total }).eq('id', customerId);
   if (updErr) console.error('recalcCustomerTotalTickets failed:', updErr.message);
@@ -330,6 +370,7 @@ export async function appendAuditLog(input: {
   role: string;
   action: string;
   details: string;
+  event?: string | null;
 }): Promise<AuditEntry> {
   const previousHash = await getLatestAuditHash();
   const entry: AuditEntry = {
@@ -339,6 +380,7 @@ export async function appendAuditLog(input: {
     actor: input.actor,
     role: input.role,
     action: input.action,
+    event: input.event ?? null,
     details: input.details,
     previousHash,
   };
@@ -363,6 +405,7 @@ export async function appendAuditLog(input: {
     actor: entry.actor,
     role: entry.role,
     action: entry.action,
+    event: entry.event,
     details: entry.details,
     hash: entry.hash,
     previous_hash: entry.previousHash || '',
@@ -377,7 +420,7 @@ export async function appendAuditLog(input: {
 export async function listAuditLogs(limit = 500, user?: AuthUser): Promise<AuditEntry[]> {
   let query = supabase
     .from('audit_logs')
-    .select('id, timestamp, ticket_id, actor, role, action, details, hash, previous_hash')
+    .select('id, timestamp, ticket_id, actor, role, action, event, details, hash, previous_hash, tenant_id')
     .order('timestamp', { ascending: false })
     .limit(limit);
   const tenantId = user ? tenantScope(user) : null;
@@ -393,6 +436,7 @@ export async function listAuditLogs(limit = 500, user?: AuthUser): Promise<Audit
     actor: r.actor,
     role: r.role,
     action: r.action,
+    event: r.event ?? undefined,
     details: r.details,
     hash: r.hash,
     previousHash: r.previous_hash,
@@ -408,7 +452,7 @@ export async function listAuditLogs(limit = 500, user?: AuthUser): Promise<Audit
 export async function listAuditLogsForVerification(): Promise<AuditEntry[]> {
   const { data, error } = await supabase
     .from('audit_logs')
-    .select('id, timestamp, ticket_id, actor, role, action, details, hash, previous_hash')
+    .select('id, timestamp, ticket_id, actor, role, action, event, details, hash, previous_hash')
     .order('timestamp', { ascending: true })
     .order('id', { ascending: true })
     .limit(20000);
@@ -420,6 +464,7 @@ export async function listAuditLogsForVerification(): Promise<AuditEntry[]> {
     actor: r.actor,
     role: r.role,
     action: r.action,
+    event: r.event ?? undefined,
     details: r.details,
     hash: r.hash,
     previousHash: r.previous_hash,
@@ -535,9 +580,9 @@ const tenantId = tenantScope(user);
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    // Prefer partner_org_id FK if set (migration 035); fall back to partner name string match
-    if (user.partner_org_id !== undefined) {
-      query = query.eq('partner_org_id', user.partner_org_id);
+    // Prefer partner_org_id FK (migration 044); fall back to partner name match
+    if (user.partnerOrgId != null) {
+      query = query.eq('partner_org_id', user.partnerOrgId);
     } else {
       query = query.ilike('partner', partnerNameFor(user));
     }
@@ -567,7 +612,11 @@ export async function getScopedMajorIncident(id: string, user: AuthUser): Promis
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   } else if (isPartner(user)) {
-    query = query.ilike('partner', partnerNameFor(user));
+    if (user.partnerOrgId != null) {
+      query = query.eq('partner_org_id', user.partnerOrgId);
+    } else {
+      query = query.ilike('partner', partnerNameFor(user));
+    }
   }
   const { data, error } = await query.single();
   if (error || !data) return null;
@@ -591,10 +640,28 @@ export async function upsertMajorIncident(mi: any) {
     timeline: mi.timeline || [],
     notifications: mi.notifications || [],
     pir: mi.pir || null,
+    declaredBy: mi.declaredBy || null,
+    owner: mi.owner || null,
+    affectedPartners: mi.affectedPartners || null,
+    affectedBus: mi.affectedBus || null,
+    impact: mi.impact || null,
+    expectedRto: mi.expectedRto || null,
+    severityJustification: mi.severityJustification || null,
+    acknowledgedAt: mi.acknowledgedAt || null,
+    resolvedAt: mi.resolvedAt || null,
+    closedAt: mi.closedAt || null,
   });
   const { error } = await supabase.from('major_incidents').upsert(row, { onConflict: 'id' });
   if (error) throw new Error(`upsertMajorIncident failed: ${error.message}`);
   broadcast('major_incident_updated', { id: mi.id }, tenantId);
+}
+
+/** Link an existing ticket to a major incident, upgrading to CRITICAL when severe. */
+export async function linkTicketToMajorIncident(ticketId: string, miId: string, criticalUpgrade: boolean) {
+  const row: Record<string, unknown> = { major_incident_id: miId };
+  if (criticalUpgrade) row.priority = 'CRITICAL';
+  const { error } = await supabase.from('tickets').update(row).eq('id', ticketId);
+  if (error) throw new Error(`linkTicketToMajorIncident failed: ${error.message}`);
 }
 
 // ─── Customers ─────────────────────────────────────────────────────────
@@ -611,32 +678,44 @@ export async function listCustomers(user: AuthUser) {
   if (error || !data) return [];
 
   // Derive totalTickets from the live ticket set (the stored counter drifts).
-  let ticketQuery = supabase
-    .from('tickets')
-    .select('customer_id, customer_email, business_unit')
-    .eq('is_deleted', false);
-  if (tenantId) {
-    ticketQuery = ticketQuery.eq('tenant_id', tenantId);
-  } else if (isPartner(user)) {
-    ticketQuery = ticketQuery.eq('business_unit', user.bu);
+  // Aggregation runs in SQL via customer_ticket_counts() when available
+  // (migration 043); the fallback fetches the single narrow customer_id column
+  // and counts in-process. Legacy email-based matching is gone: customer_email
+  // is encrypted per-row (migration 031), so plaintext equality never matched.
+  const counts = new Map<string, number>();
+  const rpc = (supabase as any).rpc;
+  let aggregated = false;
+  if (typeof rpc === 'function') {
+    const { data: grouped, error: rpcError } = await (supabase as any).rpc('customer_ticket_counts', {
+      p_tenant_id: tenantId ?? null,
+      p_business_unit: isPartner(user) ? user.bu : null,
+    });
+    if (!rpcError && Array.isArray(grouped)) {
+      aggregated = true;
+      for (const row of grouped) {
+        if (row?.customer_id) counts.set(String(row.customer_id), Number(row.total) || 0);
+      }
+    }
   }
-  const { data: tickets } = await ticketQuery;
-  const byCustomerId = new Map<string, number>();
-  const byEmailBu = new Map<string, number>();
-  for (const t of tickets || []) {
-    if (t.customer_id) {
-      byCustomerId.set(t.customer_id, (byCustomerId.get(t.customer_id) || 0) + 1);
-    } else if (t.customer_email) {
-      const key = `${(t.customer_email || '').toLowerCase()}|${(t.business_unit || '').toUpperCase()}`;
-      byEmailBu.set(key, (byEmailBu.get(key) || 0) + 1);
+  if (!aggregated) {
+    let ticketQuery = supabase
+      .from('tickets')
+      .select('customer_id')
+      .eq('is_deleted', false);
+    if (tenantId) {
+      ticketQuery = ticketQuery.eq('tenant_id', tenantId);
+    } else if (isPartner(user)) {
+      ticketQuery = ticketQuery.eq('business_unit', user.bu);
+    }
+    const { data: ticketRows } = await ticketQuery;
+    for (const t of ticketRows || []) {
+      if (t.customer_id) counts.set(t.customer_id, (counts.get(t.customer_id) || 0) + 1);
     }
   }
 
   return data.map((row) => {
     const customer = toCamel(row);
-    const linked = byCustomerId.get(customer.id) || 0;
-    const fallback = byEmailBu.get(`${(customer.email || '').toLowerCase()}|${(customer.businessUnit || '').toUpperCase()}`) || 0;
-    customer.totalTickets = linked + fallback;
+    customer.totalTickets = counts.get(customer.id) || 0;
     return customer;
   });
 }
@@ -739,19 +818,15 @@ export async function findOrCreateCustomer(opts: {
   return { id: row.id };
 }
 
-/** Count non-deleted tickets that reference a customer (by id, or email fallback). */
+/** Count non-deleted tickets that reference a customer. customer_email is
+ *  encrypted per-row (migration 031) so it can never be equality-matched;
+ *  the id join key is the only reliable reference. */
 export async function countTicketsByCustomer(opts: { id: string; email?: string; businessUnit?: string }): Promise<number> {
   let query = supabase
     .from('tickets')
     .select('id', { count: 'exact', head: true })
-    .eq('is_deleted', false);
-  if (opts.email) {
-    // PostgREST OR: customer_id = id OR customer_email = email (within BU when known)
-    const orClause = `customer_id.eq.${opts.id},customer_email.eq.${opts.email.replace(/'/g, "''")}`;
-    query = query.or(orClause);
-  } else {
-    query = query.eq('customer_id', opts.id);
-  }
+    .eq('is_deleted', false)
+    .eq('customer_id', opts.id);
   if (opts.businessUnit) {
     query = query.eq('business_unit', opts.businessUnit);
   }
@@ -803,13 +878,26 @@ export async function replaceJsonTable(table: string, items: any[]) {
   const inserter = tableInsertMappers[table];
   if (!inserter) return;
 
-  // Delete all existing rows
+  const rows = items.map(inserter);
+
+  // Preferred path: the replace_table_rows RPC (migration 045) swaps the
+  // whole table in one transaction — a mid-replace failure can never leave
+  // the table empty. Falls back to delete+insert when the RPC is unavailable.
+  const rpc = (supabase as any).rpc;
+  if (typeof rpc === 'function') {
+    const { error: rpcError } = await (supabase as any).rpc('replace_table_rows', {
+      p_table: table,
+      p_rows: rows,
+    });
+    if (!rpcError) return;
+    // RPC missing/failed (e.g. migration not applied) — fall through to the
+    // legacy non-atomic path so the operation still completes.
+  }
+
   const { error: delError } = await supabase.from(table as any).delete().neq('id', '__none__');
   if (delError) throw new Error(`replaceJsonTable delete failed (${table}): ${delError.message}`);
 
-  // Insert new rows in batches
-  if (items.length > 0) {
-    const rows = items.map(inserter);
+  if (rows.length > 0) {
     const { error: insError } = await supabase.from(table as any).insert(rows);
     if (insError) throw new Error(`replaceJsonTable insert failed (${table}): ${insError.message}`);
   }
@@ -829,7 +917,7 @@ export async function ensureTenantForBu(bu: string | undefined | null): Promise<
 }
 
 export async function listUsersPublic() {
-  const { data, error } = await supabase.from('users').select('id, name, email, role, bu, partner, account_type, phone, tenant_id, is_active').order('name');
+  const { data, error } = await supabase.from('users').select('id, name, email, role, bu, partner, partner_org_id, account_type, phone, tenant_id, is_active, activation_token, must_change_password').order('name');
   if (error || !data) return [];
   return data.map((u) => ({
     id: u.id,
@@ -838,10 +926,17 @@ export async function listUsersPublic() {
     role: u.role,
     bu: u.bu || '',
     partner: u.partner || '',
+    partnerOrgId: u.partner_org_id ?? null,
     accountType: u.account_type || (u.role === 'PARTNER' ? 'PARTNER' : 'BU'),
     phone: u.phone || '',
     tenantId: u.tenant_id || '',
     isActive: u.is_active !== false,
+    // Derived flags so the admin UI can render Active / Pending / Suspended
+    // without ever exposing the raw token or hash. An account is Pending while
+    // it is inactive AND either still holds its activation token OR still needs
+    // to choose its own password (legacy provisioned users predate tokens).
+    activationPending: u.is_active === false && (Boolean(u.activation_token) || Boolean(u.must_change_password)),
+    mustChangePassword: Boolean(u.must_change_password),
   }));
 }
 
@@ -852,6 +947,7 @@ export async function upsertUser(user: {
   role?: string;
   bu?: string;
   partner?: string;
+  partnerOrgId?: number | null;
   accountType?: string;
   phone?: string;
   passwordHash?: string;
@@ -868,6 +964,12 @@ export async function upsertUser(user: {
   if (user.role !== undefined) row.role = user.role;
   if (user.bu !== undefined) row.bu = user.bu;
   if (user.partner !== undefined) row.partner = user.partner;
+  if (user.partnerOrgId !== undefined) {
+    row.partner_org_id = user.partnerOrgId;
+  } else if (user.partner !== undefined && user.partner !== '') {
+    // Keep the org FK in sync when the partner name is (re)assigned.
+    row.partner_org_id = await resolvePartnerOrgId(user.partner);
+  }
   if (user.accountType !== undefined) row.account_type = user.accountType;
   if (user.phone !== undefined) row.phone = user.phone;
   if (user.tenantId !== undefined) {
@@ -920,11 +1022,14 @@ export async function deleteUser(id: string) {
 // ─── SLA ───────────────────────────────────────────────────────────────
 
 export async function openTicketsForSla() {
+  // Waiting tickets have their SLA clock paused (migration 048) — the monitor
+  // skips them entirely; breach/at-risk evaluation resumes when they leave the
+  // waiting state. Only the columns the monitor reads are fetched.
   const { data, error } = await supabase
     .from('tickets')
-    .select('*')
+    .select('id, tenant_id, partner, category, priority, status, is_escalated, sla_deadline, sla_paused_ms, sla_pause_started_at, watchers, assigned_agent_id')
     .eq('is_deleted', false)
-    .not('status', 'in', '(CLOSED,RESOLVED)');
+    .not('status', 'in', '(CLOSED,RESOLVED,WAITING_CUSTOMER,WAITING_PARTNER,WAITING_INTERNAL)');
   if (error || !data) return [];
   return data.map(toCamel);
 }
@@ -949,55 +1054,56 @@ export async function setConfig(key: string, value: any) {
 }
 
 // ─── Reference data: referential-integrity counters ───────────────────
+// All counters use head-count queries: the database counts, no rows ship.
 
 export async function countTicketsByBu(bu: string): Promise<number> {
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from('tickets')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('business_unit', bu)
     .eq('is_deleted', false);
-  if (error || !data) return 0;
-  return data.length;
+  if (error) return 0;
+  return count || 0;
 }
 
 export async function countTicketsByPartner(partner: string): Promise<number> {
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from('tickets')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('partner', partner)
     .eq('is_deleted', false);
-  if (error || !data) return 0;
-  return data.length;
+  if (error) return 0;
+  return count || 0;
 }
 
 export async function countTicketsByCategory(category: string): Promise<number> {
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from('tickets')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('category', category)
     .eq('is_deleted', false);
-  if (error || !data) return 0;
-  return data.length;
+  if (error) return 0;
+  return count || 0;
 }
 
 export async function countUsersByBu(bu: string): Promise<number> {
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from('users')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .eq('bu', bu);
-  if (error || !data) return 0;
-  return data.length;
+  if (error) return 0;
+  return count || 0;
 }
 
 export async function countActiveTicketsByCategoryAndPriority(category: string, priority: string): Promise<number> {
-  const { data, error } = await supabase
+  const { count, error } = await supabase
     .from('tickets')
-    .select('id')
+    .select('id', { count: 'exact', head: true })
     .ilike('category', category.trim())
     .ilike('priority', priority.trim())
     .eq('is_deleted', false);
-  if (error || !data) return 0;
-  return data.length;
+  if (error) return 0;
+  return count || 0;
 }
 
 export async function categoryExists(name: string): Promise<boolean> {

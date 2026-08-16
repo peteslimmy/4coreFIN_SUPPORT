@@ -245,7 +245,7 @@ export function createFakeSupabase(seed: TableStore) {
           error: null,
         }),
         updateUserById: async (id: string, attrs: any) => {
-          const row = (store.users || []).find((u: any) => u.id === id);
+          const row = (store.users || []).find((u: any) => u.id === id || u.auth_user_id === id);
           if (row) {
             if (attrs.email) row.email = attrs.email;
             if (attrs.password) row.password_plaintext = attrs.password;

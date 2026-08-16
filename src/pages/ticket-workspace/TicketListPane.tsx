@@ -97,9 +97,11 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
             <span className="text-[10px] text-text-muted">
               <strong className="text-text-primary">{filteredTickets.length}</strong> / {getScopedTickets(tickets).length}
             </span>
-            <button onClick={onNewTicket} className="flex items-center gap-1 px-2 py-1 bg-primary text-white rounded-md text-[10px] font-semibold hover:bg-primary-dark transition focus-ring shrink-0">
-              <Plus className="w-3 h-3" /> New
-            </button>
+            {onNewTicket && (
+              <button onClick={onNewTicket} className="flex items-center gap-1 px-2 py-1 bg-primary text-white rounded-md text-[10px] font-semibold hover:bg-primary-dark transition focus-ring shrink-0">
+                <Plus className="w-3 h-3" /> New
+              </button>
+            )}
           </div>
           {selectedTicketIds.size > 0 && (
             <div className="bg-surface rounded-lg p-2 flex items-center justify-between">
@@ -179,13 +181,13 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                      <StatusBadge status={t.status} size="sm" />
                    </div>
                    <div className="flex items-center gap-2">
-                     {slaBreached ? (
-                       <span className="bg-error/10 text-error font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-error/20 uppercase tracking-wider shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
-                     ) : slaAtRisk ? (
-                       <span className="bg-warning/10 text-warning font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-warning/20 uppercase tracking-wider shrink-0">At risk -{formatSlaDuration(start, now)}</span>
-                     ) : (
-                       <span className="bg-success/10 text-success font-bold text-[9px] px-1.5 py-0.5 rounded-full border border-success/20 uppercase tracking-wider shrink-0">{formatSlaDuration(now, deadlineMs)} left</span>
-                     )}
+{slaBreached ? (
+                        <span className="bg-error/10 text-error font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-error/20 shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
+                      ) : slaAtRisk ? (
+                        <span className="bg-warning/10 text-warning font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-warning/20 shrink-0">At risk -{formatSlaDuration(start, now)}</span>
+                      ) : (
+                        <span className="bg-success/10 text-success font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-success/20 shrink-0">{formatSlaDuration(now, deadlineMs)} left</span>
+                      )}
                    </div>
                  </div>
                  <div className="flex items-center justify-between gap-2">

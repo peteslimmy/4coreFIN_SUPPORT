@@ -7,6 +7,7 @@ export interface AuditEntry {
   ticketId: string | null;
   actor: string;
   role: string;
+  event?: string | null;
   action: string;
   details: string;
   hash?: string;
@@ -89,7 +90,7 @@ export type AuthUser = {
   phone?: string;
   tenantId?: string;
   mustChangePassword?: boolean; // set when a freshly-provisioned user must set their own password
-  partner_org_id?: number; // FK to partner_organizations; set when org model is wired
+  partnerOrgId?: number; // FK to partner_organizations (migration 044); set for PARTNER accounts
 };
 
 /**

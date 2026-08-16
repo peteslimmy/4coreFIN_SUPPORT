@@ -87,31 +87,10 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
   const [evidence, setEvidence] = useState<FileEvidence[]>([]);
   const [majorIncidents, setMajorIncidents] = useState<MajorIncidentRecord[]>([]);
 
-  // Initialize from localStorage only
-  useEffect(() => {
-    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        try {
-          setter(JSON.parse(raw));
-        } catch {
-          // If parsing fails, keep existing state
-        }
-      }
-    };
-    load('4c_tickets', (parsed: TicketRecord[]) => {
-      setTickets(parsed.map(t => ({
-        ...t,
-        partner: (t as TicketRecord & { provider?: string }).provider ?? (t as TicketRecord & { partner?: string }).partner ?? '',
-        submittedBy: (t as { submittedBy?: string }).submittedBy === 'PARTNER' ? 'CUSTOMER' : ((t as { submittedBy?: string }).submittedBy as 'BU_SUPPORT' | 'CUSTOMER' | undefined || 'BU_SUPPORT'),
-      })));
-    });
-    load('4c_comments', setComments);
-    load('4c_audit', setAuditLogs);
-    load('4c_major_incidents', setMajorIncidents);
-    load('4c_watcher_notifications', setWatcherNotifications);
-    load('4c_evidence', setEvidence);
-  }, []);
+  // Initial state is empty by design: the server bootstrap (hydrateFromBootstrap
+  // in AppContext) is the single hydration source. The localStorage preload was
+  // removed with the offline mirrors — it served stale/sensitive rows and
+  // duplicated what the network fetch replaces moments later.
 
   // Log Immutable audits with hash chain
   const logAuditAction = useCallback(async (ticketId: string | null, action: string, details: string) => {
@@ -149,12 +128,12 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       seen: false
     }));
     newNotifications.forEach(n => syncNotification(n));
-    setWatcherNotifications(prev => {
-      const updatedWN = [...newNotifications, ...prev];
-      saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents, updatedWN);
-      return updatedWN;
-    });
-  }, [tickets, comments, auditLogs, majorIncidents, saveToStorage]);
+    // Side effects stay OUT of the state updater: React StrictMode double-invokes
+    // updater functions, which previously duplicated the persistence writes.
+    const updatedWN = [...newNotifications, ...watcherNotifications];
+    setWatcherNotifications(updatedWN);
+    saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents, updatedWN);
+  }, [tickets, comments, auditLogs, majorIncidents, watcherNotifications, saveToStorage]);
 
   // Authoritative, rule-gated ticket lifecycle transition.
   const getAvailableTicketTransitions = useCallback(

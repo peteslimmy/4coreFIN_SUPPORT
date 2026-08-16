@@ -1,7 +1,28 @@
 import { SlaRule, HolidayRecord } from '../types/admin';
-import { TicketPriority } from '../types/app';
+import { TicketPriority, TicketStatus, type TicketRecord } from '../types/app';
 
 export type SlaSource = 'rule' | 'fallback';
+
+/** True while the ticket's SLA clock is paused (waiting on an external party). */
+export function isSlaPaused(ticket: Pick<TicketRecord, 'status' | 'slaPauseStartedAt'>): boolean {
+  if (ticket.status !== TicketStatus.WAITING_CUSTOMER
+    && ticket.status !== TicketStatus.WAITING_PARTNER
+    && ticket.status !== TicketStatus.WAITING_INTERNAL) return false;
+  return Boolean(ticket.slaPauseStartedAt);
+}
+
+/**
+ * The deadline the SLA clock is actually measured against: the base deadline
+ * shifted forward by all paused time (plus the ongoing pause when waiting).
+ */
+export function effectiveSlaDeadline(ticket: Pick<TicketRecord, 'slaDeadline' | 'slaPausedMs' | 'slaPauseStartedAt'> & { status?: TicketStatus }): Date {
+  const base = new Date(ticket.slaDeadline).getTime();
+  let pausedMs = ticket.slaPausedMs || 0;
+  if (ticket.slaPauseStartedAt) {
+    pausedMs += Math.max(0, Date.now() - new Date(ticket.slaPauseStartedAt).getTime());
+  }
+  return new Date(base + pausedMs);
+}
 
 export interface SlaDeadlineInfo {
   deadline: Date;
@@ -59,30 +80,138 @@ export function resolveSlaDuration(
   return { durationHours, source: 'fallback' };
 }
 
+// ─── Timezone-aware wall-clock helpers ─────────────────────────────────
+// Business hours are defined in the tenant's local timezone (tzName). Date
+// objects are UTC instants; converting to/from wall clock uses Intl so DST
+// transitions are handled by the runtime's tz database.
+
+interface WallClock {
+  year: number; month: number; day: number; // month is 1-based
+  hour: number; minute: number;
+  weekday: number; // 0 = Sunday … 6 = Saturday
+}
+
+const wallFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function getWallFormatter(tzName: string): Intl.DateTimeFormat {
+  let fmt = wallFormatters.get(tzName);
+  if (!fmt) {
+    fmt = new Intl.DateTimeFormat('en-US', {
+      timeZone: tzName,
+      weekday: 'short',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      hourCycle: 'h23',
+    });
+    wallFormatters.set(tzName, fmt);
+  }
+  return fmt;
+}
+
+/** The wall-clock time of a UTC instant inside tzName. */
+function zonedWallClock(date: Date, tzName: string): WallClock {
+  const parts = getWallFormatter(tzName).formatToParts(date);
+  const get = (type: string) => parts.find((p) => p.type === type)?.value ?? '';
+  const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  return {
+    year: Number(get('year')),
+    month: Number(get('month')),
+    day: Number(get('day')),
+    hour: Number(get('hour')) % 24,
+    minute: Number(get('minute')),
+    weekday: Math.max(0, weekdays.indexOf(get('weekday'))),
+  };
+}
+
+/** The UTC instant of a wall-clock time inside tzName (DST-safe to ±1h). */
+function wallClockToUtc(tzName: string, wall: WallClock, hour: number, minute: number): Date {
+  const guess = Date.UTC(wall.year, wall.month - 1, wall.day, hour, minute);
+  const asZoned = zonedWallClock(new Date(guess), tzName);
+  const asUtc = Date.UTC(asZoned.year, asZoned.month - 1, asZoned.day, asZoned.hour, asZoned.minute);
+  return new Date(guess - (asUtc - guess));
+}
+
+function parseHm(hm: string): { h: number; m: number } {
+  const [h, m] = hm.split(':').map(Number);
+  return { h: h || 0, m: m || 0 };
+}
+
+function nextDayOpen(tzName: string, wall: WallClock, openHm: string): Date {
+  const open = parseHm(openHm);
+  // Date.UTC normalizes month/day overflow, so day + 1 rolls over correctly.
+  const next = new Date(Date.UTC(wall.year, wall.month - 1, wall.day + 1, 12));
+  const nextWall = zonedWallClock(next, tzName);
+  return wallClockToUtc(tzName, nextWall, open.h, open.m);
+}
+
 /**
- * Check whether a time string (HH:MM) falls within the open->close business window.
+ * Consume `hours` of business time starting at `start`, in the tenant's
+ * timezone. Only time inside the [open, close) window on non-weekend,
+ * non-holiday days counts. Holidays and weekends simply contribute no
+ * business time — no synthetic 24h extensions.
  */
-function isWithinWindow(timeStr: string, open: string, close: string): boolean {
-  const [h, m] = timeStr.split(':').map(Number);
-  const total = h * 60 + m;
-  const [oh, om] = open.split(':').map(Number);
-  const [ch, cm] = close.split(':').map(Number);
-  const openMin = oh * 60 + om;
-  const closeMin = ch * 60 + cm;
-  return total >= openMin && total < closeMin;
+function addBusinessHours(
+  start: Date,
+  hours: number,
+  tzName: string,
+  openTime: string,
+  closeTime: string,
+  holidaySet: Set<string>
+): Date {
+  const open = parseHm(openTime);
+  const close = parseHm(closeTime);
+  const openMin = open.h * 60 + open.m;
+  const closeMin = close.h * 60 + close.m;
+  const pad = (n: number) => String(n).padStart(2, '0');
+
+  let cursor = new Date(start.getTime());
+  let remainingMs = hours * 3_600_000;
+  // Hard stop: even 48h over long holidays resolves in well under 1000 hops.
+  let guard = 0;
+
+  while (remainingMs > 0 && guard++ < 1000) {
+    const wall = zonedWallClock(cursor, tzName);
+    const dateStr = `${wall.year}-${pad(wall.month)}-${pad(wall.day)}`;
+    const isWeekend = wall.weekday === 0 || wall.weekday === 6;
+    const isHoliday = holidaySet.has(dateStr);
+
+    if (isWeekend || isHoliday) {
+      cursor = nextDayOpen(tzName, wall, openTime);
+      continue;
+    }
+
+    const curMin = wall.hour * 60 + wall.minute;
+    if (curMin < openMin) {
+      cursor = wallClockToUtc(tzName, wall, open.h, open.m);
+      continue;
+    }
+    if (curMin >= closeMin) {
+      cursor = nextDayOpen(tzName, wall, openTime);
+      continue;
+    }
+
+    const availableMs = (closeMin - curMin) * 60_000;
+    const consumeMs = Math.min(remainingMs, availableMs);
+    cursor = new Date(cursor.getTime() + consumeMs);
+    remainingMs -= consumeMs;
+    // Loop re-evaluates: at close-of-day it jumps to the next business open.
+  }
+
+  return cursor;
 }
 
 /**
  * Calculates a dynamic, holiday-aware SLA deadline.
- * 
+ *
  * When businessHoursConfig is supplied:
- *   - The deadline is computed by counting only hours that fall within the
- *     open->close window each day, in the tenant's IANA timezone (tzName).
- *   - Holidays (from the holidays array) extend the deadline by 24 hours each.
- *   - The weekend behavior is: if the final computed time falls on a weekend,
- *     it rolls forward to the next Monday (simple heuristic).
- * 
- * When businessHoursConfig is omitted, the existing 24/7 + holiday cascade
+ *   - The deadline is computed by consuming only hours that fall within the
+ *     open->close window, Monday-Friday, in the tenant's IANA timezone.
+ *   - Holidays (tenant-local dates) contribute no business time.
+ *
+ * When businessHoursConfig is omitted, the legacy 24/7 + holiday cascade
  * behavior is used (every hour counts, holidays extend by 24h).
  */
 export function computeSlaDeadline(
@@ -98,86 +227,8 @@ export function computeSlaDeadline(
   // ---------- Business-hours-aware path ----------
   if (businessHoursConfig) {
     const { tzName, openTime, closeTime } = businessHoursConfig;
-    let deadline = new Date(createdAt.getTime() + durationHours * 60 * 60 * 1000);
     const holidaySet = new Set(holidays.map(h => h.date));
-
-    // Helper: move a Date to the next business-hour open time in the given TZ
-    function nextBizOpen(date: Date): Date {
-      // In a full impl, consult per-tenant business_hours table.
-      // For now, use a fixed 09:00–17:00 window.
-      const base = new Date(date);
-      base.setHours(9, 0, 0, 0);
-      return base;
-    }
-
-    // Helper: add a number of business hours, respecting the window
-    function addBizHours(start: Date, hours: number): Date {
-      const tzDate = new Date(start.getTime());
-      let remaining = hours;
-      let cur = new Date(start.getTime());
-
-      while (remaining > 0) {
-        // Skip weekends: advance to Monday 09:00
-        const day = cur.getDay();
-        if (day === 0 || day === 6) { // Sun or Sat
-          cur = new Date(cur);
-          cur.setDate(cur.getDate() + (8 - day)); // days to Monday
-          cur.setHours(9, 0, 0, 0);
-          continue;
-        }
-
-        // Get current time in window
-        const curMin = cur.getHours() * 60 + cur.getMinutes();
-        const openMin = 9 * 60;   // 09:00
-        const closeMin = 17 * 60; // 17:00
-
-        if (curMin < openMin) {
-          cur.setHours(9, 0, 0, 0);
-        } else if (curMin >= closeMin) {
-          // After hours: jump to next day 09:00
-          cur = new Date(cur);
-          cur.setDate(cur.getDate() + 1);
-          cur.setHours(9, 0, 0, 0);
-        } else {
-          // Within window: consume remaining hours
-          const hoursThisWindow = closeMin - curMin;
-          const add = Math.min(remaining, hoursThisWindow);
-          cur = new Date(cur.getTime() + add * 60 * 60 * 1000);
-          remaining -= add;
-          if (remaining > 0) {
-            // Move to next day 09:00
-            cur = new Date(cur);
-            cur.setDate(cur.getDate() + 1);
-            cur.setHours(9, 0, 0, 0);
-          }
-        }
-      }
-      return cur;
-    }
-
-    // Apply holidays first: push deadline by 24h per holiday within range
-    let adjusted = true;
-    while (adjusted) {
-      adjusted = false;
-      const scanDate = new Date(createdAt);
-      while (scanDate <= deadline) {
-        const dStr = scanDate.toISOString().split('T')[0];
-        if (holidaySet.has(dStr)) {
-          deadline = new Date(deadline.getTime() + 24 * 60 * 60 * 1000);
-          adjusted = true;
-        }
-        scanDate.setDate(scanDate.getDate() + 1);
-      }
-    }
-
-    // Now apply business-hour counting on top of the holiday-adjusted deadline
-    deadline = addBizHours(deadline, durationHours);
-
-    // Weekend roll-forward (simple: if final deadline is Sat/Sun, move to Mon)
-    const finalDay = deadline.getDay();
-    if (finalDay === 0) { deadline = new Date(deadline); deadline.setDate(deadline.getDate() + 1); }
-    if (finalDay === 6) { deadline = new Date(deadline); deadline.setDate(deadline.getDate() + 2); }
-
+    const deadline = addBusinessHours(createdAt, durationHours, tzName, openTime, closeTime, holidaySet);
     return { deadline, source, durationHours, rule };
   }
 
@@ -185,14 +236,20 @@ export function computeSlaDeadline(
   let deadline = new Date(createdAt.getTime() + durationHours * 60 * 60 * 1000);
   const holidaySet = new Set(holidays.map(h => h.date));
 
+  // Each distinct holiday inside [createdAt, deadline] extends the deadline
+  // by 24h — exactly once. Without the applied-set this loops forever when a
+  // holiday falls on the creation date (the scan restarts at createdAt each
+  // pass and re-detects it indefinitely).
+  const applied = new Set<string>();
   let adjusted = true;
   while (adjusted) {
     adjusted = false;
     const scanDate = new Date(createdAt);
     while (scanDate <= deadline) {
       const dStr = scanDate.toISOString().split('T')[0];
-      if (holidaySet.has(dStr)) {
+      if (holidaySet.has(dStr) && !applied.has(dStr)) {
         deadline = new Date(deadline.getTime() + 24 * 60 * 60 * 1000);
+        applied.add(dStr);
         adjusted = true;
       }
       scanDate.setDate(scanDate.getDate() + 1);

@@ -2,8 +2,8 @@ import { Router, type Response } from 'express';
 import { randomBytes } from 'crypto';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
+import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
-import { appendAuditLog } from '../repository';
 import { registerDeliveryAttempt } from '../services/webhookDispatcher';
 import { dispatchWebhook } from '../services/webhookDispatcher';
 import { buildId } from '../lib/ids';
@@ -47,13 +47,7 @@ export function createWebhooksRouter(): Router {
       created_by: req.user!.id,
     });
     if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null,
-      actor: req.user!.name,
-      role: req.user!.role,
-      action: 'ADMIN_WEBHOOK_CREATED',
-      details: `Created webhook: ${name}`,
-    });
+    await audit({ event: 'WEBHOOK_CREATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.WEBHOOK_CREATED, details: `Created webhook: ${name}` });
     res.status(201).json({ id, name, url, events, is_active: true, tenant_id, secret });
   });
 
@@ -83,13 +77,7 @@ export function createWebhooksRouter(): Router {
     if (error) return res.status(500).json({ error: error.message });
     if (!data) return res.status(404).json({ error: 'Webhook not found' });
 
-    await appendAuditLog({
-      ticketId: null,
-      actor: req.user!.name,
-      role: req.user!.role,
-      action: 'ADMIN_WEBHOOK_UPDATED',
-      details: `Updated webhook ${req.params.id}: changed ${Object.keys(patch).join(', ')}`,
-    });
+    await audit({ event: 'WEBHOOK_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.WEBHOOK_UPDATED, details: `Updated webhook ${req.params.id}: changed ${Object.keys(patch).join(', ')}` });
     res.json(data);
   });
 
@@ -105,13 +93,7 @@ export function createWebhooksRouter(): Router {
 
 const { error } = await supabase.from('webhooks').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
-    await appendAuditLog({
-      ticketId: null,
-      actor: req.user!.name,
-      role: req.user!.role,
-      action: 'ADMIN_WEBHOOK_DELETED',
-      details: `Deleted webhook: ${name}`,
-    });
+    await audit({ event: 'WEBHOOK_DELETED', actor: req.user!.name, role: req.user!.role, action: AuditAction.WEBHOOK_DELETED, details: `Deleted webhook: ${name}` });
     res.json({ ok: true });
   });
 

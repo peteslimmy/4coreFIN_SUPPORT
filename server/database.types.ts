@@ -138,6 +138,7 @@ export interface Database {
           actor: string;
           role: string;
           action: string;
+          event: string | null;
           details: string;
           hash: string;
           previous_hash: string;
@@ -150,6 +151,7 @@ export interface Database {
           actor: string;
           role: string;
           action: string;
+          event?: string | null;
           details: string;
           hash: string;
           previous_hash?: string;

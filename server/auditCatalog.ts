@@ -1,0 +1,214 @@
+/**
+ * Typed audit action catalog.
+ *
+ * Every audit entry in the system should use one of these actions.
+ * Keeps the ledger sortable, prevents typos, and makes coverage measurable.
+ */
+
+export const AuditAction = {
+  // Tickets
+  TICKET_CREATED: 'TICKET_CREATED',
+  TICKET_UPDATED: 'TICKET_UPDATED',
+  TICKET_TRANSITION: 'TICKET_TRANSITION',
+  TICKET_FEEDBACK: 'TICKET_FEEDBACK',
+  TICKET_DELETED: 'TICKET_DELETED',
+  TICKET_ESCALATED: 'TICKET_ESCALATED',
+
+  // Comments
+  COMMENT_ADDED: 'COMMENT_ADDED',
+  COMMENT_UPDATED: 'COMMENT_UPDATED',
+  COMMENT_DELETED: 'COMMENT_DELETED',
+
+  // Announcements
+  ANNOUNCEMENT_POSTED: 'ANNOUNCEMENT_POSTED',
+
+  // Evidence
+  EVIDENCE_UPLOADED: 'EVIDENCE_UPLOADED',
+  EVIDENCE_DELETED: 'EVIDENCE_DELETED',
+
+  // Auth / Sessions
+  USER_LOGIN: 'USER_LOGIN',
+  USER_LOGOUT: 'USER_LOGOUT',
+  LOGIN_FAILED: 'LOGIN_FAILED',
+
+  // Users (admin)
+  USER_PROVISIONED: 'USER_PROVISIONED',
+  USER_INVITED: 'USER_INVITED',
+  USER_TEMP_PASSWORD_GENERATED: 'USER_TEMP_PASSWORD_GENERATED',
+  USER_UPDATED: 'USER_UPDATED',
+  USER_PROFILE_UPDATED: 'USER_PROFILE_UPDATED',
+  USER_ACTIVATED: 'USER_ACTIVATED',
+  USER_SUSPENDED: 'USER_SUSPENDED',
+  USER_PASSWORD_CHANGED: 'USER_PASSWORD_CHANGED',
+  USER_PASSWORD_RESET: 'USER_PASSWORD_RESET',
+  USER_DELETED: 'USER_DELETED',
+
+  // Customers
+  CUSTOMER_CREATED: 'CUSTOMER_CREATED',
+  CUSTOMER_UPDATED: 'CUSTOMER_UPDATED',
+  CUSTOMER_DELETED: 'CUSTOMER_DELETED',
+
+  // Major Incidents
+  MAJOR_INCIDENT_DECLARED: 'MAJOR_INCIDENT_DECLARED',
+  MAJOR_INCIDENT_STATUS: 'MAJOR_INCIDENT_STATUS',
+
+  // Config
+  CONFIG_UPDATED: 'CONFIG_UPDATED',
+  CONFIG_TABLE_UPDATED: 'CONFIG_TABLE_UPDATED',
+  FORM_CONFIG_UPDATED: 'FORM_CONFIG_UPDATED',
+  FORM_CONFIG_IMPORTED: 'FORM_CONFIG_IMPORTED',
+  ROLES_UPDATED: 'ROLES_UPDATED',
+  SETTINGS_UPDATED: 'SETTINGS_UPDATED',
+  BUSINESS_HOURS_UPDATED: 'BUSINESS_HOURS_UPDATED',
+  REFERENCE_KIND_CREATED: 'REFERENCE_KIND_CREATED',
+  REFERENCE_ITEM_CREATED: 'REFERENCE_ITEM_CREATED',
+  REFERENCE_ITEM_UPDATED: 'REFERENCE_ITEM_UPDATED',
+  REFERENCE_ITEM_DELETED: 'REFERENCE_ITEM_DELETED',
+  ADMIN_SETTINGS_UPDATED: 'ADMIN_SETTINGS_UPDATED',
+  ADMIN_BRANDING_UPLOADED: 'ADMIN_BRANDING_UPLOADED',
+  ADMIN_SMTP_TESTED: 'ADMIN_SMTP_TESTED',
+  ADMIN_API_KEY_CREATED: 'ADMIN_API_KEY_CREATED',
+  ADMIN_API_KEY_REVEALED: 'ADMIN_API_KEY_REVEALED',
+  ADMIN_API_KEY_DELETED: 'ADMIN_API_KEY_DELETED',
+
+  // Webhooks
+  WEBHOOK_CREATED: 'WEBHOOK_CREATED',
+  WEBHOOK_UPDATED: 'WEBHOOK_UPDATED',
+  WEBHOOK_DELETED: 'WEBHOOK_DELETED',
+  WEBHOOK_TESTED: 'WEBHOOK_TESTED',
+
+  // SLA monitor
+  SLA_BREACH_DETECTED: 'SLA_BREACH_DETECTED',
+
+  // Security
+  UNMASK_GRANTED: 'UNMASK_GRANTED',
+};
+
+export type AuditAction = typeof AuditAction[keyof typeof AuditAction];
+
+export function isAuditAction(value: string): value is AuditAction {
+  return Object.values(AuditAction).includes(value as AuditAction);
+}
+
+// Trust classification.
+// LOW_TRUST entries bypass the per-ticket sequence counter.
+
+export const AUDIT_META = {
+  LOW_TRUST: [
+    AuditAction.TICKET_CREATED,
+    AuditAction.TICKET_UPDATED,
+    AuditAction.TICKET_TRANSITION,
+    AuditAction.TICKET_FEEDBACK,
+    AuditAction.TICKET_DELETED,
+    AuditAction.TICKET_ESCALATED,
+    AuditAction.EVIDENCE_UPLOADED,
+    AuditAction.EVIDENCE_DELETED,
+    AuditAction.USER_LOGIN,
+    AuditAction.USER_LOGOUT,
+    AuditAction.LOGIN_FAILED,
+    AuditAction.USER_PROVISIONED,
+    AuditAction.USER_INVITED,
+    AuditAction.USER_TEMP_PASSWORD_GENERATED,
+    AuditAction.USER_UPDATED,
+    AuditAction.USER_PROFILE_UPDATED,
+    AuditAction.USER_ACTIVATED,
+    AuditAction.USER_SUSPENDED,
+    AuditAction.USER_PASSWORD_CHANGED,
+    AuditAction.USER_PASSWORD_RESET,
+    AuditAction.USER_DELETED,
+    AuditAction.CUSTOMER_CREATED,
+    AuditAction.CUSTOMER_UPDATED,
+    AuditAction.CUSTOMER_DELETED,
+    AuditAction.MAJOR_INCIDENT_DECLARED,
+    AuditAction.MAJOR_INCIDENT_STATUS,
+    AuditAction.CONFIG_UPDATED,
+    AuditAction.CONFIG_TABLE_UPDATED,
+    AuditAction.FORM_CONFIG_UPDATED,
+    AuditAction.FORM_CONFIG_IMPORTED,
+    AuditAction.ROLES_UPDATED,
+    AuditAction.SETTINGS_UPDATED,
+    AuditAction.BUSINESS_HOURS_UPDATED,
+    AuditAction.REFERENCE_KIND_CREATED,
+    AuditAction.REFERENCE_ITEM_CREATED,
+    AuditAction.REFERENCE_ITEM_UPDATED,
+    AuditAction.REFERENCE_ITEM_DELETED,
+    AuditAction.ADMIN_SETTINGS_UPDATED,
+    AuditAction.ADMIN_BRANDING_UPLOADED,
+    AuditAction.ADMIN_SMTP_TESTED,
+    AuditAction.ADMIN_API_KEY_CREATED,
+    AuditAction.ADMIN_API_KEY_REVEALED,
+    AuditAction.ADMIN_API_KEY_DELETED,
+    AuditAction.WEBHOOK_CREATED,
+    AuditAction.WEBHOOK_UPDATED,
+    AuditAction.WEBHOOK_DELETED,
+    AuditAction.WEBHOOK_TESTED,
+    AuditAction.SLA_BREACH_DETECTED,
+    AuditAction.UNMASK_GRANTED,
+  ],
+};
+
+// Event-field discriminator.
+export type AuditEventType = AuditAction | string;
+
+export interface AuditCatalogEntry {
+  action: AuditAction;
+  event: AuditEventType;
+  trust: 'FULL_TRUST' | 'LOW_TRUST';
+  lowTrustReason?: string;
+}
+
+export const AUDIT_CATALOG: Record<string, AuditCatalogEntry> = {
+  [AuditAction.TICKET_CREATED]:      { action: AuditAction.TICKET_CREATED,      event: 'TICKET_CREATED',      trust: 'FULL_TRUST' },
+  [AuditAction.TICKET_UPDATED]:      { action: AuditAction.TICKET_UPDATED,      event: 'TICKET_UPDATED',      trust: 'FULL_TRUST' },
+  [AuditAction.TICKET_TRANSITION]:   { action: AuditAction.TICKET_TRANSITION,   event: 'TICKET_TRANSITION',   trust: 'FULL_TRUST' },
+  [AuditAction.TICKET_FEEDBACK]:     { action: AuditAction.TICKET_FEEDBACK,     event: 'TICKET_FEEDBACK',     trust: 'FULL_TRUST' },
+  [AuditAction.TICKET_DELETED]:      { action: AuditAction.TICKET_DELETED,      event: 'TICKET_DELETED',      trust: 'FULL_TRUST' },
+  [AuditAction.TICKET_ESCALATED]:    { action: AuditAction.TICKET_ESCALATED,    event: 'TICKET_ESCALATED',    trust: 'FULL_TRUST' },
+  [AuditAction.COMMENT_ADDED]:       { action: AuditAction.COMMENT_ADDED,       event: 'COMMENT_ADDED',       trust: 'FULL_TRUST' },
+  [AuditAction.COMMENT_UPDATED]:     { action: AuditAction.COMMENT_UPDATED,     event: 'COMMENT_UPDATED',     trust: 'FULL_TRUST' },
+  [AuditAction.COMMENT_DELETED]:     { action: AuditAction.COMMENT_DELETED,     event: 'COMMENT_DELETED',     trust: 'FULL_TRUST' },
+  [AuditAction.EVIDENCE_UPLOADED]:   { action: AuditAction.EVIDENCE_UPLOADED,   event: 'EVIDENCE_UPLOADED',   trust: 'FULL_TRUST' },
+  [AuditAction.EVIDENCE_DELETED]:    { action: AuditAction.EVIDENCE_DELETED,    event: 'EVIDENCE_DELETED',    trust: 'FULL_TRUST' },
+  [AuditAction.USER_LOGIN]:          { action: AuditAction.USER_LOGIN,          event: 'USER_LOGIN',          trust: 'FULL_TRUST' },
+  [AuditAction.USER_LOGOUT]:         { action: AuditAction.USER_LOGOUT,         event: 'USER_LOGOUT',         trust: 'FULL_TRUST' },
+  [AuditAction.LOGIN_FAILED]:        { action: AuditAction.LOGIN_FAILED,        event: 'LOGIN_FAILED',        trust: 'FULL_TRUST' },
+  [AuditAction.USER_PROVISIONED]:    { action: AuditAction.USER_PROVISIONED,    event: 'USER_PROVISIONED',    trust: 'FULL_TRUST' },
+  [AuditAction.USER_INVITED]:        { action: AuditAction.USER_INVITED,        event: 'USER_INVITED',        trust: 'FULL_TRUST' },
+  [AuditAction.USER_TEMP_PASSWORD_GENERATED]: { action: AuditAction.USER_TEMP_PASSWORD_GENERATED, event: 'USER_TEMP_PASSWORD_GENERATED', trust: 'FULL_TRUST' },
+  [AuditAction.USER_UPDATED]:        { action: AuditAction.USER_UPDATED,        event: 'USER_UPDATED',        trust: 'FULL_TRUST' },
+  [AuditAction.USER_PROFILE_UPDATED]:{ action: AuditAction.USER_PROFILE_UPDATED,event: 'USER_PROFILE_UPDATED',trust: 'FULL_TRUST' },
+  [AuditAction.USER_ACTIVATED]:      { action: AuditAction.USER_ACTIVATED,      event: 'USER_ACTIVATED',      trust: 'FULL_TRUST' },
+  [AuditAction.USER_SUSPENDED]:      { action: AuditAction.USER_SUSPENDED,      event: 'USER_SUSPENDED',      trust: 'FULL_TRUST' },
+  [AuditAction.USER_PASSWORD_CHANGED]:{ action: AuditAction.USER_PASSWORD_CHANGED, event: 'USER_PASSWORD_CHANGED', trust: 'FULL_TRUST' },
+  [AuditAction.USER_PASSWORD_RESET]: { action: AuditAction.USER_PASSWORD_RESET, event: 'USER_PASSWORD_RESET', trust: 'FULL_TRUST' },
+  [AuditAction.USER_DELETED]:        { action: AuditAction.USER_DELETED,        event: 'USER_DELETED',        trust: 'FULL_TRUST' },
+  [AuditAction.CUSTOMER_CREATED]:    { action: AuditAction.CUSTOMER_CREATED,    event: 'CUSTOMER_CREATED',    trust: 'FULL_TRUST' },
+  [AuditAction.CUSTOMER_UPDATED]:    { action: AuditAction.CUSTOMER_UPDATED,    event: 'CUSTOMER_UPDATED',    trust: 'FULL_TRUST' },
+  [AuditAction.CUSTOMER_DELETED]:    { action: AuditAction.CUSTOMER_DELETED,    event: 'CUSTOMER_DELETED',    trust: 'FULL_TRUST' },
+  [AuditAction.MAJOR_INCIDENT_DECLARED]: { action: AuditAction.MAJOR_INCIDENT_DECLARED, event: 'MAJOR_INCIDENT_DECLARED', trust: 'FULL_TRUST' },
+  [AuditAction.MAJOR_INCIDENT_STATUS]:   { action: AuditAction.MAJOR_INCIDENT_STATUS,   event: 'MAJOR_INCIDENT_STATUS',   trust: 'FULL_TRUST' },
+  [AuditAction.CONFIG_UPDATED]:      { action: AuditAction.CONFIG_UPDATED,      event: 'CONFIG_UPDATED',      trust: 'FULL_TRUST' },
+  [AuditAction.CONFIG_TABLE_UPDATED]:{ action: AuditAction.CONFIG_TABLE_UPDATED,event: 'CONFIG_TABLE_UPDATED',trust: 'FULL_TRUST' },
+  [AuditAction.FORM_CONFIG_UPDATED]: { action: AuditAction.FORM_CONFIG_UPDATED, event: 'FORM_CONFIG_UPDATED', trust: 'FULL_TRUST' },
+  [AuditAction.FORM_CONFIG_IMPORTED]:{ action: AuditAction.FORM_CONFIG_IMPORTED,event:'FORM_CONFIG_IMPORTED', trust: 'FULL_TRUST' },
+  [AuditAction.ROLES_UPDATED]:       { action: AuditAction.ROLES_UPDATED,       event: 'ROLES_UPDATED',       trust: 'FULL_TRUST' },
+  [AuditAction.SETTINGS_UPDATED]:    { action: AuditAction.SETTINGS_UPDATED,    event: 'SETTINGS_UPDATED',    trust: 'FULL_TRUST' },
+  [AuditAction.BUSINESS_HOURS_UPDATED]: { action: AuditAction.BUSINESS_HOURS_UPDATED, event: 'BUSINESS_HOURS_UPDATED', trust: 'FULL_TRUST' },
+  [AuditAction.REFERENCE_KIND_CREATED]: { action: AuditAction.REFERENCE_KIND_CREATED, event: 'REFERENCE_KIND_CREATED', trust: 'FULL_TRUST' },
+  [AuditAction.REFERENCE_ITEM_CREATED]: { action: AuditAction.REFERENCE_ITEM_CREATED, event: 'REFERENCE_ITEM_CREATED', trust: 'FULL_TRUST' },
+  [AuditAction.REFERENCE_ITEM_UPDATED]: { action: AuditAction.REFERENCE_ITEM_UPDATED, event: 'REFERENCE_ITEM_UPDATED', trust: 'FULL_TRUST' },
+  [AuditAction.REFERENCE_ITEM_DELETED]: { action: AuditAction.REFERENCE_ITEM_DELETED, event: 'REFERENCE_ITEM_DELETED', trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_SETTINGS_UPDATED]: { action: AuditAction.ADMIN_SETTINGS_UPDATED, event: 'ADMIN_SETTING_UPDATED', trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_BRANDING_UPLOADED]: { action: AuditAction.ADMIN_BRANDING_UPLOADED, event: 'ADMIN_BRANDING_UPLOAD', trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_SMTP_TESTED]:    { action: AuditAction.ADMIN_SMTP_TESTED,    event: 'ADMIN_SMTP_TESTED',    trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_API_KEY_CREATED]:{ action: AuditAction.ADMIN_API_KEY_CREATED,event: 'ADMIN_API_KEY_CREATED', trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_API_KEY_REVEALED]:{ action: AuditAction.ADMIN_API_KEY_REVEALED, event: 'ADMIN_API_KEY_REVEALED', trust: 'FULL_TRUST' },
+  [AuditAction.ADMIN_API_KEY_DELETED]:{ action: AuditAction.ADMIN_API_KEY_DELETED, event: 'ADMIN_API_KEY_DELETED', trust: 'FULL_TRUST' },
+  [AuditAction.WEBHOOK_CREATED]:     { action: AuditAction.WEBHOOK_CREATED,     event: 'WEBHOOK_CREATED',     trust: 'FULL_TRUST' },
+  [AuditAction.WEBHOOK_UPDATED]:     { action: AuditAction.WEBHOOK_UPDATED,     event: 'WEBHOOK_UPDATED',     trust: 'FULL_TRUST' },
+  [AuditAction.WEBHOOK_DELETED]:     { action: AuditAction.WEBHOOK_DELETED,     event: 'WEBHOOK_DELETED',     trust: 'FULL_TRUST' },
+  [AuditAction.WEBHOOK_TESTED]:      { action: AuditAction.WEBHOOK_TESTED,      event: 'WEBHOOK_TESTED',      trust: 'FULL_TRUST' },
+  [AuditAction.SLA_BREACH_DETECTED]: { action: AuditAction.SLA_BREACH_DETECTED, event: 'SLA_BREACH_DETECTED', trust: 'FULL_TRUST' },
+  [AuditAction.ANNOUNCEMENT_POSTED]: { action: AuditAction.ANNOUNCEMENT_POSTED, event: 'ANNOUNCEMENT_POSTED', trust: 'FULL_TRUST' },
+  [AuditAction.UNMASK_GRANTED]:      { action: AuditAction.UNMASK_GRANTED,      event: 'UNMASK_GRANTED',      trust: 'FULL_TRUST' },
+};

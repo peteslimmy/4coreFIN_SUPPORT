@@ -4,7 +4,8 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { requireAdmin } from '../middleware/requireAdmin';
-import { listJsonTable, replaceJsonTable, getConfig, setConfig, appendAuditLog, listBusinessHours, upsertBusinessHours } from '../repository';
+import { listJsonTable, replaceJsonTable, getConfig, setConfig, listBusinessHours, upsertBusinessHours } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { DEFAULT_ROLES, getRoles } from '../rbac';
 import { getDefaultBuFormConfigs, mergeConfigs } from '../../src/lib/formConfigs';
 import { businessUnitNames } from '../../src/lib/buCodes';
@@ -33,12 +34,12 @@ export function createConfigRouter(): Router {
     const { name } = req.params;
     if (CONFIG_TABLES.includes(name)) {
       await replaceJsonTable(name, req.body);
-      await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'CONFIG_TABLE_UPDATED', details: `Updated config table ${name}` });
+      await audit({ event: 'CONFIG_TABLE_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_TABLE_UPDATED, details: `Updated config table ${name}` });
       return res.json(req.body);
     }
     if (CONFIG_KEYS.includes(name)) {
       await setConfig(name, req.body);
-      await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'CONFIG_UPDATED', details: `Updated config key ${name}` });
+      await audit({ event: 'CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_UPDATED, details: `Updated config key ${name}` });
       return res.json(req.body);
     }
     return res.status(404).json({ error: 'Unknown config name' });
@@ -97,7 +98,7 @@ export function createConfigRouter(): Router {
         ? allConfigs.map((c: any) => c.bu === targetBu ? merged : c)
         : [...allConfigs, merged];
       await setConfig('buFormConfigs', next);
-      await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'FORM_CONFIG_IMPORTED', details: 'Imported ' + merged.fields.length + ' fields for BU ' + targetBu + ' (' + fields.length + ' rows, +' + summary.added + ' new, ~' + summary.updated + ' updated).' });
+      await audit({ event: 'FORM_CONFIG_IMPORTED', actor: req.user!.name, role: req.user!.role, action: AuditAction.FORM_CONFIG_IMPORTED, details: 'Imported ' + merged.fields.length + ' fields for BU ' + targetBu + ' (' + fields.length + ' rows, +' + summary.added + ' new, ~' + summary.updated + ' updated).' });
       res.json({ success: true, config: merged, summary });
     } catch (e: any) {
       res.status(400).json({ error: (e.errors as any)?.map((x: any) => ((x.path || []).join('.') + ': ' + x.message)).join('; ') || e.message || 'Import failed' });
@@ -112,7 +113,7 @@ export function createConfigRouter(): Router {
 
   router.put('/roles', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res: Response) => {
     await setConfig('roles', req.body);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'ROLES_UPDATED', details: 'Roles config updated' });
+    await audit({ event: 'ROLES_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ROLES_UPDATED, details: 'Roles config updated' });
     res.json(req.body);
   });
 
@@ -123,7 +124,7 @@ export function createConfigRouter(): Router {
 
   router.put('/settings', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res: Response) => {
     await setConfig('settings', req.body);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'SETTINGS_UPDATED', details: 'Settings updated' });
+    await audit({ event: 'SETTINGS_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.SETTINGS_UPDATED, details: 'Settings updated' });
     res.json(req.body);
   });
 
@@ -144,7 +145,7 @@ export function createConfigRouter(): Router {
     const updated = { ...(existing.find((c: any) => c.bu === bu) ?? getDefaultBuFormConfigs().find((c: any) => c.bu === bu) ?? { bu, fields: [], version: 1 }), ...req.body, bu, updatedAt: new Date().toISOString(), updatedBy: req.user!.name };
     const next = existing.some((c: any) => c.bu === bu) ? existing.map((c: any) => c.bu === bu ? updated : c) : [...existing, updated];
     await setConfig('buFormConfigs', next);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'FORM_CONFIG_UPDATED', details: `Updated form config for BU ${bu}` });
+    await audit({ event: 'FORM_CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.FORM_CONFIG_UPDATED, details: `Updated form config for BU ${bu}` });
     res.json(updated);
   });
 
@@ -184,7 +185,7 @@ export function createConfigRouter(): Router {
 
   router.put('/business-units', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
     await setConfig('businessUnits', req.body);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'CONFIG_UPDATED', details: `Updated business units` });
+    await audit({ event: 'CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_UPDATED, details: `Updated business units` });
     res.json(req.body);
   });
 
@@ -235,7 +236,7 @@ export function createConfigRouter(): Router {
       is_active: d.isActive ?? true,
     }));
     await upsertBusinessHours(rows);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'BUSINESS_HOURS_UPDATED', details: `Updated business hours for tenant ${tenantId}` });
+    await audit({ event: 'BUSINESS_HOURS_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.BUSINESS_HOURS_UPDATED, details: `Updated business hours for tenant ${tenantId}` });
     const updated = await listBusinessHours(tenantId);
     res.json(updated);
   });

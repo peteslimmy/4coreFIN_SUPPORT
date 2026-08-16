@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { listCustomers, upsertCustomer, deleteCustomer, getScopedCustomer, countTicketsByCustomer, appendAuditLog } from '../repository';
+import { listCustomers, upsertCustomer, deleteCustomer, getScopedCustomer, countTicketsByCustomer } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { buildId } from '../lib/ids';
 
 export function createCustomersRouter(): Router {
@@ -31,6 +32,7 @@ export function createCustomersRouter(): Router {
       }
       throw e;
     }
+    await audit({ event: 'CUSTOMER_CREATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CUSTOMER_CREATED, details: `Customer ${entry.id} (${entry.email}) created` });
     res.status(201).json(entry);
   });
 
@@ -46,6 +48,7 @@ export function createCustomersRouter(): Router {
       }
       throw e;
     }
+    await audit({ event: 'CUSTOMER_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CUSTOMER_UPDATED, details: `Customer ${req.params.id} updated` });
     res.json({ ok: true });
   });
 
@@ -57,7 +60,7 @@ export function createCustomersRouter(): Router {
       return res.status(409).json({ error: `Customer is referenced by ${ticketCount} ticket(s)`, referencedBy: { tickets: ticketCount } });
     }
     await deleteCustomer(req.params.id);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'CUSTOMER_DELETED', details: `Customer ${req.params.id} deleted` });
+    await audit({ event: 'CUSTOMER_DELETED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CUSTOMER_DELETED, details: `Customer ${req.params.id} deleted` });
     res.json({ ok: true });
   });
 

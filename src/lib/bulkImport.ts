@@ -1,5 +1,4 @@
 import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
 import { api } from './api';
 import { syncReferenceCreate, syncReferenceUpdate } from './sync';
 import type { ReferenceKindDef } from '../types/reference';
@@ -212,10 +211,13 @@ export function parseCsvText(text: string): BulkParseResult {
   return result;
 }
 
-export function parseXlsxBuffer(buffer: ArrayBuffer): BulkParseResult {
+export async function parseXlsxBuffer(buffer: ArrayBuffer): Promise<BulkParseResult> {
   const result: BulkParseResult = { rows: [], errors: [] };
 
   try {
+    // xlsx is ~400 KB and only needed for spreadsheet imports — loaded on
+    // demand so CSV-only sessions never pay for it.
+    const XLSX = await import('xlsx');
     const wb = XLSX.read(buffer, { type: 'array' });
     const sheetName = wb.SheetNames[0];
     if (!sheetName) {
@@ -262,7 +264,7 @@ export async function parseUploadFile(file: File): Promise<BulkParseResult> {
     return parseCsvText(await file.text());
   }
   if (ext === 'xlsx' || ext === 'xls') {
-    return parseXlsxBuffer(await file.arrayBuffer());
+    return await parseXlsxBuffer(await file.arrayBuffer());
   }
   return {
     rows: [],

@@ -20,6 +20,7 @@ import type {
 } from '../types/admin';
 import type { BuFormConfig } from '../types/forms';
 import type { Permission, RoleDefinition } from '../types/rbac';
+import { ALL_PERMISSIONS, getRoles } from '../lib/rbac';
 import type { EscalationRule } from '../types/reference';
 import type { NotificationConfig } from '../context/ConfigContext';
 
@@ -119,7 +120,9 @@ export function useTransitionTicket(options?: UseMutationOptions<TicketRecord, E
  */
 export function useComments(ticketId: string, options?: UseQueryOptions<CommentRecord[]>) {
   return useQuery({
-    queryKey: queryKeys.comments.all(),
+    // Keyed by ticketId — a shared 'comments' key would serve one ticket's
+    // cached thread while viewing another.
+    queryKey: queryKeys.tickets.comments(ticketId),
     queryFn: () => api.listComments(ticketId),
     enabled: !!ticketId,
     ...options,
@@ -508,17 +511,22 @@ export function useGeminiAnalyze(options?: UseMutationOptions<unknown, Error, un
 }
 
 /**
- * RBAC hooks
+ * RBAC hooks — resolve the caller's permissions from the stored role
+ * definitions (server-persisted custom roles override the defaults).
  */
-export function usePermissions(_role: string): Permission[] {
-  // This would typically come from a query or context
-  // For now, return empty array - implement based on your RBAC system
-  return [];
+export function usePermissions(role?: string): Permission[] {
+  const { data: me } = useAuthMe();
+  const effectiveRole = role ?? (me?.user?.role as string | undefined);
+  const { data: storedRoles } = useRoles();
+  if (!effectiveRole) return [];
+  const roles = getRoles(storedRoles ?? []);
+  const definition = roles.find((r) => r.id === effectiveRole);
+  if (!definition) return [];
+  return definition.permissions === '*' ? ALL_PERMISSIONS : definition.permissions;
 }
 
-export function useHasPermission(_permission: Permission, _role?: string): boolean {
-  // Implement based on your RBAC system
-  return true;
+export function useHasPermission(permission: Permission, role?: string): boolean {
+  return usePermissions(role).includes(permission);
 }
 
 /**

@@ -166,7 +166,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
                 <p className="text-overline">SLA</p>
                 <div className="flex items-center justify-end gap-1.5">
                   <p className={`text-xs font-mono font-bold ${activeTicket.isEscalated ? 'text-error' : 'text-text-primary'}`}>{slaCountdown}</p>
-                  <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded-full border ${slaSource === 'rule' ? 'bg-primary-light/50 text-primary border-primary/25' : 'bg-warning-light text-warning border-warning/25'}`} title={slaSource === 'rule' ? 'Deadline set by a configured SLA category rule' : 'No category rule matched; using the priority fallback SLA'}>
+                  <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full border ${slaSource === 'rule' ? 'bg-primary-light/50 text-primary border-primary/25' : 'bg-warning-light text-warning border-warning/25'}`} title={slaSource === 'rule' ? 'Deadline set by a configured SLA category rule' : 'No category rule matched; using the priority fallback SLA'}>
                     {slaSource === 'rule' ? 'Rule' : 'Default'}
                   </span>
                 </div>
@@ -200,7 +200,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="bg-error/5 border-b border-error/15 px-5 py-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-error shrink-0" />
-                  <span className="text-xs font-bold text-error uppercase tracking-wider">{activeTicket.partner} Partner Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
+                  <span className="text-xs font-bold text-error">{activeTicket.partner} Partner Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
                 </div>
               </div>
             );

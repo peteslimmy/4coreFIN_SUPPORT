@@ -6,6 +6,8 @@ coverage/
 *.log
 .env*
 !.env.example
+!.env.test.example
+.claude/
 *credentials*
 *secrets*
 GEMINI_API_KEY.md

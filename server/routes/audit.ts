@@ -4,6 +4,7 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { appendAuditLog, listAuditLogs, listAuditLogsForVerification } from '../repository';
+import { AuditAction } from '../auditCatalog';
 import { verifyAuditChain } from '../compliance';
 
 export function createAuditRouter(): Router {
@@ -15,13 +16,14 @@ export function createAuditRouter(): Router {
     res.json(logs);
   });
 
-  router.post('/audit-log', requireAuth, requirePermission('audit:write'), validateBody(z.object({ ticketId: z.string().nullable().optional(), action: z.string().min(1), details: z.string().min(1) })), async (req: AuthedRequest, res: Response) => {
-    const { ticketId, action, details } = req.body as { ticketId?: string | null; action: string; details: string };
+  router.post('/audit-log', requireAuth, requirePermission('audit:write'), validateBody(z.object({ ticketId: z.string().nullable().optional(), action: z.string().min(1), event: z.string().min(1).optional(), details: z.string().min(1) })), async (req: AuthedRequest, res: Response) => {
+    const { ticketId, action, event, details } = req.body as { ticketId?: string | null; action: string; event?: string; details: string };
     const entry = await appendAuditLog({
       ticketId: ticketId || null,
       actor: req.user!.name,
       role: req.user!.role,
       action,
+      event: event ?? null,
       details,
     });
     res.status(201).json(entry);

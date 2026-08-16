@@ -1,5 +1,5 @@
-import { useState, useRef, type FormEvent, type ChangeEvent, type KeyboardEvent, useCallback } from 'react';
-import { Lock, Mail, Shield, ShieldCheck, AlertCircle, Check, X } from 'lucide-react';
+﻿import { useState, useRef, type FormEvent, type ChangeEvent, type KeyboardEvent, useCallback } from 'react';
+import { Lock, Mail, ShieldCheck, AlertCircle, Check, X } from 'lucide-react';
 import { useApp } from '../context/AppContext';
 import { useLocalStorage } from '../hooks/useLocalStorage';
 import { usePublicSettings } from '../hooks/useSettings';
@@ -94,8 +94,8 @@ export default function LoginPage() {
   return (
     <PageTransition>
       <div className="relative flex min-h-screen overflow-hidden bg-app">
-        {/* Brand panel — visible on md+ */}
-        <aside className="relative hidden overflow-hidden p-10 text-white md:flex md:w-1/2 md:flex-col md:justify-between lg:w-[55%] lg:p-14">
+        {/* Brand panel â€” visible on md+ */}
+        <aside className="relative hidden overflow-hidden p-10 text-white md:flex md:w-1/2 md:flex-col lg:w-[55%] lg:p-14">
           {/* Background: hero image, falling back to the brand gradient while loading/absent */}
           {imageLoading || !desktop ? (
             <div className="absolute inset-0 bg-gradient-to-br from-accent-dark via-accent to-accent-light" />
@@ -115,21 +115,10 @@ export default function LoginPage() {
             </>
           )}
           <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
-          <div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/5 blur-3xl" aria-hidden="true" />
+<div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/5 blur-3xl" aria-hidden="true" />
 
-          <header className="relative z-10 flex items-center gap-3">
-            <span className="flex h-11 w-11 items-center justify-center rounded-xl border border-white/25 bg-white/15 backdrop-blur-sm">
-              <Shield className="h-5 w-5 text-white" />
-            </span>
-            <span className="text-lg font-bold tracking-tight">{orgName} Support</span>
-          </header>
-
-          <div className="relative z-10 mx-auto max-w-md text-center">
-            <p className="text-caption font-semibold uppercase tracking-widest text-white/80">
-              FinTech Incident Control &amp; Payment Operations Intelligence
-            </p>
-            <h2 className="mt-3 text-3xl font-bold leading-tight lg:text-4xl">{orgName} Operations Hub</h2>
-            <p className="mt-3 text-sm text-white/85">
+          <div className="relative z-10 mx-auto max-w-md text-center mt-auto">
+            <p className="mt-3 text-sm text-white/85 whitespace-nowrap">
               Manage incidents, evidence, and compliance from one command center.
             </p>
             <ul className="mt-6 space-y-3">
@@ -144,7 +133,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <footer className="relative z-10 text-center text-xs text-white/70">
+<footer className="relative z-10 pt-10 text-center text-xs text-white/70">
             © {year} {orgName} Support. All rights reserved.
           </footer>
         </aside>
@@ -302,3 +291,5 @@ export default function LoginPage() {
     </PageTransition>
   );
 }
+
+

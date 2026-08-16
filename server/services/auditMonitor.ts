@@ -1,6 +1,6 @@
 import { supabase } from '../supabase';
 import { verifyAuditChain, type AuditEntry } from '../compliance';
-import { listAuditLogs } from '../repository';
+import { listAuditLogsForVerification } from '../repository';
 
 export interface AuditVerificationResult {
   valid: boolean;
@@ -17,11 +17,11 @@ export async function verifyAuditChainNow(businessUnit?: string): Promise<AuditV
     // Filter by tenant_id (BU mapping)
     const tenantId = await getTenantIdForBu(businessUnit);
     if (tenantId) {
-      const tenantLogs = await listAuditLogs(20000); // fetch page; in production use paginated + filtered
+      const tenantLogs = await listAuditLogsForVerification(); // fetch full chain; in production use paginated
       logs = tenantLogs.filter((l) => l.actor || l.ticketId);
     }
   } else {
-    logs = await listAuditLogs(20000);
+    logs = await listAuditLogsForVerification();
   }
 
   const result = verifyAuditChain(logs);

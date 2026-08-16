@@ -9,7 +9,7 @@ import { useToast } from '../hooks/useToast';
 import { api, hasSession, type BootstrapData } from '../lib/api';
 import { normalizeStatus } from '../lib/ticketStateMachine';
 import { connectEvents } from '../lib/api';
-import { db } from '../lib/db';
+
 import { clearAppData } from '../lib/db';
 import { queryClient, queryKeys } from '../lib/queryClient';
 import type { TransitionRule } from '../lib/ticketStateMachine';
@@ -118,82 +118,6 @@ export function useApp() {
   return ctx;
 }
 
-interface LatestState {
-  tickets: TicketRecord[];
-  comments: CommentRecord[];
-  auditLogs: AuditLog[];
-  majorIncidents: MajorIncidentRecord[];
-  watcherNotifications: WatcherNotification[];
-  users: UserRecord[];
-  slaRules: SlaRule[];
-  holidays: HolidayRecord[];
-  ticketTemplates: TicketTemplate[];
-  kbArticles: KbArticle[];
-  savedReplies: string[];
-  customers: CustomerRecord[];
-  businessUnits: string[];
-  businessUnitCodes: Record<string, string>;
-  partners: string[];
-  paymentChannels: string[];
-  categories: CategoryRecord[];
-  evidence: FileEvidence[];
-  buFormConfigs: BuFormConfig[];
-  ticketFormConfigs: TicketFormConfig[];
-  roles: RoleDefinition[];
-}
-
-interface PersistedState {
-  tickets?: TicketRecord[];
-  comments?: CommentRecord[];
-  auditLogs?: AuditLog[];
-  majorIncidents?: MajorIncidentRecord[];
-  watcherNotifications?: WatcherNotification[];
-  users?: UserRecord[];
-  slaRules?: SlaRule[];
-  holidays?: HolidayRecord[];
-  ticketTemplates?: TicketTemplate[];
-  kbArticles?: KbArticle[];
-  savedReplies?: string[];
-  customers?: CustomerRecord[];
-  businessUnits?: string[];
-  businessUnitCodes?: Record<string, string>;
-  partners?: string[];
-  paymentChannels?: string[];
-  categories?: CategoryRecord[];
-  evidence?: FileEvidence[];
-  buFormConfigs?: BuFormConfig[];
-  ticketFormConfigs?: TicketFormConfig[];
-  roles?: RoleDefinition[];
-}
-
-async function persistToDexie(state: PersistedState): Promise<void> {
-   try {
-     const writes: Promise<unknown>[] = [];
-     if (state.tickets) writes.push(db.tickets.bulkPut(state.tickets));
-     if (state.comments) writes.push(db.comments.bulkPut(state.comments));
-     if (state.auditLogs) writes.push(db.auditLogs.bulkPut(state.auditLogs));
-     if (state.majorIncidents) writes.push(db.majorIncidents.bulkPut(state.majorIncidents));
-     if (state.watcherNotifications) writes.push(db.watcherNotifications.bulkPut(state.watcherNotifications));
-     if (state.users) writes.push(db.users.bulkPut(state.users));
-     if (state.slaRules) writes.push(db.slaRules.bulkPut(state.slaRules));
-     if (state.holidays) writes.push(db.holidays.bulkPut(state.holidays));
-     if (state.ticketTemplates) writes.push(db.ticketTemplates.bulkPut(state.ticketTemplates));
-     if (state.kbArticles) writes.push(db.kbArticles.bulkPut(state.kbArticles));
-if (state.savedReplies) writes.push(db.savedReplies.bulkPut(state.savedReplies.map(s => ({ id: s }))));
-      if (state.customers) writes.push(db.customers.bulkPut(state.customers));
-      if (state.businessUnits) writes.push(db.businessUnits.bulkPut(state.businessUnits.map(s => ({ id: s }))));
-      if (state.partners) writes.push(db.partners.bulkPut(state.partners.map(s => ({ id: s }))));
-      if (state.paymentChannels) writes.push(db.paymentChannels.bulkPut(state.paymentChannels.map(s => ({ id: s }))));
-     if (state.categories) writes.push(db.categories.bulkPut(state.categories.map(c => ({ ...c, id: c.name }))));
-     if (state.evidence) writes.push(db.evidence.bulkPut(state.evidence));
-     if (state.buFormConfigs) writes.push(db.buFormConfigs.bulkPut(state.buFormConfigs));
-     if (state.ticketFormConfigs) writes.push(db.ticketFormConfigs.bulkPut(state.ticketFormConfigs));
-     if (state.roles) writes.push(db.roles.bulkPut(state.roles));
-     await Promise.all(writes);
-   } catch (error) {
-     console.warn('Failed to persist state to Dexie:', error);
-   }
- }
 
 /**
  * Seed the TanStack Query cache with bootstrap payload so domain hooks
@@ -246,127 +170,24 @@ function AppProviderInner({ children }: { children: ReactNode }) {
 
   const lastLocalUpdate = useRef<Record<string, number>>({});
 
-  // Snapshot of latest state across all domains. saveToStorage keeps a stable
-  // identity (empty deps) so dependent callbacks/effects don't re-fire on every
-  // render, while still reading the freshest persisted values.
-  const latestStateRef = useRef<LatestState>({
-    tickets: [], comments: [], auditLogs: [], majorIncidents: [], watcherNotifications: [],
-    users: admin.users, slaRules: admin.slaRules, holidays: admin.holidays,
-    ticketTemplates: admin.ticketTemplates, kbArticles: config.kbArticles,
-    savedReplies: config.savedReplies, customers: config.customers,
-    businessUnits: admin.businessUnits, partners: admin.partners,
-    businessUnitCodes: admin.businessUnitCodes, paymentChannels: admin.paymentChannels,
-    categories: admin.categories, evidence: [], buFormConfigs: config.buFormConfigs,
-    ticketFormConfigs: config.ticketFormConfigs, roles: config.roles,
-  });
-
-  const sanitizeTicket = (ticket: TicketRecord): TicketRecord => {
-    const sanitized = { ...ticket };
-    // Mask PII fields for client-side storage
-    if (sanitized.customerEmail) {
-      sanitized.customerEmail = sanitized.customerEmail.length > 2 
-        ? sanitized.customerEmail.substring(0, 2) + '***' + sanitized.customerEmail.split('@')[1]
-        : '***';
-    }
-    if (sanitized.customerPhone) {
-      sanitized.customerPhone = sanitized.customerPhone.length > 6 
-        ? sanitized.customerPhone.substring(0, 6) + '***'
-        : '***';
-    }
-    return sanitized;
-  };
-
+  // Retained for API compatibility with the many call sites threaded through
+  // the domain contexts; the server + React Query cache are the only sources
+  // of truth now. The per-mutation localStorage/IndexedDB mirrors were
+  // removed: they re-serialized every collection on every write, stored
+  // sensitive rows on shared machines, and exhausted the 5 MB quota as data
+  // grew.
   const saveToStorage = useCallback((
-    t?: TicketRecord[], c?: CommentRecord[], a?: AuditLog[], m?: MajorIncidentRecord[],
-    wn?: WatcherNotification[], uList?: UserRecord[], sRules?: SlaRule[],
-    hList?: HolidayRecord[], tTemplates?: TicketTemplate[], kArticles?: KbArticle[],
-    sReplies?: string[], cList?: CustomerRecord[],
-    buList?: string[], partList?: string[], catList?: CategoryRecord[],
-    eList?: FileEvidence[], fConfigs?: BuFormConfig[], rList?: RoleDefinition[],
+    _t?: TicketRecord[], _c?: CommentRecord[], _a?: AuditLog[], _m?: MajorIncidentRecord[],
+    _wn?: WatcherNotification[], _uList?: UserRecord[], _sRules?: SlaRule[],
+    _hList?: HolidayRecord[], _tTemplates?: TicketTemplate[], _kArticles?: KbArticle[],
+    _sReplies?: string[], _cList?: CustomerRecord[],
+    _buList?: string[], _partList?: string[], _catList?: CategoryRecord[],
+    _eList?: FileEvidence[], _fConfigs?: BuFormConfig[], _rList?: RoleDefinition[],
   ) => {
-    const latest = latestStateRef.current;
-    const sanitizedTickets = t !== undefined ? t.map(sanitizeTicket) : latest.tickets.map(sanitizeTicket);
-    localStorage.setItem('4c_tickets', JSON.stringify(sanitizedTickets));
-    localStorage.setItem('4c_comments', JSON.stringify(c !== undefined ? c : latest.comments));
-    localStorage.setItem('4c_audit', JSON.stringify(a !== undefined ? a : latest.auditLogs));
-    localStorage.setItem('4c_major_incidents', JSON.stringify(m !== undefined ? m : latest.majorIncidents));
-    localStorage.setItem('4c_watcher_notifications', JSON.stringify(wn !== undefined ? wn : latest.watcherNotifications));
-    const sanitizedUsers = uList !== undefined 
-      ? uList.map(u => (({ password_hash: _, ...rest }) => rest)(u as UserRecord & { password_hash?: string })) 
-      : latest.users.map(u => (({ password_hash: _, ...rest }) => rest)(u as UserRecord & { password_hash?: string }));
-    localStorage.setItem('4c_users', JSON.stringify(sanitizedUsers));
-    localStorage.setItem('4c_sla_rules', JSON.stringify(sRules !== undefined ? sRules : latest.slaRules));
-    localStorage.setItem('4c_holidays', JSON.stringify(hList !== undefined ? hList : latest.holidays));
-    localStorage.setItem('4c_ticket_templates', JSON.stringify(tTemplates !== undefined ? tTemplates : latest.ticketTemplates));
-    localStorage.setItem('4c_kb_articles', JSON.stringify(kArticles !== undefined ? kArticles : latest.kbArticles));
-    localStorage.setItem('4c_saved_replies', JSON.stringify(sReplies !== undefined ? sReplies : latest.savedReplies));
-    localStorage.setItem('4c_customers', JSON.stringify(cList !== undefined ? cList : latest.customers));
-    localStorage.setItem('4c_business_units', JSON.stringify(buList !== undefined ? buList : latest.businessUnits));
-    localStorage.setItem('4c_business_unit_codes', JSON.stringify(latest.businessUnitCodes));
-    localStorage.setItem('4c_partners', JSON.stringify(partList !== undefined ? partList : latest.partners));
-    localStorage.setItem('4c_payment_channels', JSON.stringify(latest.paymentChannels));
-    localStorage.setItem('4c_categories', JSON.stringify(catList !== undefined ? catList : latest.categories));
-    localStorage.setItem('4c_evidence', JSON.stringify(eList !== undefined ? eList : latest.evidence));
-    localStorage.setItem('4c_bu_form_configs', JSON.stringify(fConfigs !== undefined ? fConfigs : latest.buFormConfigs));
-    localStorage.setItem('4c_ticket_form_configs', JSON.stringify(latest.ticketFormConfigs));
-    localStorage.setItem('4c_roles', JSON.stringify(rList !== undefined ? rList : latest.roles));
-
-    // Mirror to IndexedDB for larger datasets / offline resilience.
-    void persistToDexie({
-      tickets: t !== undefined ? t : latest.tickets,
-      comments: c !== undefined ? c : latest.comments,
-      auditLogs: a !== undefined ? a : latest.auditLogs,
-      majorIncidents: m !== undefined ? m : latest.majorIncidents,
-      watcherNotifications: wn !== undefined ? wn : latest.watcherNotifications,
-      users: uList !== undefined ? uList : latest.users,
-      slaRules: sRules !== undefined ? sRules : latest.slaRules,
-      holidays: hList !== undefined ? hList : latest.holidays,
-      ticketTemplates: tTemplates !== undefined ? tTemplates : latest.ticketTemplates,
-      kbArticles: kArticles !== undefined ? kArticles : latest.kbArticles,
-      savedReplies: sReplies !== undefined ? sReplies : latest.savedReplies,
-      customers: cList !== undefined ? cList : latest.customers,
-      businessUnits: buList !== undefined ? buList : latest.businessUnits,
-      partners: partList !== undefined ? partList : latest.partners,
-      paymentChannels: latest.paymentChannels,
-      categories: catList !== undefined ? catList : latest.categories,
-      evidence: eList !== undefined ? eList : latest.evidence,
-      buFormConfigs: fConfigs !== undefined ? fConfigs : latest.buFormConfigs,
-      ticketFormConfigs: latest.ticketFormConfigs,
-      roles: rList !== undefined ? rList : latest.roles,
-    }).catch(() => {
-      // IndexedDB unavailable (private mode / quota) — localStorage already written.
-    });
+    // Intentional no-op.
   }, []);
 
   const ticket = useTicketDomain({ shell, admin, saveToStorage, showToast });
-
-  // Populate the latest-state snapshot with fresh values every render so that
-  // saveToStorage() (no args) persists the current state of every domain.
-  useEffect(() => {
-    latestStateRef.current = {
-      tickets: ticket.tickets,
-      comments: ticket.comments,
-      auditLogs: ticket.auditLogs,
-      majorIncidents: ticket.majorIncidents,
-      watcherNotifications: ticket.watcherNotifications,
-      users: admin.users,
-      slaRules: admin.slaRules,
-      holidays: admin.holidays,
-      ticketTemplates: admin.ticketTemplates,
-      kbArticles: config.kbArticles,
-      savedReplies: config.savedReplies,
-      customers: config.customers,
-      businessUnits: admin.businessUnits,
-      businessUnitCodes: admin.businessUnitCodes,
-      partners: admin.partners,
-      paymentChannels: admin.paymentChannels,
-      categories: admin.categories,
-      evidence: ticket.evidence,
-      buFormConfigs: config.buFormConfigs,
-      ticketFormConfigs: config.ticketFormConfigs,
-      roles: config.roles,
-    };
-  });
 
   const { logAuditAction, notifyWatchers, transitionTicket, handleCreateTicket } = ticket;
   const { tickets: ticketList, comments: commentList, setAuditLogs: setTicketAuditLogs } = ticket;
@@ -397,51 +218,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     if (data.roles) config.setRoles(getRoles(data.roles));
     if (data.evidence) ticket.setEvidence(data.evidence);
     if (data.notificationConfigs) config.setNotificationConfigs(data.notificationConfigs as NotificationConfig[]);
-    // Persist server state as the offline/refresh fallback
-    localStorage.setItem('4c_tickets', JSON.stringify(data.tickets || []));
-    localStorage.setItem('4c_comments', JSON.stringify(data.comments || []));
-    localStorage.setItem('4c_audit', JSON.stringify(data.auditLogs || []));
-    localStorage.setItem('4c_major_incidents', JSON.stringify(data.majorIncidents || []));
-    localStorage.setItem('4c_watcher_notifications', JSON.stringify(data.watcherNotifications || []));
-    localStorage.setItem('4c_users', JSON.stringify((data.users || []).map(normalizeUserRecord)));
-    localStorage.setItem('4c_sla_rules', JSON.stringify(data.slaRules || []));
-    localStorage.setItem('4c_holidays', JSON.stringify(data.holidays || []));
-    localStorage.setItem('4c_ticket_templates', JSON.stringify(data.ticketTemplates || []));
-    localStorage.setItem('4c_kb_articles', JSON.stringify(data.kbArticles || []));
-    localStorage.setItem('4c_roles', JSON.stringify(getRoles(data.roles) || []));
-    localStorage.setItem('4c_saved_replies', JSON.stringify(data.savedReplies || []));
-    localStorage.setItem('4c_customers', JSON.stringify(data.customers || []));
-    localStorage.setItem('4c_business_units', JSON.stringify(data.businessUnits || []));
-    localStorage.setItem('4c_business_unit_codes', JSON.stringify(data.businessUnitCodes || {}));
-    localStorage.setItem('4c_partners', JSON.stringify(data.partners || []));
-    localStorage.setItem('4c_payment_channels', JSON.stringify(data.paymentChannels || []));
-    localStorage.setItem('4c_categories', JSON.stringify(data.categories || []));
-    localStorage.setItem('4c_bu_form_configs', JSON.stringify(data.buFormConfigs || []));
-    localStorage.setItem('4c_evidence', JSON.stringify(data.evidence || []));
-    // Mirror to IndexedDB for offline resilience
-    void persistToDexie({
-      tickets: data.tickets,
-      comments: data.comments,
-      auditLogs: data.auditLogs,
-      majorIncidents: data.majorIncidents,
-      watcherNotifications: data.watcherNotifications,
-      users: data.users.map(normalizeUserRecord),
-      slaRules: data.slaRules,
-      holidays: data.holidays,
-      ticketTemplates: data.ticketTemplates,
-      kbArticles: data.kbArticles,
-      savedReplies: data.savedReplies,
-      customers: data.customers,
-      businessUnits: data.businessUnits,
-      partners: data.partners,
-      paymentChannels: data.paymentChannels,
-      categories: data.categories,
-      evidence: data.evidence,
-      buFormConfigs: data.buFormConfigs,
-      roles: getRoles(data.roles),
-    }).catch(() => {
-      // IndexedDB unavailable — localStorage fallback already written.
-    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -628,10 +404,8 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     return disconnect;
   }, [shell.isAuthenticated, showToast, shell.currentUser, ticket]);
 
-  // Persist state to localStorage whenever these values change
-  useEffect(() => {
-    saveToStorage();
-  }, [admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, config.kbArticles, config.savedReplies, config.customers, admin.businessUnits, admin.businessUnitCodes, admin.partners, admin.paymentChannels, admin.categories, ticket.evidence, config.buFormConfigs, config.roles, saveToStorage]);
+  // Persist state to localStorage whenever these values change — removed with
+  // the offline mirrors; the server is the source of truth on every load.
 
   const appContextValue: AppContextType = useMemo(() => ({
     isLoading: shell.isLoading,

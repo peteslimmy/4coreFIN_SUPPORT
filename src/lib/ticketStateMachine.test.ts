@@ -227,3 +227,48 @@ describe('ticketStateMachine', () => {
     expect(getAllTransitionBlockers(fullRcaTicket(), UserRole.PARTNER)).toHaveLength(0);
   });
 });
+
+describe('waiting-state lifecycle and SLA pause', () => {
+  const investigating = baseTicket({ status: TicketStatus.INVESTIGATE, assignedAgentId: 'agent-1' });
+
+  it('enters waiting states from INVESTIGATE and starts the pause clock', () => {
+    const before = Date.now();
+    const waiting = applyTransition(investigating, TicketStatus.WAITING_PARTNER, UserRole.BU_SUPPORT);
+    expect(waiting.status).toBe(TicketStatus.WAITING_PARTNER);
+    expect(waiting.slaPauseStartedAt).toBeTruthy();
+    expect(new Date(waiting.slaPauseStartedAt!).getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('accumulates paused time when the wait ends', async () => {
+    const started = new Date(Date.now() - 3600_000).toISOString(); // waited 1h
+    const waiting = { ...investigating, status: TicketStatus.WAITING_PARTNER, slaPauseStartedAt: started, slaPausedMs: 0 } as TicketRecord;
+    const resumed = applyTransition(waiting, TicketStatus.INVESTIGATE, UserRole.PARTNER);
+    expect(resumed.status).toBe(TicketStatus.INVESTIGATE);
+    expect(resumed.slaPauseStartedAt).toBeNull();
+    expect(resumed.slaPausedMs!).toBeGreaterThanOrEqual(3600_000);
+    expect(resumed.slaPausedMs!).toBeLessThan(3700_000);
+  });
+
+  it('partners can resume a WAITING_PARTNER ticket; customers cannot', () => {
+    const waiting = { ...investigating, status: TicketStatus.WAITING_PARTNER } as TicketRecord;
+    expect(getAvailableTransitions(waiting, UserRole.PARTNER).map(r => r.to)).toContain(TicketStatus.INVESTIGATE);
+    expect(getAvailableTransitions(waiting, UserRole.CUSTOMER as UserRole)).toEqual([]);
+  });
+
+  it('only BU agents can put a ticket on hold', () => {
+    expect(getAvailableTransitions(investigating, UserRole.BU_SUPPORT_L1).map(r => r.to)).toContain(TicketStatus.WAITING_CUSTOMER);
+    expect(getAvailableTransitions(investigating, UserRole.PARTNER).map(r => r.to)).not.toContain(TicketStatus.WAITING_CUSTOMER);
+  });
+
+  it('waiting states share the In Review progress step', () => {
+    expect(getTicketStatusStep(TicketStatus.WAITING_PARTNER)).toBe(getTicketStatusStep(TicketStatus.INVESTIGATE));
+    expect(getTicketStatusStep(TicketStatus.WAITING_CUSTOMER)).toBe(2);
+  });
+
+  it('tickets can be merged closed straight from a waiting state', () => {
+    const waiting = { ...investigating, status: TicketStatus.WAITING_INTERNAL, slaPauseStartedAt: new Date().toISOString() } as TicketRecord;
+    const merged = applyTransition(waiting, TicketStatus.CLOSED, UserRole.BU_SUPPORT_L3);
+    expect(merged.status).toBe(TicketStatus.CLOSED);
+    expect(merged.slaPauseStartedAt).toBeNull();
+  });
+});

@@ -5,6 +5,7 @@ import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { listComments, insertComment, updateComment, getScopedTicket, getScopedComment } from '../repository';
 import { buildId } from '../lib/ids';
+import { audit, AuditAction } from '../auditEvents';
 
 export function createCommentsRouter(): Router {
   const router = Router();
@@ -20,6 +21,7 @@ export function createCommentsRouter(): Router {
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     const entry = { ...c, id: typeof c.id === 'string' && c.id.trim() ? c.id : buildId('cmt'), timestamp: new Date().toISOString(), author: req.user!.name, role: req.user!.role, seen: false, seenBy: [] };
     await insertComment(entry);
+    await audit({ event: 'COMMENT_ADDED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_ADDED, details: `Comment ${entry.id} added to ticket ${c.ticketId}`, ticketId: c.ticketId });
     res.status(201).json(entry);
   });
 
@@ -28,6 +30,7 @@ export function createCommentsRouter(): Router {
     if (!existing) return res.status(404).json({ error: 'Comment not found' });
     const c = req.body;
     await updateComment({ ...c, id: req.params.id });
+    await audit({ event: 'COMMENT_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_UPDATED, details: `Comment ${req.params.id} updated`, ticketId: existing.ticket_id });
     res.json({ ok: true });
   });
 

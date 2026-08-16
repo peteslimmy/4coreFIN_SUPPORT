@@ -3,7 +3,10 @@ export enum TicketStatus {
   ASSIGNED = 'ASSIGNED',
   INVESTIGATE = 'INVESTIGATE',
   RESOLVED = 'RESOLVED',
-  CLOSED = 'CLOSED'
+  CLOSED = 'CLOSED',
+  WAITING_CUSTOMER = 'WAITING_CUSTOMER',
+  WAITING_PARTNER = 'WAITING_PARTNER',
+  WAITING_INTERNAL = 'WAITING_INTERNAL'
 }
 
 export enum TicketPriority {
@@ -41,6 +44,10 @@ export interface TicketRecord {
   description: string;
   createdAt: string;
   slaDeadline: string;
+  /** Accumulated SLA pause time (ms) across waiting episodes. */
+  slaPausedMs?: number;
+  /** Set while the ticket waits (WAITING_*); cleared on resume. */
+  slaPauseStartedAt?: string | null;
   isEscalated: boolean;
   escalationCount: number;
   assignedAgentId: string;
@@ -81,6 +88,9 @@ export interface CustomerRecord {
   notes?: string;
 }
 
+export const MAJOR_INCIDENT_STATUS_ORDER = ['DECLARED', 'INVESTIGATING', 'IDENTIFIED', 'MONITORING', 'RESOLVED', 'CLOSED'] as const;
+export type MajorIncidentStatus = typeof MAJOR_INCIDENT_STATUS_ORDER[number];
+
 export interface MajorIncidentRecord {
   id: string;
   name: string;
@@ -91,7 +101,18 @@ export interface MajorIncidentRecord {
   active: boolean;
   ticketCount: number;
   createdAt: string;
-  status: 'INVESTIGATING' | 'IDENTIFIED' | 'MITIGATED' | 'RESOLVED' | 'CLOSED';
+  status: MajorIncidentStatus | 'MITIGATED';
+  tenantId?: string;
+  owner?: { id?: string; name: string; role: string };
+  declaredBy?: { name: string; role: string };
+  affectedPartners?: string[];
+  affectedBus?: string[];
+  impact?: { description: string; customerCount?: string; amount?: string };
+  expectedRto?: string | null;
+  severityJustification?: string | null;
+  acknowledgedAt?: string | null;
+  resolvedAt?: string | null;
+  closedAt?: string | null;
   timeline: Array<{
     id: string;
     timestamp: string;
@@ -105,7 +126,8 @@ export interface MajorIncidentRecord {
     channel: string;
     recipient: string;
     subject: string;
-    status: 'SENT' | 'FAILED';
+    status: 'SENT' | 'FAILED' | 'QUEUED';
+    error?: string;
   }>;
   pir?: {
     rootCauseSummary: string;
@@ -125,6 +147,7 @@ export interface AuditLog {
   ticketId: string | null;
   actor: string;
   role: string;
+  event?: string | null;
   action: string;
   details: string;
   hash?: string;

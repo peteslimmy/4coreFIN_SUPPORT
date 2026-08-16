@@ -1,6 +1,5 @@
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useState, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, CategoryRecord } from '../types/admin';
-import { normalizeUserRecord } from '../lib/mention';
 
 export interface AdminDomain {
   users: UserRecord[];
@@ -40,85 +39,13 @@ const [users, setUsers] = useState<UserRecord[]>([]);
   const [slaRules, setSlaRules] = useState<SlaRule[]>([]);
   const [holidays, setHolidays] = useState<HolidayRecord[]>([]);
   const [ticketTemplates, setTicketTemplates] = useState<TicketTemplate[]>([]);
-  const [businessUnits, setBusinessUnits] = useState<string[]>(() => {
-    const buRaw = localStorage.getItem('4c_business_units');
-    if (buRaw !== null) {
-      try {
-        return JSON.parse(buRaw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return [];
-  });
-  const [partners, setPartners] = useState<string[]>(() => {
-    const provRaw = localStorage.getItem('4c_partners') ?? localStorage.getItem('4c_providers');
-    if (provRaw !== null) {
-      try {
-        return JSON.parse(provRaw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return [];
-  });
-  const [businessUnitCodes, setBusinessUnitCodes] = useState<Record<string, string>>(() => {
-    const raw = localStorage.getItem('4c_business_unit_codes');
-    if (raw !== null) {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return {};
-  });
-  const [paymentChannels, setPaymentChannels] = useState<string[]>(() => {
-    const raw = localStorage.getItem('4c_payment_channels');
-    if (raw !== null) {
-      try {
-        return JSON.parse(raw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return ['POS', 'Web', 'Mobile App', 'USSD', 'API'];
-  });
-  const [categories, setCategories] = useState<CategoryRecord[]>(() => {
-    const catRaw = localStorage.getItem('4c_categories');
-    if (catRaw !== null) {
-      try {
-        return JSON.parse(catRaw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return [];
-  });
-
-  // Initialize from localStorage only
-  useEffect(() => {
-    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        try {
-          const parsed = JSON.parse(raw);
-          setter((key === '4c_users' ? (parsed as unknown[]).map(normalizeUserRecord) : parsed) as T);
-        } catch {
-          // If parsing fails, keep existing state
-        }
-      }
-    };
-    load('4c_users', setUsers);
-    load('4c_sla_rules', setSlaRules);
-    load('4c_holidays', setHolidays);
-    load('4c_ticket_templates', setTicketTemplates);
-    load('4c_business_units', setBusinessUnits);
-    load('4c_partners', setPartners);
-    load('4c_payment_channels', setPaymentChannels);
-    load('4c_categories', setCategories);
-    load('4c_business_unit_codes', setBusinessUnitCodes);
-  }, []);
+  // Empty until the server bootstrap hydrates the app — the localStorage
+  // preloads were removed together with the offline mirrors.
+  const [businessUnits, setBusinessUnits] = useState<string[]>([]);
+  const [partners, setPartners] = useState<string[]>([]);
+  const [businessUnitCodes, setBusinessUnitCodes] = useState<Record<string, string>>({});
+  const [paymentChannels, setPaymentChannels] = useState<string[]>(['POS', 'Web', 'Mobile App', 'USSD', 'API']);
+  const [categories, setCategories] = useState<CategoryRecord[]>([]);
 
   const value: AdminDomain = useMemo(() => ({
     users, setUsers,

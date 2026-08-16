@@ -2,7 +2,8 @@ import { Router } from 'express';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, type AuthedRequest, hashPassword, supabaseSignIn, supabaseUpdateUser, findUserByEmail, findUserById } from '../auth';
 import { uploadFile } from '../services/storageService';
-import { appendAuditLog, upsertUser } from '../repository';
+import { upsertUser } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
 
 export function createProfileRouter(): Router {
@@ -60,10 +61,7 @@ export function createProfileRouter(): Router {
 
     if (error) return res.status(500).json({ error: error.message });
 
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'USER_PROFILE_UPDATED', details: `Profile updated by ${req.user!.name}`,
-    });
+    await audit({ event: 'USER_PROFILE_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_PROFILE_UPDATED, details: `Profile updated by ${req.user!.name}` });
     res.json({ ok: true });
   });
 
@@ -123,14 +121,21 @@ export function createProfileRouter(): Router {
     const current = await findUserById(req.user!.id);
     const newHash = hashPassword(newPassword);
     const update: any = { passwordHash: newHash, mustChangePassword: false };
+    // A pending-activation user completes their activation here: the temp
+    // password is replaced with their own, the one-time token is consumed, and
+    // the account flips to active. Legacy provisioned users (inactive, forced
+    // change, but no token) are treated the same so they don't regress to
+    // "Suspended" after choosing their password.
+    if (current?.activation_token || (current?.is_active === false && current?.must_change_password)) {
+      update.isActive = true;
+      update.activationToken = null;
+      update.activatedAt = new Date().toISOString();
+    }
     if (current?.auth_user_id) {
       await supabaseUpdateUser(current.auth_user_id, { password: newPassword });
     }
     await upsertUser({ id: req.user!.id, ...update });
-    await appendAuditLog({
-      ticketId: null, actor: req.user!.name, role: req.user!.role,
-      action: 'USER_PASSWORD_CHANGED', details: `Password changed by ${req.user!.name}`,
-    });
+    await audit({ event: 'USER_PASSWORD_CHANGED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_PASSWORD_CHANGED, details: `Password changed by ${req.user!.name}` });
     res.json({ ok: true });
   });
 
@@ -192,13 +197,7 @@ export function createProfileRouter(): Router {
         await upsertUser({ id: appUser.id, passwordHash: hashPassword(newPassword), mustChangePassword: false });
       }
 
-      await appendAuditLog({
-        ticketId: null,
-        actor: data.user.email || 'unknown',
-        role: 'SYSTEM',
-        action: 'PASSWORD_RESET',
-        details: `Password reset completed for user ${data.user.email}`,
-      });
+      await audit({ event: 'USER_PASSWORD_RESET', actor: data.user.email || 'unknown', role: 'SYSTEM', action: AuditAction.USER_PASSWORD_RESET, details: `Password reset completed for user ${data.user.email}` });
 
       res.json({ ok: true, message: 'Password reset successful' });
     } catch {

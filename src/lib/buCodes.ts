@@ -60,16 +60,16 @@ export function buCodeFor(name: string, raw: unknown[] | undefined | null): stri
   return hit ? hit.code : null;
 }
 
-/** Format a date as YYMMDD for ticket numbering (e.g. 260807). */
+/** Format a date as YYMMMDD for ticket numbering (e.g. 26AUG16). */
 export function yymmdd(date: Date = new Date()): string {
   const y = String(date.getFullYear()).slice(-2);
-  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const m = date.toLocaleString('en-US', { month: 'short' }).toUpperCase();
   const d = String(date.getDate()).padStart(2, '0');
   return `${y}${m}${d}`;
 }
 
 /**
- * Generate the next ticket id "BUCODE-yymmdd-NNN" for a business unit.
+ * Generate the next ticket id "BUCODE-YYMMMDD-NNN" for a business unit.
  * Falls back to the legacy `TKT-<ms>` format when the BU has no code, so
  * creation never blocks. `existingIds` lets callers compute the next sequence
  * number deterministically (supply the already-scoped ticket id list).

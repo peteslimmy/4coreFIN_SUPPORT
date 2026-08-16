@@ -13,6 +13,8 @@
     "format": "prettier --write \"src/**/*.{ts,tsx,css,json}\"",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:prepare": "tsx scripts/prepareTestDb.ts",
+    "test:reset": "tsx scripts/resetTestDb.ts",
     "test:e2e": "playwright test",
     "test:e2e:headed": "playwright test --headed",
     "test:a11y": "playwright test accessibility"

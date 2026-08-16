@@ -1,4 +1,4 @@
-import { jsPDF } from 'jspdf';
+import type { jsPDF } from 'jspdf';
 import { TicketStatus, type TicketRecord, type AuditLog } from '../types/app';
 import {
   computeTrendData,
@@ -90,12 +90,15 @@ function drawGauge(doc: jsPDF, cx: number, cy: number, r: number, pct: number, s
   doc.text(`${score}%`, cx, cy);
 }
 
-export function downloadExecutivePdfReport(
+export async function downloadExecutivePdfReport(
   tickets: TicketRecord[],
   partners: string[],
   businessUnits: string[],
   auditLogs?: AuditLog[]
 ) {
+  // jspdf (+html2canvas) is ~600 KB — loaded on demand only when an export
+  // is actually requested, keeping it out of every eager/admin chunk.
+  const { jsPDF } = await import('jspdf');
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const PAGE_W = 210;
   const PAGE_H = 297;

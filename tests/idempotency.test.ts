@@ -1,16 +1,11 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { AddressInfo } from 'net';
 import type { Server } from 'http';
-
-vi.mock('../server/supabase', () => {
-  const s = { from: () => { throw new Error('supabase not initialised in this test'); } };
-  return { supabase: s, supabaseAuth: s };
-});
 
 import express from 'express';
 import { supabase } from '../server/supabase';
 import { idempotencyMiddleware, hashBody } from '../server/middleware/idempotency';
-import { createFakeSupabase } from './helpers/fakeSupabase';
+import './helpers/conftest';
 
 let server: Server | undefined;
 let base: string;
@@ -26,7 +21,6 @@ app.post('/api/orders', (_req, res) => {
 
 beforeEach(async () => {
   hitCount = 0;
-  Object.assign(supabase, createFakeSupabase({ idempotency_keys: [] }));
   server = app.listen(0);
   await new Promise<void>((resolve) => server!.once('listening', resolve));
   base = `http://127.0.0.1:${(server!.address() as AddressInfo).port}/api`;
@@ -55,7 +49,6 @@ describe('Idempotency middleware — SEC-43 regression', () => {
     });
     expect(first.status).toBe(201);
     expect((await first.json()).hit).toBe(1);
-    console.log('T-STATUSES', 'first', first.status);
 
     await new Promise((r) => setTimeout(r, 20));
 
@@ -64,12 +57,10 @@ describe('Idempotency middleware — SEC-43 regression', () => {
       headers: { 'Idempotency-Key': 'key-1', 'Content-Type': 'application/json' },
       body,
     });
-    console.log('T-STATUSES', 'second', second.status)
     expect(second.status).toBe(201);
     expect((await second.json()).hit).toBe(1); // handler did NOT run again
 
     expect((await idempotencyRows()).length).toBe(1);
-    console.log('CACHED', JSON.stringify((await idempotencyRows())[0]?.response_status), JSON.stringify((await idempotencyRows())[0]?.request_hash));
   });
 
   it('returns 409 when the same key is reused with a different body', async () => {

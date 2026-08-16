@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Plus, Search, Pencil, Trash2, Building2, CreditCard, KeyRound, Check, Power } from 'lucide-react';
+import { Plus, Search, Pencil, Trash2, Building2, CreditCard, KeyRound, Check, Power, Wand2, Copy, MailPlus, Eye, EyeOff } from 'lucide-react';
 import { api, ApiError } from '../../lib/api';
 import { syncReferenceCreate, syncReferenceUpdate, syncReferenceDelete } from '../../lib/sync';
 import { useApp } from '../../context/AppContext';
@@ -71,6 +71,7 @@ function toUserRecord(row: Record<string, unknown>): UserRecord {
     accountType: String(row.accountType ?? (row.role === 'PARTNER' ? 'PARTNER' : 'BU')),
     phone: String(row.phone ?? ''),
     isActive: row.isActive === undefined ? true : Boolean(row.isActive),
+    activationPending: Boolean(row.activationPending),
   };
 }
 
@@ -86,6 +87,14 @@ export default function UserAccountsManager() {
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; label: string } | null>(null);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [copied, setCopied] = useState(false);
+  const [resentId, setResentId] = useState<string | null>(null);
+  // When the welcome email cannot be delivered (SMTP unconfigured/down), keep the
+  // temporary password so the admin can hand the credentials to the user manually.
+  const [inviteFallback, setInviteFallback] = useState<{ id: string; email: string; password: string } | null>(null);
+  const [fallbackPasswordVisible, setFallbackPasswordVisible] = useState(false);
+  const [fallbackCopied, setFallbackCopied] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -226,8 +235,13 @@ export default function UserAccountsManager() {
         showToast('User updated.', 'success');
       } else {
         payload.password = form.password;
-        await syncReferenceCreate('users', payload);
-        showToast('User created.', 'success');
+        const created = (await syncReferenceCreate('users', payload)) as Record<string, unknown>;
+        if (created?.invitationSent === false) {
+          setInviteFallback({ id: String(created.id ?? ''), email: String(created.email ?? ''), password: form.password });
+          showToast('User created, but the welcome email could not be sent (check SMTP settings).', 'warning');
+        } else {
+          showToast('User created. Welcome email sent to the user.', 'success');
+        }
       }
       setForm(emptyWizard);
       await load();
@@ -236,6 +250,75 @@ export default function UserAccountsManager() {
       setFormError(message || 'Save failed');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const generatePassword = async () => {
+    setFormError(null);
+    try {
+      const { password } = await api.generateTempPassword();
+      setField('password', password);
+      setCopied(false);
+    } catch (e) {
+      setFormError((e as Error).message || 'Failed to generate a password');
+    }
+  };
+
+  const copyPassword = async () => {
+    if (!form.password) return;
+    try {
+      await navigator.clipboard.writeText(form.password);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1600);
+    } catch {
+      setFormError('Could not copy to clipboard');
+    }
+  };
+
+  const resendInvite = async (u: UserRecord) => {
+    setResentId(u.id);
+    try {
+      const result = await api.resendUserInvite(u.id);
+      if (result?.invitationSent === false) {
+        setInviteFallback({ id: u.id, email: u.email, password: String(result?.tempPassword ?? '') });
+        showToast('Welcome email could not be sent (check SMTP settings).', 'warning');
+      } else {
+        showToast('Welcome email re-sent with a new temporary password.', 'success');
+      }
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to resend the welcome email', 'error');
+    } finally {
+      setResentId(null);
+    }
+  };
+
+  const copyFallbackPassword = async () => {
+    if (!inviteFallback?.password) return;
+    try {
+      await navigator.clipboard.writeText(inviteFallback.password);
+      setFallbackCopied(true);
+      setTimeout(() => setFallbackCopied(false), 1600);
+    } catch {
+      showToast('Could not copy to clipboard', 'error');
+    }
+  };
+
+  const resendFromFallback = async () => {
+    if (!inviteFallback) return;
+    setResentId(inviteFallback.id);
+    try {
+      const result = await api.resendUserInvite(inviteFallback.id);
+      if (result?.invitationSent === false) {
+        setInviteFallback({ id: inviteFallback.id, email: inviteFallback.email, password: String(result?.tempPassword ?? inviteFallback.password) });
+        showToast('Welcome email could not be sent (check SMTP settings).', 'warning');
+      } else {
+        setInviteFallback(null);
+        showToast('Welcome email re-sent with a new temporary password.', 'success');
+      }
+    } catch (e) {
+      showToast((e as Error).message || 'Failed to resend the welcome email', 'error');
+    } finally {
+      setResentId(null);
     }
   };
 
@@ -337,19 +420,26 @@ export default function UserAccountsManager() {
                   <span className="text-xs font-mono text-text-secondary">{u.role}</span>
                 </td>
                 <td className="px-4 py-3">
-                  <span
-                    className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
-                      u.isActive === false ? 'bg-error-light text-error' : 'bg-success-light text-success'
-                    }`}
-                  >
-                    <span className={`w-1.5 h-1.5 rounded-full ${u.isActive === false ? 'bg-error' : 'bg-success'}`} />
-                    {u.isActive === false ? 'Suspended' : 'Active'}
-                  </span>
+                  {u.activationPending ? (
+                    <span className="inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-warning/10 text-warning">
+                      <span className="w-1.5 h-1.5 rounded-full bg-warning animate-pulse" />
+                      Pending Activation
+                    </span>
+                  ) : (
+                    <span
+                      className={`inline-flex items-center gap-1.5 text-[10px] font-bold uppercase px-2 py-0.5 rounded-full ${
+                        u.isActive === false ? 'bg-error-light text-error' : 'bg-success-light text-success'
+                      }`}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${u.isActive === false ? 'bg-error' : 'bg-success'}`} />
+                      {u.isActive === false ? 'Suspended' : 'Active'}
+                    </span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-text-secondary">{u.accountType === 'PARTNER' ? u.partner : u.bu}</td>
                 <td className="px-4 py-3">
                   <div className="flex justify-end gap-1">
-                    {isSuperAdmin && (
+                    {isSuperAdmin && !u.activationPending && (
                       <button
                         onClick={() => toggleActive(u)}
                         className={`p-1.5 rounded-md transition-colors focus-ring ${
@@ -359,6 +449,17 @@ export default function UserAccountsManager() {
                         title={u.isActive === false ? 'Activate user' : 'Suspend user'}
                       >
                         <Power className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isSuperAdmin && u.activationPending && (
+                      <button
+                        onClick={() => resendInvite(u)}
+                        disabled={resentId === u.id}
+                        className="p-1.5 rounded-md text-text-muted hover:text-accent hover:bg-accent/10 transition-colors focus-ring disabled:opacity-50"
+                        aria-label="Resend welcome email"
+                        title="Resend welcome email with a new temporary password"
+                      >
+                        {resentId === u.id ? <span className="block w-4 h-4 border-2 border-accent/30 border-t-accent rounded-full animate-spin" /> : <MailPlus className="w-4 h-4" />}
                       </button>
                     )}
                     <button
@@ -504,14 +605,36 @@ export default function UserAccountsManager() {
               <Input label="Email" type="email" required value={form.email} onChange={(e) => setField('email', e.target.value)} />
               <Input label="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
               <div className="sm:col-span-2">
-                <Input
-                  label={isEditing ? 'New password (only if resetting)' : 'Initial password'}
-                  type="password"
-                  required={!isEditing}
-                  value={form.password}
-                  onChange={(e) => setField('password', e.target.value)}
-                  helperText={isEditing ? 'Leave blank to keep the current password. Min 6 characters.' : 'Min 6 characters. The user must change it on first login.'}
-                />
+                <label className="block text-caption font-medium text-text-secondary mb-1">
+                  {isEditing ? 'New password (only if resetting)' : 'Initial password'}
+                </label>
+                <div className="relative">
+                  <input
+                    type={passwordVisible ? 'text' : 'password'}
+                    value={form.password}
+                    onChange={(e) => setField('password', e.target.value)}
+                    placeholder={isEditing ? 'Leave blank to keep the current password' : 'Type a password or generate one'}
+                    className="w-full bg-surface border border-border rounded-lg pl-3 pr-24 py-2.5 text-sm text-text-primary placeholder:text-text-muted focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all focus-ring"
+                  />
+                  <div className="absolute right-1 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    {form.password && (
+                      <>
+                        <button type="button" onClick={() => setPasswordVisible(v => !v)} className="p-1.5 rounded text-text-muted hover:text-text-secondary transition" aria-label={passwordVisible ? 'Hide password' : 'Show password'}>
+                          {passwordVisible ? <span className="text-[10px] font-bold">HIDE</span> : <span className="text-[10px] font-bold">SHOW</span>}
+                        </button>
+                        <button type="button" onClick={copyPassword} className="p-1.5 rounded text-text-muted hover:text-text-secondary transition" aria-label="Copy password">
+                          <Copy className={`w-3.5 h-3.5 ${copied ? 'text-success' : ''}`} />
+                        </button>
+                      </>
+                    )}
+                    <button type="button" onClick={generatePassword} className="p-1.5 rounded flex items-center gap-1 text-[10px] font-bold text-accent hover:bg-accent/10 transition" aria-label="Generate temporary password">
+                      <Wand2 className="w-3.5 h-3.5" /> Generate
+                    </button>
+                  </div>
+                </div>
+                <p className="text-caption text-text-muted mt-1">
+                  {isEditing ? 'Leave blank to keep the current password. Min 6 characters.' : 'Min 6 characters. A temporary password — the user must change it on first login.'}
+                </p>
               </div>
             </div>
           </div>
@@ -532,6 +655,51 @@ export default function UserAccountsManager() {
       {deleteError && (
         <Modal open={!!deleteError} onClose={() => setDeleteError(null)} title="Cannot delete" size="sm">
           <p className="text-sm text-text-muted">{deleteError}</p>
+        </Modal>
+      )}
+
+      {inviteFallback && (
+        <Modal
+          open={!!inviteFallback}
+          onClose={() => setInviteFallback(null)}
+          title="User created — share credentials"
+          size="md"
+          footer={
+            <div className="flex justify-end gap-3 w-full">
+              <Button variant="secondary" size="md" onClick={() => setInviteFallback(null)}>
+                Done
+              </Button>
+              <Button size="md" onClick={resendFromFallback} loading={resentId === inviteFallback.id}>
+                Resend Welcome Email
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-text-muted">
+              The welcome email could not be sent because SMTP is not configured (or is unreachable).
+              Share these sign-in credentials with the user, or configure SMTP and resend the email.
+            </p>
+            <div className="bg-surface rounded-lg border border-border p-3 space-y-2 text-sm">
+              <p className="text-overline text-text-muted font-bold uppercase">Sign-in email</p>
+              <p className="font-semibold text-text-primary break-all">{inviteFallback.email}</p>
+              <div className="border-t border-border pt-2 flex items-center justify-between">
+                <p className="text-overline text-text-muted font-bold uppercase">Temporary password</p>
+                <div className="flex items-center gap-1">
+                  <button type="button" onClick={() => setFallbackPasswordVisible(v => !v)} className="p-1.5 rounded text-text-muted hover:text-text-secondary transition" aria-label={fallbackPasswordVisible ? 'Hide password' : 'Show password'}>
+                    {fallbackPasswordVisible ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  </button>
+                  <button type="button" onClick={copyFallbackPassword} className="p-1.5 rounded text-text-muted hover:text-text-secondary transition" aria-label="Copy password">
+                    <Copy className={`w-3.5 h-3.5 ${fallbackCopied ? 'text-success' : ''}`} />
+                  </button>
+                </div>
+              </div>
+              <p className="font-mono font-bold text-text-primary tracking-wide">{fallbackPasswordVisible ? inviteFallback.password : '••••••••••••'}</p>
+            </div>
+            <p className="text-caption text-text-muted">
+              The user must change this password on first sign-in. It is only shown once — copy it before closing.
+            </p>
+          </div>
         </Modal>
       )}
     </div>

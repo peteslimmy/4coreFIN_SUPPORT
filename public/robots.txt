@@ -1,0 +1,9 @@
+User-agent: *
+Allow: /$
+Allow: /privacy-policy
+Disallow: /auth/
+Disallow: /api/
+Disallow: /reset-password
+
+# All authenticated application routes are behind a session; only the public
+# landing page and privacy policy are indexable.

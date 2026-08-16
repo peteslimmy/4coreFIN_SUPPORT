@@ -4,7 +4,7 @@ export const ALL_PERMISSIONS: Permission[] = [
   'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:resolve',
   'tickets:delete', 'tickets:escalate', 'tickets:merge', 'tickets:unmask', 'tickets:assign',
   'comments:view', 'comments:create', 'comments:internal',
-  'major-incidents:manage', 'customers:manage', 'notifications:view',
+  'major-incidents:manage', 'major-incidents:declare', 'customers:manage', 'notifications:view',
   'audit:view', 'audit:verify', 'reports:view', 'executive:dashboard',
   'partner:rca', 'admin:config', 'admin:users', 'admin:forms', 'admin:access',
   'admin:branding', 'admin:landing_page', 'admin:sla',
@@ -39,6 +39,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
     group: 'Operations',
     permissions: [
       { id: 'major-incidents:manage', label: 'Manage major incidents' },
+      { id: 'major-incidents:declare', label: 'Declare major incidents' },
       { id: 'customers:manage', label: 'Manage customers' },
       { id: 'partner:rca', label: 'Submit root cause analysis' },
     ],
@@ -84,12 +85,35 @@ export function isGlobalRole(role: string | undefined | null): boolean {
   return role === 'SUPER_ADMIN' || role === 'EXECUTIVE';
 }
 
-export const BU_SUPPORT_PERMISSIONS: Permission[] = [
+/**
+ * Tiered BU support permissions — mirrors server/rbac.ts exactly.
+ *   L1 — frontline handling only (no escalation, merge, unmask, delete, admin)
+ *   L2 — + escalation, merge, PII unmask, major-incident declaration
+ *   L3 — + ticket deletion, config administration, audit writing
+ * Legacy BU_SUPPORT keeps the full pre-tier set (migration safety).
+ */
+export const BU_SUPPORT_BASE_PERMISSIONS: Permission[] = [
   'tickets:view', 'tickets:create', 'tickets:edit', 'tickets:resolve',
-  'tickets:delete', 'tickets:escalate', 'tickets:merge', 'tickets:unmask', 'tickets:assign',
+  'tickets:assign',
   'comments:view', 'comments:create', 'comments:internal',
   'major-incidents:manage', 'customers:manage', 'notifications:view',
-  'audit:view', 'reports:view', 'admin:config', 'users:view',
+  'audit:view', 'reports:view', 'users:view',
+];
+
+export const BU_SUPPORT_L2_PERMISSIONS: Permission[] = [
+  ...BU_SUPPORT_BASE_PERMISSIONS,
+  'tickets:escalate', 'tickets:merge', 'tickets:unmask',
+  'major-incidents:declare',
+];
+
+export const BU_SUPPORT_L3_PERMISSIONS: Permission[] = [
+  ...BU_SUPPORT_L2_PERMISSIONS,
+  'tickets:delete', 'admin:config', 'audit:write',
+];
+
+/** Legacy flat role: the union the platform granted before tiers existed. */
+export const BU_SUPPORT_PERMISSIONS: Permission[] = [
+  ...BU_SUPPORT_L3_PERMISSIONS,
 ];
 
 export const DEFAULT_ROLES: RoleDefinition[] = [
@@ -104,26 +128,26 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
   {
     id: 'BU_SUPPORT_L1',
     name: 'Business Unit Support — Level 1',
-    description: 'First-line BU agent. Files and tracks tickets for the assigned business unit, escalates to the payment partner domain within the ticket.',
+    description: 'First-line BU agent. Files and tracks tickets for the assigned business unit; escalates up to L2/L3 rather than handling escalations directly.',
     isSystem: true,
     buScoped: true,
-    permissions: [...BU_SUPPORT_PERMISSIONS],
+    permissions: [...BU_SUPPORT_BASE_PERMISSIONS],
   },
   {
     id: 'BU_SUPPORT_L2',
     name: 'Business Unit Support — Level 2',
-    description: 'Senior BU agent. Level-2 escalation target within the business unit; broader handling of escalated tickets for the assigned business unit.',
+    description: 'Senior BU agent. Escalates and merges tickets, unmasks PII, and declares major incidents for the assigned business unit.',
     isSystem: true,
     buScoped: true,
-    permissions: [...BU_SUPPORT_PERMISSIONS],
+    permissions: [...BU_SUPPORT_L2_PERMISSIONS],
   },
   {
     id: 'BU_SUPPORT_L3',
     name: 'Business Unit Support — Level 3',
-    description: 'Lead BU agent. Final BU-side escalation tier; owns escalated tickets for the assigned business unit.',
+    description: 'Lead BU agent. Final BU-side escalation tier: owns escalated tickets, deletes/archives tickets, and administers reference configuration.',
     isSystem: true,
     buScoped: true,
-    permissions: [...BU_SUPPORT_PERMISSIONS],
+    permissions: [...BU_SUPPORT_L3_PERMISSIONS],
   },
   {
     id: 'BU_SUPPORT',
@@ -150,7 +174,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     description: 'Handles assigned tickets and submits root cause analyses.',
     isSystem: true,
     buScoped: true,
-    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'partner:rca'],
+    permissions: ['tickets:view', 'tickets:edit', 'comments:view', 'comments:create', 'partner:rca', 'major-incidents:manage', 'major-incidents:declare'],
   },
   {
     id: 'CUSTOMER',
@@ -179,6 +203,14 @@ export function hasPermission(role: RoleDefinition | undefined, permission: Perm
   if (!role) return false;
   if (role.permissions === '*') return true;
   return role.permissions.includes(permission);
+}
+
+export function hasPermissionForRoleId(
+  roles: RoleDefinition[],
+  roleId: string,
+  permission: Permission
+): boolean {
+  return hasPermission(roles.find(r => r.id === roleId), permission);
 }
 
 export function hasAnyPermission(role: RoleDefinition | undefined, permissions: Permission[]): boolean {

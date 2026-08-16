@@ -715,7 +715,7 @@ export default function CustomerPortalPage() {
                               ev.url ? (
                                 <a key={ev.id} href={ev.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2 py-1 bg-surface border border-border rounded text-[10px] font-medium text-text-primary hover:border-accent/30 transition-colors" title={ev.fileName}>
                                   {ev.fileType?.startsWith('image/') ? (
-                                    <img src={ev.url} alt={ev.fileName} className="w-4 h-4 rounded object-cover" />
+                                    <img src={ev.url} alt={ev.fileName} loading="lazy" className="w-4 h-4 rounded object-cover" />
                                   ) : (
                                     <FileText className="w-3.5 h-3.5 text-text-muted" />
                                   )}

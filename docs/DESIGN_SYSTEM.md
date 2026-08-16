@@ -5,7 +5,7 @@
 **Organization:** 4CoreFinSupport
 **Primary Color:** Dark Red (#dc2626)
 **Secondary Color:** White / Slate grays
-**Typography:** Plus Jakarta Sans (sans) + JetBrains Mono (mono)
+**Typography:** Inter (sans) + Montserrat (headings), loaded from Google Fonts with `preconnect` + `display=swap` via `<link>` in `index.html`
 **Personality:** Premium, minimal, enterprise-grade, calm, professional
 
 ---
@@ -72,8 +72,9 @@
 ## Typography
 
 ### Font Families
-- **Sans:** Plus Jakarta Sans (400-800)
-- **Mono:** JetBrains Mono (400-700)
+- **Sans (body/UI):** Inter (400–700)
+- **Headings:** Montserrat (500–800), applied via `.font-heading`
+- **Numeric:** rendered in the sans stack with tabular figures where supported
 
 ### Type Scale
 | Level | Class | Size | Weight | Line Height | Use |

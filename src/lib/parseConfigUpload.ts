@@ -1,5 +1,5 @@
 ﻿import Papa from 'papaparse';
-import * as XLSX from 'xlsx';
+
 import type { FormFieldDefinition, FormFieldType, ParseFieldError, ImportResult } from '../types/forms';
 
 const VALID_TYPES: FormFieldType[] = ['text', 'number', 'currency', 'select', 'date', 'textarea'];
@@ -100,10 +100,13 @@ export function parseCsv(text: string): ImportResult {
   return result;
 }
 
-export function parseXlsx(buffer: ArrayBuffer): ImportResult {
+export async function parseXlsx(buffer: ArrayBuffer): Promise<ImportResult> {
   const result: ImportResult = { fields: [], errors: [] };
 
   try {
+    // xlsx is ~400 KB and only needed for spreadsheet imports — loaded on
+    // demand so CSV-only sessions never pay for it.
+    const XLSX = await import('xlsx');
     const wb = XLSX.read(buffer, { type: 'array' });
     const sheetName = wb.SheetNames[0];
     if (!sheetName) {
@@ -156,7 +159,7 @@ export async function parseConfigUpload(file: File): Promise<ImportResult> {
 
   if (ext === 'xlsx' || ext === 'xls') {
     const buffer = await file.arrayBuffer();
-    return parseXlsx(buffer);
+    return await parseXlsx(buffer);
   }
 
   return {

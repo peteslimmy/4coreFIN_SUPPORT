@@ -59,7 +59,7 @@ export default function LandingPage() {
 
         <main className="max-w-3xl">
           <p className="mb-4 text-caption font-semibold uppercase tracking-widest text-white/80">
-            FinTech Incident Control &amp; Payment Operations Intelligence
+            Payment Incident &amp; Operation Centre
           </p>
           <h1 className="text-4xl font-bold leading-tight text-white drop-shadow-lg md:text-6xl">
             {orgName}

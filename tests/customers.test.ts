@@ -1,47 +1,18 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import type { AddressInfo } from 'net';
 import type { Server } from 'http';
 
-vi.mock('../server/supabase', () => {
-  const s = { from: () => { throw new Error('supabase not initialised in this test'); } };
-  return { supabase: s, supabaseAuth: s };
-});
-
 import express from 'express';
-import { supabase } from '../server/supabase';
 import { createApiRouter } from '../server/routes';
-import { requireCsrf, hashPassword } from '../server/auth';
-import { createFakeSupabase, type TableStore } from './helpers/fakeSupabase';
+import { requireCsrf } from '../server/auth';
+import { resetDatabase, insertRows } from './helpers/testDb';
+import { createTestUser } from './helpers/testUsers';
+import { ticketRow } from './helpers/testSeeds';
+import { supabase } from '../server/supabase';
+import './helpers/conftest';
 
 const ALPHA = 'tnt-ALPHA';
-const BETA = 'tnt-BETA';
 const PASSWORD = 'password123';
-
-function seedStore(): TableStore {
-  const pass = hashPassword(PASSWORD);
-  return {
-    users: [
-      { id: 'usr-a', name: 'Alice Alpha', email: 'alice@alpha.com', password_hash: pass, role: 'BU_SUPPORT', bu: 'ALPHA', phone: '', tenant_id: ALPHA },
-      { id: 'usr-admin', name: 'Admin', email: 'admin@4core.com', password_hash: pass, role: 'SUPER_ADMIN', bu: 'ALL', phone: '', tenant_id: ALPHA },
-    ],
-    tickets: [
-      { id: 'tkt-a1', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Payment Dispute', issue_type: 'Payment Dispute', priority: 'HIGH', status: 'INVESTIGATE', is_deleted: false, created_at: '2026-07-01T00:00:00Z', sla_deadline: '2026-07-10T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: null, amount: 100, transaction_id: 'TX1', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
-    ],
-    comments: [],
-    evidence: [],
-    audit_logs: [],
-    watcher_notifications: [],
-    major_incidents: [],
-    customers: [
-      { id: 'cst-a1', first_name: 'Faith', last_name: 'Adeleke', email: 'faith@example.com', phone: '', business_unit: 'ALPHA', tenant_id: ALPHA, created_at: '2026-01-01T00:00:00Z', total_tickets: 1, notes: null },
-    ],
-    app_config: [],
-    sla_rules: [],
-    holidays: [],
-    ticket_templates: [],
-    kb_articles: [],
-  };
-}
 
 let base: string;
 let server: Server | undefined;
@@ -76,8 +47,76 @@ function authedHeaders(s: Session): Record<string, string> {
   return headers;
 }
 
+async function seedBaseStore() {
+  await createTestUser({
+    id: 'usr-a',
+    name: 'Alice Alpha',
+    email: 'alice@alpha.com',
+    password: PASSWORD,
+    role: 'BU_SUPPORT',
+    bu: 'ALPHA',
+    phone: '',
+  });
+  await createTestUser({
+    id: 'usr-admin',
+    name: 'Admin',
+    email: 'admin@4core.com',
+    password: PASSWORD,
+    role: 'SUPER_ADMIN',
+    bu: 'ALL',
+    phone: '',
+  });
+  await insertRows('customers', [
+    {
+      id: 'cst-a1',
+      first_name: 'Faith',
+      last_name: 'Adeleke',
+      email: 'faith@example.com',
+      phone: '',
+      business_unit: 'ALPHA',
+      tenant_id: ALPHA,
+      created_at: '2026-01-01T00:00:00Z',
+      total_tickets: 1,
+      notes: null,
+    },
+  ]);
+  const tkt = await ticketRow({
+    id: 'tkt-a1',
+    business_unit: 'ALPHA',
+    provider: 'Paystack',
+    category: 'Payment Dispute',
+    issue_type: 'Payment Dispute',
+    priority: 'HIGH',
+    status: 'INVESTIGATE',
+    is_deleted: false,
+    created_at: '2026-07-01T00:00:00Z',
+    sla_deadline: '2026-07-10T00:00:00Z',
+    customer_name: 'Faith',
+    customer_email: 'faith@example.com',
+    customer_phone: '',
+    customer_last_name: '',
+    customer_id: null,
+    amount: 100,
+    transaction_id: 'TX1',
+    card_pan: '****',
+    description: '',
+    is_escalated: false,
+    escalation_count: 0,
+    assigned_agent_id: '',
+    major_incident_id: null,
+    watchers: [],
+  });
+  await insertRows('tickets', [tkt]);
+}
+
+async function seedTicket(id: string, fixture: any) {
+  const row = await ticketRow({ id, ...fixture });
+  await insertRows('tickets', [row]);
+}
+
 beforeEach(async () => {
-  Object.assign(supabase, createFakeSupabase(seedStore()));
+  await resetDatabase();
+  await seedBaseStore();
   server = app.listen(0);
   await new Promise<void>((resolve) => server!.once('listening', resolve));
   base = `http://127.0.0.1:${(server!.address() as AddressInfo).port}/api`;
@@ -183,13 +222,20 @@ describe('Customer delete guard', () => {
   });
 
   it('allows deleting a customer with no linked tickets', async () => {
-    const store = createFakeSupabase({
-      ...seedStore(),
-      customers: [
-        { id: 'cst-empty', first_name: 'Orphan', last_name: 'Row', email: 'orphan@example.com', phone: '', business_unit: 'ALPHA', tenant_id: ALPHA, created_at: '2026-01-01T00:00:00Z', total_tickets: 0, notes: null },
-      ],
-    });
-    Object.assign(supabase, store);
+    await insertRows('customers', [
+      {
+        id: 'cst-empty',
+        first_name: 'Orphan',
+        last_name: 'Row',
+        email: 'orphan@example.com',
+        phone: '',
+        business_unit: 'ALPHA',
+        tenant_id: ALPHA,
+        created_at: '2026-01-01T00:00:00Z',
+        total_tickets: 0,
+        notes: null,
+      },
+    ]);
     const s = await login('alice@alpha.com');
     const res = await fetch(`${base}/customers/cst-empty`, {
       method: 'DELETE',
@@ -202,15 +248,42 @@ describe('Customer delete guard', () => {
 
 describe('Customer totalTickets derivation', () => {
   it('computes totalTickets from linked tickets (id + email fallback)', async () => {
-    const store = createFakeSupabase({
-      ...seedStore(),
-      tickets: [
-        { ...seedStore().tickets[0] },
-        { id: 'tkt-a2', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Technical Issue', issue_type: 'Technical Issue', priority: 'MEDIUM', status: 'ASSIGNED', is_deleted: false, created_at: '2026-07-02T00:00:00Z', sla_deadline: '2026-07-11T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: 'cst-a1', amount: 0, transaction_id: 'TX2', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
-        { id: 'tkt-a3', business_unit: 'ALPHA', tenant_id: ALPHA, partner: 'Paystack', category: 'Account Issue', issue_type: 'Account Issue', priority: 'LOW', status: 'RECEIPT', is_deleted: false, created_at: '2026-07-03T00:00:00Z', sla_deadline: '2026-07-13T00:00:00Z', customer_name: 'Faith', customer_email: 'faith@example.com', customer_phone: '', customer_last_name: '', customer_id: 'cst-a1', amount: 0, transaction_id: 'TX3', card_pan: '****', description: '', bank_name: '', is_escalated: false, escalation_count: 0, assigned_agent_id: '', major_incident_id: null, feedback_score: null, feedback_comment: null, root_cause: null, corrective_action: null, submitted_by: 'BU_SUPPORT', submitted_by_name: '', submitted_by_phone: '', watchers: [], rca_details: null, custom_fields: {}, duplicate_of: null },
-      ],
+    await seedTicket('tkt-a2', {
+      business_unit: 'ALPHA',
+      provider: 'Paystack',
+      category: 'Technical Issue',
+      issue_type: 'Technical Issue',
+      priority: 'MEDIUM',
+      status: 'ASSIGNED',
+      is_deleted: false,
+      created_at: '2026-07-02T00:00:00Z',
+      sla_deadline: '2026-07-11T00:00:00Z',
+      customer_name: 'Faith',
+      customer_email: 'faith@example.com',
+      customer_phone: '',
+      customer_last_name: '',
+      customer_id: 'cst-a1',
+      transaction_id: 'TX2',
+      watchers: [],
     });
-    Object.assign(supabase, store);
+    await seedTicket('tkt-a3', {
+      business_unit: 'ALPHA',
+      provider: 'Paystack',
+      category: 'Account Issue',
+      issue_type: 'Account Issue',
+      priority: 'LOW',
+      status: 'RECEIPT',
+      is_deleted: false,
+      created_at: '2026-07-03T00:00:00Z',
+      sla_deadline: '2026-07-13T00:00:00Z',
+      customer_name: 'Faith',
+      customer_email: 'faith@example.com',
+      customer_phone: '',
+      customer_last_name: '',
+      customer_id: 'cst-a1',
+      transaction_id: 'TX3',
+      watchers: [],
+    });
     const s = await login('alice@alpha.com');
     const res = await fetch(`${base}/customers`, { headers: authedHeaders(s) });
     expect(res.status).toBe(200);

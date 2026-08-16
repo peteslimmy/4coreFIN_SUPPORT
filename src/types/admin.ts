@@ -12,6 +12,8 @@ export interface UserRecord {
   accountType?: string;
   phone?: string;
   isActive?: boolean;
+  /** True while the account is awaiting its first password (token outstanding). */
+  activationPending?: boolean;
 }
 
 export interface SlaRule {

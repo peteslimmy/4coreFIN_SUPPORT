@@ -65,7 +65,7 @@ export default function ChangePasswordRequiredPage() {
             />
           </div>
           <h1 className="text-display font-bold text-text-primary">Change your password</h1>
-          <p className="text-body-sm text-text-muted mt-1 font-medium">Your administrator set a temporary password. Create a new one to continue.</p>
+          <p className="text-body-sm text-text-muted mt-1 font-medium">A temporary password was emailed to you. Enter it below and create a new one to continue.</p>
         </div>
 
         <div className="bg-surface-card border border-border-subtle rounded-xl p-5 shadow-card">

@@ -66,7 +66,7 @@ function ExecutiveDashboardPage() {
   const downloadPdf = async () => {
     try {
       const { downloadExecutivePdfReport } = await import('../lib/pdfGenerator');
-      downloadExecutivePdfReport(tickets, partners, businessUnits, auditLogs);
+      await downloadExecutivePdfReport(tickets, partners, businessUnits, auditLogs);
       showToast('PDF report downloaded.', 'success');
     } catch {
       showToast('Failed to download PDF report.', 'error');

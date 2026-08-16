@@ -182,6 +182,26 @@ export function signToken(user: AuthUser): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_TTL } as jwt.SignOptions);
 }
 
+/** Full app-users row shape (select('*')). */
+export type AppUserRow = {
+  id: string;
+  name: string;
+  email: string;
+  password_hash: string;
+  role: string;
+  bu: string;
+  partner?: string | null;
+  partner_org_id?: number | null;
+  phone: string;
+  tenant_id?: string;
+  auth_user_id?: string | null;
+  is_active?: boolean | null;
+  isActive?: boolean;
+  activation_token?: string | null;
+  activated_at?: string | null;
+  must_change_password?: boolean | null;
+};
+
 export async function findUserByEmail(email: string) {
   const { data, error } = await supabase
     .from('users')
@@ -189,21 +209,7 @@ export async function findUserByEmail(email: string) {
     .ilike('email', email)
     .single();
   if (error || !data) return undefined;
-  return data as {
-id: string;
-    name: string;
-    email: string;
-    password_hash: string;
-    role: string;
-    bu: string;
-    phone: string;
-    tenant_id?: string;
-    auth_user_id?: string | null;
-    is_active?: boolean | null;
-    isActive?: boolean;
-    activation_token?: string | null;
-    activated_at?: string | null;
-  };
+  return data as AppUserRow;
 }
 
 export async function findUserByAuthId(authUserId: string) {
@@ -213,21 +219,7 @@ export async function findUserByAuthId(authUserId: string) {
     .eq('auth_user_id', authUserId)
     .maybeSingle();
   if (error || !data) return undefined;
-  return data as {
-id: string;
-    name: string;
-    email: string;
-    password_hash: string;
-    role: string;
-    bu: string;
-    phone: string;
-    tenant_id?: string;
-    auth_user_id?: string | null;
-    is_active?: boolean | null;
-    isActive?: boolean;
-    activation_token?: string | null;
-    activated_at?: string | null;
-  };
+  return data as AppUserRow;
 }
 
 export async function findUserById(id: string) {
@@ -237,21 +229,7 @@ export async function findUserById(id: string) {
     .eq('id', id)
     .maybeSingle();
   if (error || !data) return undefined;
-  return data as {
-id: string;
-    name: string;
-    email: string;
-    password_hash: string;
-    role: string;
-    bu: string;
-    phone: string;
-    tenant_id?: string;
-    auth_user_id?: string | null;
-    is_active?: boolean | null;
-    isActive?: boolean;
-    activation_token?: string | null;
-    activated_at?: string | null;
-  };
+  return data as AppUserRow;
 }
 
 /**
@@ -386,6 +364,7 @@ export function toAuthUser(row: {
   role: string;
   bu: string;
   partner?: string;
+  partner_org_id?: number | null;
   account_type?: string;
   phone?: string;
   tenantId?: string;
@@ -400,6 +379,7 @@ export function toAuthUser(row: {
     role: row.role,
     bu: row.bu,
     partner: row.partner || '',
+    partnerOrgId: row.partner_org_id ?? undefined,
     accountType: row.account_type || (row.role === 'PARTNER' ? 'PARTNER' : 'BU'),
     phone: row.phone || '',
     tenantId: row.tenantId || row.tenant_id || tenantIdForBu(row.bu),
@@ -411,7 +391,7 @@ export interface AuthedRequest extends Request {
   user?: AuthUser;
 }
 
-export function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
   const cookies = parseCookies(req.headers.cookie);
   const fromCookie = cookies[SESSION_COOKIE];
   const header = req.headers.authorization;
@@ -424,45 +404,56 @@ export function requireAuth(req: AuthedRequest, res: Response, next: NextFunctio
   if (!token) {
     return res.status(401).json({ error: 'Authentication required' });
   }
+  let decoded: JwtPayload;
   try {
-    const decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
-    // The JWT `sub` is the app-level user id (e.g. "usr-..."). Look it up by `id`
-    // only. A previous query used `.or(id.eq.sub, auth_user_id.eq.sub)`, but
-    // `auth_user_id` is UUID-typed, so Postgres rejected `auth_user_id.eq.<usr-...>`
-    // with "invalid input syntax for type uuid" and every request 401'd (which
-    // silently logged the user out). `users.id` accepts the app id directly.
-    Promise.resolve(
-      supabase.from('users').select('*').eq('id', decoded.sub).single()
-    ).then(({ data: row, error }) => {
-        if (error || !row) {
-          return res.status(401).json({ error: 'User no longer exists' });
-        }
-        req.user = toAuthUser(row);
-        if (row.is_active === false) {
-          clearSession(res);
-          return res.status(401).json({ error: 'Account suspended' });
-        }
-        // Server-side gate: a freshly-provisioned user whose password was set by
-        // an administrator must choose their own password before using the app.
-        // Only the password-change endpoint, /auth/me and logout remain reachable.
-        if (row.must_change_password) {
-          const p = (req.originalUrl || req.path || '').toLowerCase();
-          const allowed =
-            p.includes('/auth/change-password') ||
-            p.includes('/auth/verify-password') ||
-            p.endsWith('/auth/me') ||
-            p.endsWith('/auth/logout');
-          if (!allowed) {
-            return res.status(403).json({ error: 'Password change required before accessing the app', code: 'PASSWORD_CHANGE_REQUIRED' });
-          }
-        }
-        next();
-      }).catch((err) => {
-        logger.error({ err }, "requireAuth Supabase error");
-        return res.status(500).json({ error: 'Auth service error' });
-      });
+    decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
   } catch {
     return res.status(401).json({ error: 'Invalid or expired token' });
+  }
+  // The JWT `sub` is the app-level user id (e.g. "usr-..."). Look it up by `id`
+  // only. A previous query used `.or(id.eq.sub, auth_user_id.eq.sub)`, but
+  // `auth_user_id` is UUID-typed, so Postgres rejected `auth_user_id.eq.<usr-...>`
+  // with "invalid input syntax for type uuid" and every request 401'd (which
+  // silently logged the user out). `users.id` accepts the app id directly.
+  try {
+    const { data: row, error } = await supabase
+      .from('users')
+      .select('*')
+      .eq('id', decoded.sub)
+      .single();
+    if (error || !row) {
+      return res.status(401).json({ error: 'User no longer exists' });
+    }
+    req.user = toAuthUser(row);
+    if (row.is_active === false) {
+      // Pending-activation accounts (still carrying an activation token) may
+      // reach the password-change endpoints so the user can set their own
+      // password. Suspended accounts have no token and are hard-blocked.
+      const pendingActivation = Boolean(row.activation_token);
+      if (!pendingActivation) {
+        clearSession(res);
+        return res.status(401).json({ error: 'Account suspended' });
+      }
+    }
+    // Server-side gate: a freshly-provisioned user whose password was set by
+    // an administrator must choose their own password before using the app.
+    // Only the password-change endpoint, /auth/me and logout remain reachable.
+    if (row.must_change_password || row.is_active === false) {
+      const p = (req.originalUrl || req.path || '').toLowerCase();
+      const allowed =
+        p.includes('/auth/change-password') ||
+        p.includes('/auth/verify-password') ||
+        p.endsWith('/auth/me') ||
+        p.endsWith('/auth/logout') ||
+        p.includes('/auth/reset-password');
+      if (!allowed) {
+        return res.status(403).json({ error: 'Password change required before accessing the app', code: 'PASSWORD_CHANGE_REQUIRED' });
+      }
+    }
+    next();
+  } catch (err) {
+    logger.error({ err }, 'requireAuth Supabase error');
+    return res.status(500).json({ error: 'Auth service error' });
   }
 }
 
@@ -477,36 +468,5 @@ export function requireRoles(...roles: string[]) {
 }
 
 /** Scope tickets by tenant/partner for the authenticated user. */
-export function canAccessTicket(
-  user: AuthUser,
-  ticket: { businessUnit?: string; business_unit?: string; partner?: string; provider?: string; assignedAgentId?: string; partner_org_id?: number }
-): boolean {
-  if (isGlobalRole(user.role)) return true;
-  const bu = (ticket.businessUnit || ticket.business_unit || '').toLowerCase();
-  if (user.role === 'CUSTOMER') {
-    const myBu = user.bu.toLowerCase();
-    return myBu === 'all' || bu === myBu;
-  }
-  if (isBuSupportRole(user.role)) {
-    const myBu = user.bu.toLowerCase();
-    return myBu === 'all' || bu === myBu;
-  }
-  if (user.role === 'PARTNER') {
-    const partner = (ticket.partner || ticket.provider || '').toLowerCase();
-    const mine = (user.partner || user.bu || '').toLowerCase();
-    const agent = (ticket.assignedAgentId || '').toLowerCase();
-    const ticketPartnerOrgId = ticket.partner_org_id;
-    const mineOrgId = user.partner_org_id; // will be set when partner_organizations table is wired
-    // Prefer FK-based org matching; fall back to string partner matching
-    if (ticketPartnerOrgId !== undefined && mineOrgId !== undefined) {
-      return ticketPartnerOrgId === mineOrgId;
-    }
-    return (
-      partner === mine ||
-      agent === mine ||
-      agent.startsWith(mine + ' ')
-    );
-  }
-  return false;
-}
+export { canAccessTicket } from '../src/lib/canAccessTicket';
 

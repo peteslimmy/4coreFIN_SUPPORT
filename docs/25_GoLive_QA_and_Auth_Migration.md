@@ -26,6 +26,15 @@ Migrations **001→022** have all been applied to the live project `kflxtzlwyxph
 | 020 | Audit log immutability: `audit_logs_protect` trigger + INSERT/SELECT policies only |
 | 021 | `cleanup_expired_data()` function (weekly cron placeholder) |
 | 022 | `users.must_change_password` BOOLEAN DEFAULT false |
+| 040 | CHECK constraints aligned with the 8 ticket statuses and 8 roles (+ severity/status enums) |
+| 041_test_reset | `reset_test_schema()` RPC for the disposable test project |
+| 042 | Audit event column |
+| 043 | `customer_ticket_counts()` SQL aggregate |
+| 044 | `users.partner_org_id` FK + backfill (partner identity isolation) |
+| 045 | `replace_table_rows()` atomic reference-data replace RPC |
+| 046 | `tickets_status_transition_guard` trigger (lifecycle adjacency enforced in DB) |
+| 047 | `sla_notification_log` (exactly-once SLA alerting) |
+| 048 | SLA pause columns (`sla_paused_ms`, `sla_pause_started_at`) + waiting-state backfill |
 
 ## 3. Demo accounts — DELETED
 
@@ -122,6 +131,6 @@ All 5 demo identities have been removed from Supabase Auth and their app rows ca
 
 ## 8. GO / NO-GO
 
-**GO** when: all F-*, SEC-*, OPS-* above pass; **249 tests green**; `npm run lint`, `tsc --noEmit`, `npm run build` clean; service key rotated; zero dev accounts; production uses Supabase Auth only; forced-password-change gate verified; `peteslimmy@gmail.com` SUPER_ADMIN login confirmed.
+**GO** when: all F-*, SEC-*, OPS-* above pass; unit suite green (209 tests as of the 2026-08 hardening pass; integration suite when test credentials exist); `npm run lint`, `tsc --noEmit`, `npm run build` clean; migrations 001→048 applied in order; service key rotated; zero dev accounts; production uses Supabase Auth only; forced-password-change gate verified; SUPER_ADMIN login confirmed.
 
 **NO-GO** if any: seeded dev account present, `AUTH_PROVIDER=local` in prod, old service key unrotated, any F-01/SEC-02/SEC-03 failure, or audit chain breaks.

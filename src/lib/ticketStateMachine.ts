@@ -18,6 +18,9 @@ export interface TransitionRule {
   mutate?: (ticket: TicketRecord, ctx?: TransitionContext) => Partial<TicketRecord>;
 }
 
+// Linear progress-step order used by the UI wizard. The WAITING_* statuses are
+// not separate progress steps — they render on the "In Review" step (see
+// getTicketStatusStep).
 export const TICKET_STATUS_ORDER: TicketStatus[] = [
   TicketStatus.RECEIPT,
   TicketStatus.ASSIGNED,
@@ -30,6 +33,9 @@ export const TICKET_STATUS_LABELS: Record<TicketStatus, string> = {
   [TicketStatus.RECEIPT]: 'Receipt',
   [TicketStatus.ASSIGNED]: 'Assigned',
   [TicketStatus.INVESTIGATE]: 'In Review',
+  [TicketStatus.WAITING_CUSTOMER]: 'Waiting Customer',
+  [TicketStatus.WAITING_PARTNER]: 'Waiting Partner',
+  [TicketStatus.WAITING_INTERNAL]: 'Waiting Internal',
   [TicketStatus.RESOLVED]: 'Resolved',
   [TicketStatus.CLOSED]: 'Closed',
 };
@@ -45,9 +51,27 @@ export function normalizeStatus(status: string | null | undefined): TicketStatus
   return LEGACY_STATUS_MAP[status];
 }
 
+// Waiting states are variants of active investigation: map them onto the
+// INVESTIGATE progress step so the wizard shows "In Review" while waiting.
+const WAITING_TO_ACTIVE_STEP: Partial<Record<TicketStatus, TicketStatus>> = {
+  [TicketStatus.WAITING_CUSTOMER]: TicketStatus.INVESTIGATE,
+  [TicketStatus.WAITING_PARTNER]: TicketStatus.INVESTIGATE,
+  [TicketStatus.WAITING_INTERNAL]: TicketStatus.INVESTIGATE,
+};
+
+/** Fold the ongoing pause span into slaPausedMs and stop the clock. */
+function accumulatePause(ticket: TicketRecord): Partial<TicketRecord> {
+  const startedAt = ticket.slaPauseStartedAt ? new Date(ticket.slaPauseStartedAt).getTime() : null;
+  if (!startedAt) return { slaPauseStartedAt: null };
+  const span = Math.max(0, Date.now() - startedAt);
+  return { slaPausedMs: (ticket.slaPausedMs || 0) + span, slaPauseStartedAt: null };
+}
+
 export function getTicketStatusStep(status: TicketStatus | string): number {
   if (!status) return 0;
-  const idx = TICKET_STATUS_ORDER.indexOf(status as TicketStatus);
+  const canonical = normalizeStatus(status) ?? (status as TicketStatus);
+  const stepStatus = WAITING_TO_ACTIVE_STEP[canonical] ?? canonical;
+  const idx = TICKET_STATUS_ORDER.indexOf(stepStatus);
   return idx >= 0 ? idx : 0;
 }
 
@@ -81,6 +105,72 @@ export const TRANSITIONS: TransitionRule[] = [
     customerFacingLabel: 'In Review',
     roles: BU_AGENT_AND_PARTNER_ROLES,
     canTransition: (t) => !!t.assignedAgentId,
+  },
+  // Waiting states: entered from INVESTIGATE by BU agents when the case needs
+  // an external or internal input before work can continue. Entering a waiting
+  // state starts the SLA pause clock; resuming accumulates the paused span so
+  // the effective deadline shifts forward without rewriting the original.
+  {
+    from: TicketStatus.INVESTIGATE,
+    to: TicketStatus.WAITING_CUSTOMER,
+    event: 'WAIT_CUSTOMER',
+    label: 'Wait for Customer',
+    customerFacingLabel: 'Waiting on You',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
+  },
+  {
+    from: TicketStatus.INVESTIGATE,
+    to: TicketStatus.WAITING_PARTNER,
+    event: 'WAIT_PARTNER',
+    label: 'Wait for Partner',
+    customerFacingLabel: 'With Payment Partner',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
+  },
+  {
+    from: TicketStatus.INVESTIGATE,
+    to: TicketStatus.WAITING_INTERNAL,
+    event: 'WAIT_INTERNAL',
+    label: 'Wait Internal',
+    customerFacingLabel: 'In Review',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
+  },
+  // Resuming: whoever the ticket was waiting on brings it back to INVESTIGATE.
+  // WAITING_PARTNER may also be resumed by the partner's own reply.
+  {
+    from: TicketStatus.WAITING_CUSTOMER,
+    to: TicketStatus.INVESTIGATE,
+    event: 'CUSTOMER_REPLIED',
+    label: 'Customer Replied',
+    customerFacingLabel: 'In Review',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
+  },
+  {
+    from: TicketStatus.WAITING_PARTNER,
+    to: TicketStatus.INVESTIGATE,
+    event: 'PARTNER_REPLIED',
+    label: 'Partner Replied',
+    customerFacingLabel: 'In Review',
+    roles: BU_AGENT_AND_PARTNER_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
+  },
+  {
+    from: TicketStatus.WAITING_INTERNAL,
+    to: TicketStatus.INVESTIGATE,
+    event: 'INTERNAL_RESUMED',
+    label: 'Resume Investigation',
+    customerFacingLabel: 'In Review',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
   },
   {
     from: TicketStatus.INVESTIGATE,
@@ -173,6 +263,36 @@ export const TRANSITIONS: TransitionRule[] = [
     customerFacingLabel: 'Closed',
     roles: BU_AGENT_ROLES,
     canTransition: () => true,
+  },
+  {
+    from: TicketStatus.WAITING_CUSTOMER,
+    to: TicketStatus.CLOSED,
+    event: 'MERGE_CLOSE',
+    label: 'Mark Merged',
+    customerFacingLabel: 'Closed',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
+  },
+  {
+    from: TicketStatus.WAITING_PARTNER,
+    to: TicketStatus.CLOSED,
+    event: 'MERGE_CLOSE',
+    label: 'Mark Merged',
+    customerFacingLabel: 'Closed',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
+  },
+  {
+    from: TicketStatus.WAITING_INTERNAL,
+    to: TicketStatus.CLOSED,
+    event: 'MERGE_CLOSE',
+    label: 'Mark Merged',
+    customerFacingLabel: 'Closed',
+    roles: BU_AGENT_ROLES,
+    canTransition: () => true,
+    mutate: (t) => accumulatePause(t),
   },
   {
     from: TicketStatus.RESOLVED,

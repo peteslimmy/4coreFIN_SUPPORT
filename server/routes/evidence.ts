@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { appendAuditLog, listEvidence, insertEvidence, deleteEvidence, getScopedTicket } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
+import { listEvidence, insertEvidence, deleteEvidence, getScopedTicket } from '../repository';
 import { uploadFile, deleteFile } from '../services/storageService';
 import { buildId } from '../lib/ids';
 
@@ -71,7 +72,7 @@ export function createEvidenceRouter(): Router {
     const ticket = await getScopedTicket(evidence.ticketId, req.user!);
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     await insertEvidence(evidence);
-    await appendAuditLog({ ticketId: evidence.ticketId, actor: req.user!.name, role: req.user!.role, action: 'EVIDENCE_UPLOADED', details: `Evidence ${evidence.id} for ticket ${evidence.ticketId}` });
+    await audit({ event: 'EVIDENCE_UPLOADED', ticketId: evidence.ticketId, actor: req.user!.name, role: req.user!.role, action: AuditAction.EVIDENCE_UPLOADED, details: `Evidence ${evidence.id} for ticket ${evidence.ticketId}` });
     res.status(201).json(evidence);
   });
 
@@ -129,7 +130,7 @@ export function createEvidenceRouter(): Router {
           url,
         };
         await insertEvidence(row);
-        await appendAuditLog({ ticketId, actor: req.user!.name, role: req.user!.role, action: 'EVIDENCE_UPLOADED', details: `Evidence ${row.id} for ticket ${ticketId}` });
+        await audit({ event: 'EVIDENCE_UPLOADED', ticketId, actor: req.user!.name, role: req.user!.role, action: AuditAction.EVIDENCE_UPLOADED, details: `Evidence ${row.id} for ticket ${ticketId}` });
         res.status(201).json(row);
       } catch (e: any) {
         res.status(500).json({ error: e.message || 'Upload failed' });
@@ -145,7 +146,7 @@ export function createEvidenceRouter(): Router {
     if (!ticket) return res.status(404).json({ error: 'Evidence not found' });
     await deleteFile(ev.url);
     await deleteEvidence(req.params.id);
-    await appendAuditLog({ ticketId: ev.ticketId, actor: req.user!.name, role: req.user!.role, action: 'EVIDENCE_DELETED', details: `Evidence ${req.params.id} deleted` });
+    await audit({ event: 'EVIDENCE_DELETED', ticketId: ev.ticketId, actor: req.user!.name, role: req.user!.role, action: AuditAction.EVIDENCE_DELETED, details: `Evidence ${req.params.id} deleted` });
     res.json({ ok: true });
   });
 

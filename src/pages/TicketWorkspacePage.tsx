@@ -35,6 +35,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     evidence,
     handleCreateTicket, users,
     slaRules, holidays, ticketTemplates, kbArticles,
+    can,
   } = useApp();
 
   const { commentText, setCommentText, activeTicketId, setActiveTicketId } = useUi();
@@ -397,6 +398,8 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   setNewTicketErrors({});
 };
 
+  const canCreateTicket = can('tickets:create');
+
 
   if (isLoading) {
     return (
@@ -425,7 +428,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
           activeTicketId={activeTicketId}
           showMobileTicketList={showMobileTicketList}
           setShowMobileTicketList={setShowMobileTicketList}
-          onNewTicket={() => setShowNewTicketPanel(true)}
+          onNewTicket={canCreateTicket ? () => setShowNewTicketPanel(true) : undefined}
         />
 
         {activeTicket ? (
@@ -515,15 +518,17 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
         setSelectedWatcherIds={setSelectedWatcherIds}
       />
 
-      <NewTicketModal
-        isOpen={showNewTicketPanel}
-        onClose={() => setShowNewTicketPanel(false)}
-        form={newTicketForm}
-        setForm={setNewTicketForm}
-        errors={newTicketErrors}
-        setErrors={setNewTicketErrors}
-        onSubmit={handleNewTicketSubmit}
-      />
+      {canCreateTicket && (
+        <NewTicketModal
+          isOpen={showNewTicketPanel}
+          onClose={() => setShowNewTicketPanel(false)}
+          form={newTicketForm}
+          setForm={setNewTicketForm}
+          errors={newTicketErrors}
+          setErrors={setNewTicketErrors}
+          onSubmit={handleNewTicketSubmit}
+        />
+      )}
     </PageTransition>
   );
 }

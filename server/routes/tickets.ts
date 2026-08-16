@@ -3,7 +3,8 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { appendAuditLog, listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
+import { listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable } from '../repository';
 import { dispatchWebhook } from '../services/webhookDispatcher';
 import { tenantIdForBu } from '../tenant';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
@@ -60,7 +61,11 @@ const createTicketSchema = z.object({
 });
 
 const updateTicketSchema = z.object({
-  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
+  // `status` and `to` are both accepted for backwards compatibility, but every
+  // status change is routed through the state machine — the generic patch path
+  // below never applies a raw status.
+  status: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED', 'WAITING_CUSTOMER', 'WAITING_PARTNER', 'WAITING_INTERNAL']).optional(),
+  to: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED', 'WAITING_CUSTOMER', 'WAITING_PARTNER', 'WAITING_INTERNAL']).optional(),
   priority: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).optional(),
   category: z.string().optional(),
   description: z.string().optional(),
@@ -84,8 +89,6 @@ const updateTicketSchema = z.object({
   isDeleted: z.boolean().optional(),
   customFields: z.record(z.string(), z.any()).optional(),
   duplicateOf: z.string().optional(),
-  event: z.string().optional(),
-  from: z.enum(['RECEIPT', 'ASSIGNED', 'INVESTIGATE', 'RESOLVED', 'CLOSED']).optional(),
 });
 
 export function createTicketsRouter(): Router {
@@ -141,7 +144,7 @@ export function createTicketsRouter(): Router {
     const customerId = await findOrCreateCustomer({ email: ticket.customerEmail || '', businessUnit: ticket.businessUnit || (req.user!.role === 'PARTNER' ? req.user!.bu : undefined), name: ticket.customerName || undefined });
     if (customerId) entry = { ...entry, customerId: customerId.id };
     await upsertTicket(entry);
-    await appendAuditLog({ ticketId: entry.id, actor: req.user!.name, role: req.user!.role, action: 'TICKET_CREATED', details: `Ticket ${entry.id} created` });
+    await audit({ event: 'TICKET_CREATED', ticketId: entry.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_CREATED, details: `Ticket ${entry.id} created` });
     res.status(201).json(entry);
   });
 
@@ -158,8 +161,14 @@ export function createTicketsRouter(): Router {
     const roles = getCachedRoles(res);
     const feat = (p: Permission) => hasPermissionForRoleId(roles, req.user!.role, p);
 
-    if (body.to !== undefined) {
-      const targetStatus = body.to as TicketStatus;
+    // Every status change goes through the state machine. `to` is the explicit
+    // transition field; `status` is accepted as an alias for older clients.
+    // Neither is ever applied as a raw field by the generic patch path below.
+    const targetStatus = (body.to ?? body.status) as TicketStatus | undefined;
+    delete body.to;
+    delete body.status;
+
+    if (targetStatus !== undefined && targetStatus !== existing.status) {
       const available = getAvailableTransitions(existing, req.user!.role as UserRole);
       const rule = available.find((r) => r.to === targetStatus);
       if (!rule) {
@@ -176,7 +185,7 @@ export function createTicketsRouter(): Router {
       if (cid) updated.customerId = cid.id;
       await upsertTicket(updated);
       const transitionDetails = `Ticket ${req.params.id} transitioned ${existing.status} → ${targetStatus} by ${req.user!.role} via "${rule.label}"`;
-      await appendAuditLog({ ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: 'TICKET_TRANSITION', details: transitionDetails });
+      await audit({ event: 'TICKET_TRANSITION', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_TRANSITION, details: transitionDetails });
       dispatchWebhook('ticket.transitioned', { id: existing.id, from: existing.status, to: targetStatus, actorRole: req.user!.role }).catch(() => {});
       res.json(updated);
       return;
@@ -219,7 +228,7 @@ export function createTicketsRouter(): Router {
     const cid2 = await findOrCreateCustomer({ email: existing.customerEmail || '', businessUnit: existing.businessUnit || (req.user!.role === 'PARTNER' ? existing.businessUnit : undefined), name: existing.customerName || undefined });
     if (cid2) updated.customerId = cid2.id;
     await upsertTicket(updated);
-    await appendAuditLog({ ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: 'TICKET_UPDATED', details: `Ticket ${req.params.id} patched` });
+    await audit({ event: 'TICKET_UPDATED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_UPDATED, details: `Ticket ${req.params.id} patched` });
     res.json(updated);
   });
 
@@ -241,7 +250,7 @@ export function createTicketsRouter(): Router {
       feedbackComment: body.feedbackComment !== undefined ? body.feedbackComment : existing.feedbackComment,
     };
     await upsertTicket(updated);
-    await appendAuditLog({ ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: 'TICKET_FEEDBACK', details: `Feedback submitted for ticket ${req.params.id}` });
+    await audit({ event: 'TICKET_FEEDBACK', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_FEEDBACK, details: `Feedback submitted for ticket ${req.params.id}` });
     res.json(updated);
   });
 
@@ -249,7 +258,7 @@ export function createTicketsRouter(): Router {
     const existing = await getScopedTicket(req.params.id, req.user!);
     if (!existing) return res.status(404).json({ error: 'Ticket not found' });
     await upsertTicket({ ...existing, isDeleted: true });
-    await appendAuditLog({ ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: 'TICKET_DELETED', details: `Ticket ${req.params.id} soft-deleted` });
+    await audit({ event: 'TICKET_DELETED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_DELETED, details: `Ticket ${req.params.id} soft-deleted` });
     dispatchWebhook('ticket.deleted', { id: req.params.id }).catch(() => {});
     res.json({ ok: true });
   });

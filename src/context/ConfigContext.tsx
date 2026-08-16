@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useState, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { getRoles } from '../lib/rbac';
 import { getDefaultBuFormConfigs } from '../lib/formConfigs';
 import type { KbArticle } from '../types/admin';
@@ -49,61 +49,16 @@ export function useConfigDomain(): ConfigDomain {
     "This charge has been flagged as a duplicate. We are initiating an automated reversal via API."
   ]);
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
-  const [buFormConfigs, setBuFormConfigs] = useState<BuFormConfig[]>(() => {
-    const formRaw = localStorage.getItem('4c_bu_form_configs');
-    if (formRaw !== null) {
-      try {
-        return JSON.parse(formRaw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return getDefaultBuFormConfigs();
-  });
-  const [ticketFormConfigs, setTicketFormConfigs] = useState<TicketFormConfig[]>(() => {
-    const formRaw = localStorage.getItem('4c_ticket_form_configs');
-    if (formRaw !== null) {
-      try {
-        return JSON.parse(formRaw);
-      } catch {
-        // fall through to default
-      }
-    }
-    return [];
-  });
-  const [roles, setRoles] = useState<RoleDefinition[]>(() => {
-    const rolesRaw = localStorage.getItem('4c_roles');
-    if (rolesRaw !== null) {
-      try {
-        return getRoles(JSON.parse(rolesRaw));
-      } catch {
-        // fall through to default
-      }
-    }
-    return getRoles([]);
-  });
+  // Form/role defaults until the server bootstrap hydrates the app — the
+  // localStorage preloads were removed together with the offline mirrors.
+  const [buFormConfigs, setBuFormConfigs] = useState<BuFormConfig[]>(getDefaultBuFormConfigs());
+  const [ticketFormConfigs, setTicketFormConfigs] = useState<TicketFormConfig[]>([]);
+  const [roles, setRoles] = useState<RoleDefinition[]>(() => getRoles([]));
   const [notificationConfigs, setNotificationConfigs] = useState<NotificationConfig[]>([
     { id: '1', stage: 'Receipt', email: 'bu-support@company.com' },
     { id: '2', stage: 'Investigation', email: 'parkway-investigations@parkway.com' },
     { id: '3', stage: 'Resolution', email: 'compliance-alerts@company.com' }
   ]);
-
-  // Initialize from localStorage only
-  useEffect(() => {
-    const load = <T,>(key: string, setter: Dispatch<SetStateAction<T>>) => {
-      const raw = localStorage.getItem(key);
-      if (raw !== null) {
-        try {
-          setter(JSON.parse(raw));
-        } catch {
-          // If parsing fails, keep existing state
-        }
-      }
-    };
-    load('4c_kb_articles', setKbArticles);
-    load('4c_saved_replies', setSavedReplies);
-    load('4c_customers', setCustomers);
-  }, []);
 
   const value: ConfigDomain = useMemo(() => ({
     kbArticles, setKbArticles,

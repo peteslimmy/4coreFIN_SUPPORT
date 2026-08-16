@@ -1,21 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-
-vi.mock('../server/supabase', () => {
-  const s = { from: () => { throw new Error('supabase not initialised in this test'); } };
-  return { supabase: s, supabaseAuth: s };
-});
+import { describe, it, expect } from 'vitest';
 
 import { supabase } from '../server/supabase';
 import { runSlaCheck } from '../server/slaJob';
-import { createFakeSupabase } from './helpers/fakeSupabase';
+import { ticketRow } from './helpers/testSeeds';
+import './helpers/conftest';
 
-const ALPHA = 'tnt-ALPHA';
-
-function openTicket(slaDeadline: string) {
+function openTicketFixture(slaDeadline: string) {
   return {
     id: 'tkt-sla',
     business_unit: 'ALPHA',
-    tenant_id: ALPHA,
     partner: 'Paystack',
     category: 'Payment Dispute',
     issue_type: 'Payment Dispute',
@@ -41,23 +34,16 @@ function openTicket(slaDeadline: string) {
   };
 }
 
-function seedStore(slaDeadline: string) {
-  return {
-    tickets: [openTicket(slaDeadline)],
-    watcher_notifications: [],
-    audit_logs: [],
-    app_config: [],
-  };
+async function seedTicket(slaDeadline: string) {
+  const row = await ticketRow(openTicketFixture(slaDeadline));
+  const { error } = await supabase.from('tickets').insert(row);
+  if (error) throw new Error(`seedTicket failed: ${error.message}`);
 }
 
 describe('SLA monitor job', () => {
-  beforeEach(() => {
-    Object.assign(supabase, createFakeSupabase({}));
-  });
-
   it('detects a breach and audits it once per ticket', async () => {
     const past = new Date(Date.now() - 3600000).toISOString();
-    Object.assign(supabase, createFakeSupabase(seedStore(past)));
+    await seedTicket(past);
 
     const first = await runSlaCheck();
     expect(first.breachCount).toBe(1);
@@ -82,7 +68,7 @@ describe('SLA monitor job', () => {
 
   it('does not notify for tickets with a future deadline', async () => {
     const future = new Date(Date.now() + 5 * 3600000).toISOString();
-    Object.assign(supabase, createFakeSupabase(seedStore(future)));
+    await seedTicket(future);
     const result = await runSlaCheck();
     expect(result.breachCount).toBe(0);
     expect(result.riskCount).toBe(0);
@@ -91,7 +77,7 @@ describe('SLA monitor job', () => {
   });
 
   it('skips tickets whose SLA deadline is unparseable', async () => {
-    Object.assign(supabase, createFakeSupabase(seedStore('not-a-date')));
+    await seedTicket('not-a-date');
     const result = await runSlaCheck();
     expect(result.breachCount).toBe(0);
     expect(result.scanned).toBe(1);

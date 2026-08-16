@@ -253,6 +253,9 @@ export const api = {
   updateMajorIncident: (id: string, patch: unknown) =>
     apiFetch<MajorIncidentRecord>(`/api/major-incidents/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }),
 
+  retryMajorIncidentNotification: (id: string, notifId: string) =>
+    apiFetch<MajorIncidentRecord>(`/api/major-incidents/${encodeURIComponent(id)}/notifications/${encodeURIComponent(notifId)}/retry`, { method: 'POST' }),
+
   createCustomer: (c: unknown) =>
     apiFetch<CustomerRecord>('/api/customers', { method: 'POST', body: JSON.stringify(c) }),
 
@@ -267,6 +270,10 @@ export const api = {
   deleteUser: (id: string) => apiFetch(`/api/users/${id}`, { method: 'DELETE' }),
   toggleUserActivation: (id: string, isActive: boolean) =>
     apiFetch(`/api/users/${id}/activation`, { method: 'PATCH', body: JSON.stringify({ isActive }) }),
+  generateTempPassword: () =>
+    apiFetch<{ password: string }>('/api/users/generate-password', { method: 'POST' }),
+  resendUserInvite: (id: string) =>
+    apiFetch<{ ok: boolean; invitationSent?: boolean; tempPassword?: string }>(`/api/users/${id}/resend-invite`, { method: 'POST' }),
 
   putSlaRules: (items: unknown[]) =>
     apiFetch('/api/config/sla_rules', { method: 'PUT', body: JSON.stringify(items) }),
@@ -322,52 +329,73 @@ export const api = {
     }),
 };
 
-/** Open an authenticated SSE connection (via session cookie). */
+/**
+ * Open an authenticated SSE connection (via session cookie) that
+ * transparently reconnects with exponential backoff after network drops or
+ * server restarts. Returns a disposer that stops the reconnect loop.
+ */
 export function connectEvents(onEvent: (event: string, data: unknown) => void): () => void {
   if (!hasSession()) return () => {};
 
-  // EventSource cannot set Authorization headers; use fetch stream polyfill pattern
   const controller = new AbortController();
-  let buffer = '';
+  let stopped = false;
+  let attempt = 0;
 
-  (async () => {
-    try {
-      const res = await fetch('/api/events', {
-        credentials: 'same-origin',
-        signal: controller.signal,
-      });
-      if (!res.ok || !res.body) return;
-      const reader = res.body.getReader();
-      const decoder = new TextDecoder();
-      let eventName = 'message';
+  const run = async () => {
+    while (!stopped) {
+      let buffer = '';
+      try {
+        const res = await fetch('/api/events', {
+          credentials: 'same-origin',
+          signal: controller.signal,
+        });
+        if (!res.ok || !res.body) throw new Error(`SSE stream unavailable (${res.status})`);
+        attempt = 0; // a healthy stream resets the backoff ladder
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let eventName = 'message';
 
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        buffer += decoder.decode(value, { stream: true });
-        const parts = buffer.split('\n');
-        buffer = parts.pop() || '';
-        for (const line of parts) {
-          if (line.startsWith('event:')) {
-            eventName = line.slice(6).trim();
-          } else if (line.startsWith('data:')) {
-            const raw = line.slice(5).trim();
-            try {
-              onEvent(eventName, JSON.parse(raw || '{}'));
-            } catch {
-              onEvent(eventName, raw);
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const parts = buffer.split('\n');
+          buffer = parts.pop() || '';
+          for (const line of parts) {
+            if (line.startsWith('event:')) {
+              eventName = line.slice(6).trim();
+            } else if (line.startsWith('data:')) {
+              const raw = line.slice(5).trim();
+              try {
+                onEvent(eventName, JSON.parse(raw || '{}'));
+              } catch {
+                onEvent(eventName, raw);
+              }
+              eventName = 'message';
             }
-            eventName = 'message';
           }
         }
+        // Stream ended without error — reconnect immediately on next loop.
+      } catch (e: unknown) {
+        const err = e as Error;
+        if (stopped || err?.name === 'AbortError') return;
+        if (import.meta.env.DEV) {
+          console.warn('SSE disconnected, reconnecting…', err);
+        }
       }
-    } catch (e: unknown) {
-      const err = e as Error;
-      if (err?.name !== 'AbortError' && import.meta.env.DEV) {
-        console.warn('SSE disconnected', err);
-      }
+      if (stopped) return;
+      attempt += 1;
+      // 2s, 4s, 8s, 16s, 30s cap — a blip recovers quickly; an outage
+      // backs off instead of hammering the server.
+      const delay = Math.min(30_000, 1_000 * 2 ** Math.min(attempt - 1, 5));
+      await new Promise((resolve) => setTimeout(resolve, delay));
     }
-  })();
+  };
 
-  return () => controller.abort();
+  void run();
+
+  return () => {
+    stopped = true;
+    controller.abort();
+  };
 }

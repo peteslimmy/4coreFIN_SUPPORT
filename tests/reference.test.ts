@@ -488,6 +488,14 @@ describe('Reference data — users kind', () => {
     expect(data.password_hash.startsWith('$2')).toBe(true);
     expect(data.auth_user_id).toBe('auth-carol@alpha.com');
     expect(data.must_change_password).toBe(true);
+    // Created as pending activation with a token, and the response carries the
+    // pending flag + invite status (SMTP unconfigured in tests → not sent).
+    expect(data.is_active).toBe(false);
+    expect(data.activation_token).toBeTruthy();
+    const created = await res.json();
+    expect(created.activationPending).toBe(true);
+    expect(created.invitationSent).toBe(false);
+    expect(created).not.toHaveProperty('activationToken');
   });
 
   it('rejects a user with a short password', async () => {
@@ -539,6 +547,33 @@ describe('Reference data — users kind', () => {
     const s = await login('alice@alpha.com');
     const res = await fetch(`${base}/reference/users/usr-prov`, {
       method: 'DELETE',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(403);
+  });
+});
+
+describe('User accounts — generate temporary password', () => {
+  it('returns a strong temporary password for an admin (admin:users)', async () => {
+    const s = await login('admin@4core.com');
+    const res = await fetch(`${base}/users/generate-password`, {
+      method: 'POST',
+      headers: authedHeaders(s),
+    });
+    expect(res.status).toBe(200);
+    const { password } = await res.json();
+    expect(typeof password).toBe('string');
+    expect(password.length).toBeGreaterThanOrEqual(14);
+    expect(password).toMatch(/[A-Z]/);
+    expect(password).toMatch(/[a-z]/);
+    expect(password).toMatch(/[0-9]/);
+    expect(password).toMatch(/[^A-Za-z0-9]/);
+  });
+
+  it('rejects a PARTNER (no admin:users) from generating a password', async () => {
+    const s = await login('rep@provider.com');
+    const res = await fetch(`${base}/users/generate-password`, {
+      method: 'POST',
       headers: authedHeaders(s),
     });
     expect(res.status).toBe(403);

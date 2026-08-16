@@ -432,8 +432,25 @@ Generate realistic and professional values for:
     app.use(vite.middlewares);
   } else {
     const distPath = path.join(process.cwd(), "dist");
-    app.use(express.static(distPath));
+    // Vite emits content-hashed filenames under /assets — cache them
+    // immutably for a year. Everything else (favicon, robots, sitemap) gets
+    // a short revalidation window so deploys are picked up promptly.
+    app.use(
+      express.static(distPath, {
+        etag: true,
+        maxAge: 0,
+        setHeaders: (res, filePath) => {
+          if (filePath.includes(`${path.sep}assets${path.sep}`)) {
+            res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+          } else {
+            res.setHeader("Cache-Control", "public, max-age=300, must-revalidate");
+          }
+        },
+      })
+    );
+    // The SPA shell must always be revalidated so new deploys are picked up.
     app.get("*", (req, res) => {
+      res.setHeader("Cache-Control", "no-cache");
       res.sendFile(path.join(distPath, "index.html"));
     });
   }

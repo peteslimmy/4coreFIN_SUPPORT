@@ -3,9 +3,11 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { listUsersPublic, upsertUser, deleteUser, appendAuditLog } from '../repository';
+import { listUsersPublic, upsertUser, deleteUser } from '../repository';
+import { audit, AuditAction } from '../auditEvents';
 import { hashPassword, supabaseCreateUser, supabaseUpdateUser, supabaseDeleteUser, findUserById, supabaseSetBan } from '../auth';
-import { buildId, buildToken } from '../lib/ids';
+import { buildId, buildToken, buildPassword } from '../lib/ids';
+import { sendUserInvite } from '../services/emailService';
 
 export const USER_ROLES = ['SUPER_ADMIN', 'EXECUTIVE', 'BU_SUPPORT', 'BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3', 'PARTNER'] as const;
 
@@ -88,9 +90,55 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
       }
       throw e;
     }
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'USER_CREATED', details: `User ${userId} created, pending activation` });
-    // TODO: Send activation email to user with link containing token
-    res.status(201).json({ id: userId, name, email, role, bu, partner, accountType: resolvedAccountType, phone, isActive: false, activationToken });
+    // Best-effort welcome email with the temporary credentials. A failure is
+    // surfaced to the admin (they can resend) but does not roll back the account.
+    const invite = await sendUserInvite({
+      to: email,
+      name,
+      email,
+      loginUrl: `${req.protocol}://${req.get('host')}/auth/login`,
+      tempPassword: password,
+      sentBy: req.user!.name,
+    });
+    await audit({ event: invite.ok ? 'USER_INVITED' : 'USER_INVITE_FAILED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_INVITED, details: `User ${userId} created, pending activation — welcome email ${invite.ok ? 'sent' : `failed (${invite.error || 'unknown'})`}` });
+    // NOTE: never return the activation token. The temp password is delivered by
+    // email (one-time) and the token is consumed by the change-password flow.
+    res.status(201).json({ id: userId, name, email, role, bu, partner, accountType: resolvedAccountType, phone, isActive: false, activationPending: true, invitationSent: invite.ok });
+  });
+
+  // Generate a secure temporary password for the admin to provision a new
+  // account (and optionally show the user). The password itself is never stored
+  // server-side before the user row exists — the admin passes it back on create.
+  router.post('/users/generate-password', requireAuth, requirePermission('admin:users'), async (req: AuthedRequest, res: Response) => {
+    const password = buildPassword();
+    await audit({ event: 'USER_TEMP_PASSWORD_GENERATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_TEMP_PASSWORD_GENERATED, details: `Temporary password generated for a new account by ${req.user!.name}` });
+    res.json({ password });
+  });
+
+  // Resend the welcome email and rotate the temporary password for a pending
+  // user (e.g. the original email was lost or SMTP was down at creation).
+  router.post('/users/:id/resend-invite', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res: Response) => {
+    const current = await findUserById(req.params.id);
+    if (!current) return res.status(404).json({ error: 'User not found' });
+    const tempPassword = buildPassword();
+    const activationToken = buildToken(32);
+    if (current.auth_user_id) {
+      await supabaseUpdateUser(current.auth_user_id, { password: tempPassword });
+    }
+    await upsertUser({ id: current.id, passwordHash: hashPassword(tempPassword), mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
+    const invite = await sendUserInvite({
+      to: current.email,
+      name: current.name,
+      email: current.email,
+      loginUrl: `${req.protocol}://${req.get('host')}/auth/login`,
+      tempPassword,
+      sentBy: req.user!.name,
+    });
+    await audit({ event: invite.ok ? 'USER_INVITE_RESENT' : 'USER_INVITE_FAILED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_INVITED, details: `Welcome email re-sent for ${current.email} — ${invite.ok ? 'sent' : `failed (${invite.error || 'unknown'})`}` });
+    // The rotated temporary password is returned so a SUPER_ADMIN (this route is
+    // SUPER_ADMIN-only) can hand the credentials over manually via the admin UI
+    // when SMTP is down. It is never persisted beyond the resend call.
+    res.json({ ok: true, invitationSent: invite.ok, tempPassword: invite.ok ? undefined : tempPassword });
   });
 
   router.patch('/users/:id', requireAuth, requirePermission('admin:users'), validateBody(z.object({ name: z.string().optional(), email: z.string().email().trim().optional(), role: z.enum([...USER_ROLES]).optional(), accountType: z.enum(['BU', 'PARTNER']).optional(), bu: z.string().optional(), partner: z.string().optional(), phone: z.string().optional(), password: z.string().min(8).optional() })), async (req: AuthedRequest, res: Response) => {
@@ -121,19 +169,28 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
     if (activateOnPasswordChange) {
       await upsertUser({ id: req.params.id, isActive: true, activationToken: null, activatedAt: new Date().toISOString() });
     }
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'USER_UPDATED', details: `User ${req.params.id} updated` });
+    await audit({ event: 'USER_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_UPDATED, details: `User ${req.params.id} updated` });
     res.json({ ok: true });
   });
 
-  // Super admin can toggle user activation status
+  // Super admin can toggle user activation status. An account can only be
+  // suspended once it has completed activation — never while still pending
+  // (pending = outstanding activation token or forced password change, the same
+  // derivation listUsersPublic uses for the "Pending Activation" status).
   router.patch('/users/:id/activation', requireAuth, requireRoles('SUPER_ADMIN'), validateBody(z.object({ isActive: z.boolean() })), async (req: AuthedRequest, res: Response) => {
     const { isActive } = req.body as { isActive: boolean };
     const current = await findUserById(req.params.id);
+    if (!isActive) {
+      if (!current) return res.status(404).json({ error: 'User not found' });
+      if (current.activation_token || current.must_change_password) {
+        return res.status(409).json({ error: 'Cannot suspend an account that has not been activated yet' });
+      }
+    }
     await upsertUser({ id: req.params.id, isActive, activationToken: null, activatedAt: isActive ? new Date().toISOString() : null });
     if (current?.auth_user_id) {
       await supabaseSetBan(current.auth_user_id, isActive);
     }
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'USER_ACTIVATION_TOGGLED', details: `User ${req.params.id} activation toggled to ${isActive} by ${req.user!.name}` });
+    await audit({ event: 'USER_ACTIVATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_ACTIVATED, details: `User ${req.params.id} activation toggled to ${isActive} by ${req.user!.name}` });
     res.json({ ok: true, isActive });
   });
 
@@ -143,7 +200,7 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
       await supabaseDeleteUser(current.auth_user_id);
     }
     await deleteUser(req.params.id);
-    await appendAuditLog({ ticketId: null, actor: req.user!.name, role: req.user!.role, action: 'USER_DELETED', details: `User ${req.params.id} deleted` });
+    await audit({ event: 'USER_DELETED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_DELETED, details: `User ${req.params.id} deleted` });
     res.json({ ok: true });
   });
 

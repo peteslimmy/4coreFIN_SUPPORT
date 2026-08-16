@@ -52,7 +52,7 @@ export default function ReportsTab() {
   const exportPdf = useCallback(async (msg: string) => {
     try {
       const { downloadExecutivePdfReport } = await import('../../lib/pdfGenerator');
-      downloadExecutivePdfReport(tickets, partners, businessUnits, auditLogs);
+      await downloadExecutivePdfReport(tickets, partners, businessUnits, auditLogs);
       showToast(msg, 'success');
     } catch {
       showToast('PDF export failed.', 'error');

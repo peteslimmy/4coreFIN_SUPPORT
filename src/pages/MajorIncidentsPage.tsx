@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Sliders, Plus, X, Activity, AlertTriangle, Lock, FileText, Send, Mail } from 'lucide-react';
+import { Sliders, Plus, X, Activity, AlertTriangle, Lock, FileText, RefreshCcw, CheckCircle2, ShieldAlert } from 'lucide-react';
 import { UserRole } from '../types/app';
 import { useApp } from '../context/AppContext';
 import { syncTicketUpdate, syncMajorIncidentUpdate } from '../lib/sync';
+import { api } from '../lib/api';
+import { normalizeStatus, nextStatuses, transitionBlocked, closeRequires, severityJustificationRequired } from '../lib/majorIncidentStateMachine';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import PageTransition from '../components/layout/PageTransition';
@@ -13,14 +15,30 @@ import Modal from '../components/ui/Modal';
 interface MajorIncidentsPageProps {
   selectedMajorIncidentId: string | null;
   setSelectedMajorIncidentId: (id: string | null) => void;
-  handleDeclareMajorIncident: (formData: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => void;
+  handleDeclareMajorIncident: (formData: {
+    name: string;
+    description: string;
+    partner: string;
+    category: string;
+    severity: string;
+    initialNotification: string;
+    affectedPartners?: string[];
+    affectedBus?: string[];
+    impact?: { description: string; customerCount?: string; amount?: string };
+    expectedRto?: string;
+    severityJustification?: string;
+    recipient?: string;
+    links?: string[];
+  }) => Promise<string | undefined>;
 }
 
 function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentId, handleDeclareMajorIncident }: MajorIncidentsPageProps) {
-  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, partners, currentRole, showToast, logAuditAction, saveToStorage, notifyWatchers, comments, auditLogs, currentUser } = useApp();
+  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, partners, businessUnits, currentRole, showToast, logAuditAction, saveToStorage, notifyWatchers, comments, auditLogs, currentUser, can } = useApp();
 
   const [miTimelineText, setMiTimelineText] = useState('');
   const [showDeclareMajorModal, setShowDeclareMajorModal] = useState(false);
+  const [declareStep, setDeclareStep] = useState<1 | 2>(1);
+  const [isSubmittingDeclare, setIsSubmittingDeclare] = useState(false);
   const [pirFormState, setPirFormState] = useState({
     rootCauseSummary: '', timelineSummary: '', impactSummary: '',
     preventiveOwner: '', preventiveDueDate: ''
@@ -30,8 +48,14 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
   const [newMajorIncidentForm, setNewMajorIncidentForm] = useState({
     name: '', description: '', partner: 'Parkway',
     category: 'Duplicate Debit', severity: 'CRITICAL',
-    initialNotification: 'Slack/Teams Webhook'
+    initialNotification: 'Slack/Teams Webhook',
+    affectedPartners: [] as string[],
+    affectedBus: [] as string[],
+    severityJustification: '',
+    expectedRto: '',
+    confirmDeclaration: false,
   });
+  const [retryingNotifId, setRetryingNotifId] = useState<string | null>(null);
 
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -118,72 +142,144 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
     showToast('Timeline updated successfully.');
   };
 
-  const handleTriggerMINotification = (miId: string, channel: string) => {
-    const updatedMIs = majorIncidents.map(mi => {
-      if (mi.id === miId) {
-        const newNotif = {
-          id: 'not-' + Date.now(),
-          timestamp: new Date().toISOString(),
-          channel,
-          recipient: channel.includes('Slack') ? '#ops-alerts-channel' : 'executive-distribution@company.com',
-          subject: `INCIDENT ADVISORY: ${mi.name} Updates`,
-          status: 'SENT' as const
-        };
-        return { ...mi, notifications: [newNotif, ...mi.notifications] };
-      }
-      return mi;
-    });
-    setMajorIncidents(updatedMIs);
-    saveToStorage(tickets, comments, auditLogs, updatedMIs);
-    const updatedMI = updatedMIs.find(mi => mi.id === miId);
-    if (updatedMI) syncMajorIncidentUpdate(miId, { notifications: updatedMI.notifications });
-    logAuditAction(null, 'MAJOR_INCIDENT_STAKEHOLDER_ALERT', `Triggered alert via ${channel} for Incident ${miId}`);
-    showToast(`Alert broadcast successfully via ${channel}.`, 'success');
+  const handleRetryNotification = async (miId: string, notifId: string) => {
+    setRetryingNotifId(notifId);
+    try {
+      const updated = await api.retryMajorIncidentNotification(miId, notifId);
+      setMajorIncidents(prev => prev.map(m => (m.id === miId ? updated : m)));
+      showToast('Advisory re-dispatched.', 'success');
+      logAuditAction(null, 'MAJOR_INCIDENT_STAKEHOLDER_ALERT', `Retried advisory ${notifId} for Incident ${miId}`);
+    } catch (e: any) {
+      showToast(e?.message || 'Failed to re-dispatch advisory.', 'error');
+    } finally {
+      setRetryingNotifId(null);
+    }
   };
 
-  const handleSavePIR = (miId: string, rcaSummary: string, timelineSummary: string, impactSummary: string, owner: string, dueDate: string, draft: boolean) => {
+  const handleSavePIR = async (miId: string, rcaSummary: string, timelineSummary: string, impactSummary: string, owner: string, dueDate: string, draft: boolean) => {
     setPirFormErrors({});
-    const updatedMIs = majorIncidents.map(mi => {
-      if (mi.id === miId) {
-        return {
-          ...mi,
-          status: draft ? mi.status : ('RESOLVED' as const),
-          active: draft ? mi.active : false,
-          pir: {
-            rootCauseSummary: rcaSummary,
-            timelineSummary: timelineSummary,
-            impactSummary: impactSummary,
-            preventiveOwner: owner,
-            preventiveDueDate: dueDate,
-            draft,
-            lastUpdated: new Date().toISOString(),
-            lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName
-          }
-        };
-      }
-      return mi;
-    });
-    setMajorIncidents(updatedMIs);
-    saveToStorage(tickets, comments, auditLogs, updatedMIs);
-    const updatedMI = updatedMIs.find(mi => mi.id === miId);
-    if (updatedMI) syncMajorIncidentUpdate(miId, { status: updatedMI.status, active: updatedMI.active, pir: updatedMI.pir });
-    logAuditAction(null, 'MAJOR_INCIDENT_PIR_SAVED', `PIR Document saved for ${miId}. Draft status: ${draft}`);
-    showToast(draft ? 'PIR draft saved successfully.' : 'PIR Finalized! Incident marked as closed and resolved.', 'success');
+    const mi = majorIncidents.find(x => x.id === miId);
+    if (!mi) return;
+    const pir = {
+      rootCauseSummary: rcaSummary,
+      timelineSummary,
+      impactSummary,
+      preventiveOwner: owner,
+      preventiveDueDate: dueDate,
+      draft,
+      lastUpdated: new Date().toISOString(),
+      lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName
+    };
+    try {
+      const updated = await api.updateMajorIncident(miId, { pir });
+      setMajorIncidents(prev => prev.map(m => (m.id === miId ? updated : m)));
+      logAuditAction(null, 'MAJOR_INCIDENT_PIR_SAVED', `PIR Document saved for ${miId}. Draft status: ${draft}`);
+      showToast(draft ? 'PIR draft saved successfully.' : 'PIR finalized — incident is now eligible to be closed.', 'success');
+    } catch (e: any) {
+      showToast(e?.message || 'Failed to save the PIR.', 'error');
+    }
   };
 
-  const handleChangeMIStatus = (miId: string, newStatus: string) => {
-    const updatedMIs = majorIncidents.map(mi => {
-      if (mi.id === miId) {
-        return { ...mi, status: newStatus as typeof mi.status, active: newStatus !== 'CLOSED' && newStatus !== 'RESOLVED' };
-      }
-      return mi;
-    });
-    setMajorIncidents(updatedMIs);
-    saveToStorage(tickets, comments, auditLogs, updatedMIs);
-    const updatedMI = updatedMIs.find(mi => mi.id === miId);
-    if (updatedMI) syncMajorIncidentUpdate(miId, { status: updatedMI.status, active: updatedMI.active });
-    logAuditAction(null, 'MAJOR_INCIDENT_STATUS_CHANGE', `Incident ${miId} changed status to ${newStatus}`);
-    showToast(`Incident status set to ${newStatus}.`, 'info');
+  const transitionIncident = async (miId: string, target: string) => {
+    const mi = majorIncidents.find(x => x.id === miId);
+    if (!mi) return;
+    const blocker = transitionBlocked(mi, target);
+    if (blocker) {
+      showToast(blocker, 'error');
+      return;
+    }
+    try {
+      const updated = await api.updateMajorIncident(miId, { status: target });
+      setMajorIncidents(prev => prev.map(m => (m.id === miId ? updated : m)));
+      syncMajorIncidentUpdate(miId, { status: updated.status, active: updated.active, owner: updated.owner, acknowledgedAt: updated.acknowledgedAt });
+      logAuditAction(null, 'MAJOR_INCIDENT_STATUS_CHANGE', `Incident ${miId} changed status to ${target}`);
+      showToast(`Incident status set to ${target}.`, 'info');
+    } catch (e: any) {
+      showToast(e?.message || 'Status could not be changed.', 'error');
+    }
+  };
+
+  const handleAcknowledge = () => {
+    if (!m) return;
+    transitionIncident(m.id, 'INVESTIGATING');
+  };
+
+  const handleFinalizeAndClose = async () => {
+    if (!m) return;
+    const errs: Record<string, string> = {};
+    if (!pirFormState.rootCauseSummary.trim()) errs.rootCauseSummary = 'Root cause is required';
+    if (!pirFormState.preventiveOwner.trim()) errs.preventiveOwner = 'Owner is required';
+    setPirFormErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    const pir = {
+      rootCauseSummary: pirFormState.rootCauseSummary,
+      timelineSummary: pirFormState.timelineSummary,
+      impactSummary: pirFormState.impactSummary,
+      preventiveOwner: pirFormState.preventiveOwner,
+      preventiveDueDate: pirFormState.preventiveDueDate,
+      draft: false,
+      lastUpdated: new Date().toISOString(),
+      lastUpdatedBy: currentUser.firstName + ' ' + currentUser.lastName
+    };
+    const merged = { ...m, pir };
+    const blocker = closeRequires(merged);
+    if (blocker) {
+      showToast(blocker, 'error');
+      return;
+    }
+    try {
+      const updated = await api.updateMajorIncident(m.id, { pir: { ...pir, draft: false, rootCauseSummary: pir.rootCauseSummary.trim(), preventiveOwner: pir.preventiveOwner.trim() }, status: 'CLOSED' });
+      setMajorIncidents(prev => prev.map(x => (x.id === m.id ? updated : x)));
+      logAuditAction(null, 'MAJOR_INCIDENT_PIR_SAVED', `PIR finalized and incident ${m.id} closed.`);
+      showToast('PIR finalized. Incident closed.', 'success');
+    } catch (e: any) {
+      showToast(e?.message || 'Could not finalize the PIR and close the incident.', 'error');
+    }
+  };
+
+  const handleDeclareSubmit = async () => {
+    const errors: Record<string, string> = {};
+    if (!newMajorIncidentForm.name.trim()) errors.name = 'Incident name is required';
+    if (!newMajorIncidentForm.description.trim()) errors.description = 'Incident description is required';
+    if (newMajorIncidentForm.affectedPartners.length === 0 && newMajorIncidentForm.affectedBus.length === 0) {
+      errors.scope = 'Select at least one affected partner or business unit.';
+    }
+    if (severityJustificationRequired(newMajorIncidentForm.severity) && !newMajorIncidentForm.severityJustification.trim()) {
+      errors.severityJustification = 'A justification is required when declaring a SEV-1 (CRITICAL) major incident.';
+    }
+    if (!newMajorIncidentForm.confirmDeclaration) {
+      errors.confirmDeclaration = 'Confirm that this is a real, unfolding major incident.';
+    }
+    setDeclareFormErrors(errors);
+    if (Object.keys(errors).length > 0) return;
+
+    setIsSubmittingDeclare(true);
+    try {
+      const createdId = await handleDeclareMajorIncident({
+        name: newMajorIncidentForm.name.trim(),
+        description: newMajorIncidentForm.description.trim(),
+        partner: newMajorIncidentForm.partner,
+        category: newMajorIncidentForm.category,
+        severity: newMajorIncidentForm.severity,
+        initialNotification: newMajorIncidentForm.initialNotification,
+        affectedPartners: newMajorIncidentForm.affectedPartners,
+        affectedBus: newMajorIncidentForm.affectedBus,
+        severityJustification: newMajorIncidentForm.severityJustification.trim(),
+        expectedRto: newMajorIncidentForm.expectedRto.trim(),
+      });
+      setShowDeclareMajorModal(false);
+      setDeclareStep(1);
+      setNewMajorIncidentForm({
+        name: '', description: '', partner: 'Parkway', category: 'Duplicate Debit', severity: 'CRITICAL',
+        initialNotification: 'Slack/Teams Webhook', affectedPartners: [], affectedBus: [],
+        severityJustification: '', expectedRto: '', confirmDeclaration: false,
+      });
+      if (createdId) setSelectedMajorIncidentId(createdId);
+    } catch (e: any) {
+      showToast(e?.message || 'Declaration failed. Please try again.', 'error');
+    } finally {
+      setIsSubmittingDeclare(false);
+    }
   };
 
   const m = majorIncidents.find(mi => mi.id === selectedMajorIncidentId);
@@ -226,18 +322,36 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
               <h4 className="text-xs font-bold text-text-muted uppercase tracking-widest flex items-center gap-1.5">
                 <Sliders className="w-4 h-4 text-accent" /> Incident Controls
               </h4>
-              <div>
-                <label className="block text-overline text-text-muted font-bold uppercase mb-1">Update Escalation Status</label>
-                <select value={m.status}
-                  onChange={(e) => handleChangeMIStatus(m.id, e.target.value)}
-                  disabled={currentRole === UserRole.EXECUTIVE}
-                  className="w-full bg-surface-elevated border border-border rounded p-2 text-body-sm font-bold text-text-primary focus:ring-1 focus:ring-brand-500">
-                  <option value="INVESTIGATING">INVESTIGATING</option>
-                  <option value="IDENTIFIED">IDENTIFIED</option>
-                  <option value="MONITORING">MONITORING</option>
-                  <option value="RESOLVED">RESOLVED</option>
-                  <option value="CLOSED">CLOSED</option>
-                </select>
+              <div className="space-y-3">
+                <label className="block text-overline text-text-muted font-bold uppercase mb-1">Lifecycle Controls</label>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  {(['DECLARED', 'INVESTIGATING', 'IDENTIFIED', 'MONITORING', 'RESOLVED', 'CLOSED'] as const).map((s, i) => (
+                    <React.Fragment key={s}>
+                      {i > 0 && <span className="text-overline text-text-muted">→</span>}
+                      <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded uppercase ${normalizeStatus(m.status) === s ? 'bg-accent text-white' : 'bg-surface text-text-muted border border-border'}`}>{s.slice(0, 4)}</span>
+                    </React.Fragment>
+                  ))}
+                </div>
+                {can(`major-incidents:manage`) && (
+                  nextStatuses(m).length > 0 ? (
+                    <div className="flex flex-col gap-2 pt-1">
+                      {normalizeStatus(m.status) === 'DECLARED' && (
+                        <button onClick={() => handleAcknowledge()}
+                          className="px-3 py-2 bg-accent hover:bg-accent-light text-white rounded text-xs font-bold transition cursor-pointer focus-ring">
+                          <CheckCircle2 className="w-4 h-4 inline mr-1 -mt-0.5" /> Acknowledge &amp; Begin Investigation
+                        </button>
+                      )}
+                      {nextStatuses(m).map((s) => (
+                        <button key={s} onClick={() => transitionIncident(m.id, s)}
+                          className="px-3 py-2 bg-surface hover:bg-surface-hover border border-border rounded text-xs font-bold text-text-primary transition cursor-pointer focus-ring text-left">
+                          <ShieldAlert className="w-4 h-4 inline mr-1 -mt-0.5 text-accent" /> Mark {s.charAt(0) + s.slice(1).toLowerCase()}
+                        </button>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-text-muted italic">No further transitions available.</p>
+                  )
+                )}
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div className="bg-surface p-2.5 rounded border border-border">
@@ -337,25 +451,25 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
               <h4 className="text-xs font-bold text-text-secondary uppercase tracking-widest flex items-center gap-1.5">
                 <Lock className="w-4 h-4 text-text-muted" /> Emergency Advisory Broadcasts
               </h4>
-              <p className="text-caption text-text-secondary">Trigger authorized real-time alerts to external operations systems and executives.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
-                <button onClick={() => handleTriggerMINotification(m.id, 'Slack/Teams Webhook')}
-                  className="px-3 py-2 bg-text-primary hover:bg-text-secondary text-white rounded text-overline font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm border border-text-secondary">
-                  <Send className="w-3.5 h-3.5" /> Slack Webhook
-                </button>
-                <button onClick={() => handleTriggerMINotification(m.id, 'Executive Email Distribution')}
-                  className="px-3 py-2 bg-accent hover:bg-accent-light text-white rounded text-overline font-bold uppercase transition flex items-center justify-center gap-1.5 cursor-pointer shadow-sm">
-                  <Mail className="w-3.5 h-3.5" /> Email Advisory
-                </button>
-              </div>
+              <p className="text-caption text-text-secondary">The declaration broadcast is dispatched over the configured channel. Failed or queued advisories can be re-sent after the channel configuration is fixed.</p>
               {m.notifications && m.notifications.length > 0 && (
-                <div className="border-t border-border pt-3 space-y-2">
+                <div className="pt-1 space-y-2">
                   <span className="text-overline text-text-muted font-bold uppercase tracking-wider block">Dispatched Advisories:</span>
-                  <div className="space-y-1.5 max-h-24 overflow-y-auto pr-1">
+                  <div className="space-y-1.5 max-h-28 overflow-y-auto pr-1">
                     {m.notifications.map((n) => (
-                      <div key={n.id} className="flex justify-between items-center bg-surface p-1.5 rounded text-overline text-text-secondary border border-border font-semibold">
-                        <span className="truncate">{n.channel}: {n.recipient}</span>
-                        <span className="text-overline text-success font-mono uppercase bg-success-light px-1 rounded">Sent</span>
+                      <div key={n.id} className="bg-surface p-2 rounded text-overline text-text-secondary border border-border font-semibold">
+                        <div className="flex justify-between items-center gap-2">
+                          <span className="truncate">{n.channel}: {n.recipient}</span>
+                          <span className={`text-[10px] font-mono uppercase px-1.5 rounded ${n.status === 'SENT' ? 'bg-success-light text-success-dark' : n.status === 'FAILED' ? 'bg-error-light text-error-dark' : 'bg-warning-light text-warning-dark'}`}>{n.status}</span>
+                        </div>
+                        {n.error && <p className="text-overline text-error mt-1">{n.error}</p>}
+                        {n.status !== 'SENT' && can('major-incidents:manage') && (
+                          <button onClick={() => handleRetryNotification(m.id, n.id)}
+                            disabled={retryingNotifId === n.id}
+                            className="mt-1.5 inline-flex items-center gap-1 text-overline font-bold text-info hover:text-info-dark uppercase transition cursor-pointer disabled:opacity-50">
+                            <RefreshCcw className="w-3 h-3" /> {retryingNotifId === n.id ? 'Re-dispatching…' : 'Retry'}
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -370,13 +484,13 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
                     <FileText className="w-4 h-4 text-info" /> PIR Documentation Desk
                   </h4>
                 </div>
-                <p className="text-caption text-text-secondary mt-2">Review technical findings and draft the mandatory Post-Incident Review (PIR). Finalizing the PIR closes the incident.</p>
+                <p className="text-caption text-text-secondary mt-2">Review technical findings and draft the mandatory Post-Incident Review (PIR). The incident must be RESOLVED before it can be finalized and closed.</p>
               </div>
 
               {m.pir && !m.pir.draft ? (
                 <div className="bg-gradient-to-br from-success-light to-accent-light/20 border border-success rounded-lg p-4 space-y-3 text-xs flex-1 overflow-y-auto mt-3 border-emerald-200/50">
                   <div className="flex items-center justify-between text-success-dark font-bold">
-                    <span>âœ“ PIR Finalized and Closed</span>
+                    <span>✓ PIR Finalized — Ready for Closure</span>
                   </div>
                   <div className="space-y-2">
                     <div><span className="font-bold text-text-secondary text-overline uppercase">Technical Root Cause Summary:</span><p className="text-text-primary font-medium">{m.pir.rootCauseSummary}</p></div>
@@ -417,14 +531,8 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
                   <div className="flex gap-2 pt-2 border-t border-border shrink-0">
                     <button onClick={() => handleSavePIR(m.id, pirFormState.rootCauseSummary, pirFormState.timelineSummary, pirFormState.impactSummary, pirFormState.preventiveOwner, pirFormState.preventiveDueDate, true)}
                       className="flex-1 py-2 bg-surface hover:bg-surface-hover text-text-primary rounded text-xs font-bold transition shadow-sm cursor-pointer text-center">Save Draft</button>
-                    <button onClick={() => {
-                      const errs: Record<string, string> = {};
-                      if (!pirFormState.rootCauseSummary.trim()) errs.rootCauseSummary = 'Root cause is required';
-                      if (!pirFormState.preventiveOwner.trim()) errs.preventiveOwner = 'Owner is required';
-                      setPirFormErrors(errs);
-                      if (Object.keys(errs).length > 0) return;
-                      handleSavePIR(m.id, pirFormState.rootCauseSummary, pirFormState.timelineSummary, pirFormState.impactSummary, pirFormState.preventiveOwner, pirFormState.preventiveDueDate, false);
-                    }} className="flex-1 py-2 bg-success hover:bg-success-dark text-white rounded text-xs font-bold transition shadow-sm cursor-pointer text-center">Finalize & Close</button>
+                    <button onClick={() => handleFinalizeAndClose()}
+                      className="flex-1 py-2 bg-success hover:bg-success-dark text-white rounded text-xs font-bold transition shadow-sm cursor-pointer text-center">Finalize &amp; Close</button>
                   </div>
                 </div>
               )}
@@ -443,60 +551,127 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
           subtitle="Coordinate response for systemic payments outages, auto-link recurring issues, and alert stakeholders"
           breadcrumbs={[{ label: 'Home' }, { label: 'Operations' }, { label: 'Major Incidents' }]}
           actions={
-            <button onClick={() => { setNewMajorIncidentForm({ name: '', description: '', partner: 'Parkway', category: 'Duplicate Debit', severity: 'CRITICAL', initialNotification: 'Slack/Teams Webhook' }); setShowDeclareMajorModal(true); }}
-              className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow cursor-pointer">
-              <AlertTriangle className="w-4 h-4" /> Declare Major Incident
-            </button>
+            can('major-incidents:declare') ? (
+              <button onClick={() => { setDeclareStep(1); setDeclareFormErrors({}); setNewMajorIncidentForm({ name: '', description: '', partner: partners[0] || 'Parkway', category: 'Duplicate Debit', severity: 'CRITICAL', initialNotification: 'Slack/Teams Webhook', affectedPartners: [], affectedBus: [], severityJustification: '', expectedRto: '', confirmDeclaration: false }); setShowDeclareMajorModal(true); }}
+                className="px-4 py-2 bg-accent hover:bg-accent-light text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow cursor-pointer">
+                <AlertTriangle className="w-4 h-4" /> Declare Major Incident
+              </button>
+            ) : null
           }
         />
 
       {showDeclareMajorModal && (
         <Modal
           open={showDeclareMajorModal}
-          onClose={() => { setShowDeclareMajorModal(false); setDeclareFormErrors({}); }}
-          title="Declare New Systemic Major Incident"
+          onClose={() => { setShowDeclareMajorModal(false); setDeclareFormErrors({}); setDeclareStep(1); }}
+          title={declareStep === 1 ? 'Declare New Systemic Major Incident — Step 1 of 2 (Triage)' : 'Declare New Systemic Major Incident — Step 2 of 2 (Assessment & Authorization)'}
           footer={
-            <div className="flex gap-2">
-              <button onClick={() => { if (!newMajorIncidentForm.name.trim()) { setDeclareFormErrors({ name: 'Incident name is required' }); return; } setDeclareFormErrors({}); handleDeclareMajorIncident(newMajorIncidentForm); }}
-                className="px-4 py-2 bg-error hover:bg-error-dark text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer">
-                <Activity className="w-4 h-4" /> Declare Emergency Incident
-              </button>
-              <button onClick={() => { setShowDeclareMajorModal(false); setDeclareFormErrors({}); }} className="px-4 py-2 bg-surface hover:bg-surface-hover text-text-primary rounded text-xs cursor-pointer">Cancel</button>
+            <div className="flex gap-2 items-center">
+              {declareStep === 2 && (
+                <button onClick={() => { setDeclareStep(1); setDeclareFormErrors({}); }} className="px-4 py-2 bg-surface hover:bg-surface-hover text-text-primary rounded text-xs font-semibold cursor-pointer">← Back</button>
+              )}
+              {declareStep === 1 ? (
+                <>
+                  <button onClick={() => { const errs: Record<string, string> = {}; if (!newMajorIncidentForm.name.trim()) errs.name = 'Incident name is required'; if (!newMajorIncidentForm.description.trim()) errs.description = 'Describe the incident'; setDeclareFormErrors(errs); if (Object.keys(errs).length > 0) return; setDeclareStep(2); }}
+                    className="px-4 py-2 bg-text-primary hover:bg-text-secondary text-white rounded text-xs font-semibold cursor-pointer">Continue →</button>
+                  <button onClick={() => { setShowDeclareMajorModal(false); setDeclareFormErrors({}); setDeclareStep(1); }} className="px-4 py-2 bg-surface hover:bg-surface-hover text-text-primary rounded text-xs cursor-pointer">Cancel</button>
+                </>
+              ) : (
+                <>
+                  <button onClick={() => handleDeclareSubmit()} disabled={isSubmittingDeclare}
+                    className="px-4 py-2 bg-error hover:bg-error-dark text-white rounded text-xs font-semibold flex items-center gap-1.5 cursor-pointer disabled:opacity-50">
+                    <Activity className="w-4 h-4" /> {isSubmittingDeclare ? 'Declaring...' : 'Declare Emergency Incident'}
+                  </button>
+                  <button onClick={() => { setShowDeclareMajorModal(false); setDeclareFormErrors({}); setDeclareStep(1); }} className="px-4 py-2 bg-surface hover:bg-surface-hover text-text-primary rounded text-xs cursor-pointer">Cancel</button>
+                </>
+              )}
             </div>
           }
         >
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-text-primary">
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Incident Name / Subject</label>
-              <input type="text" placeholder="e.g. Parkway API Settlement Delay APAC" value={newMajorIncidentForm.name} onChange={(e) => { setNewMajorIncidentForm(prev => ({ ...prev, name: e.target.value })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.name; return n; }); }} className={`w-full border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none focus-ring text-text-primary ${declareFormErrors.name ? 'border-error bg-surface-elevated' : 'border-border bg-surface-elevated'}`} aria-invalid={!!declareFormErrors.name} />
-              {declareFormErrors.name && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.name}</p>}
+          {declareStep === 1 ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 text-xs text-text-primary">
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Incident Name / Subject</label>
+                <input type="text" placeholder="e.g. Parkway API Settlement Delay APAC" value={newMajorIncidentForm.name} onChange={(e) => { setNewMajorIncidentForm(prev => ({ ...prev, name: e.target.value })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.name; return n; }); }} className={`w-full border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary ${declareFormErrors.name ? 'border-error bg-surface-elevated' : 'border-border bg-surface-elevated'}`} aria-invalid={!!declareFormErrors.name} />
+                {declareFormErrors.name && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.name}</p>}
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Primary Payment Partner</label>
+                <select value={newMajorIncidentForm.partner} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, partner: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary">
+                  {partners.map(p => <option key={p} value={p}>{p}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Incident Severity Level</label>
+                <select value={newMajorIncidentForm.severity} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, severity: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary font-semibold">
+                  <option value="CRITICAL">SEV-1 Critical Outage</option>
+                  <option value="HIGH">SEV-2 High Impact</option>
+                  <option value="MEDIUM">SEV-3 Moderate Degradation</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Incident Category</label>
+                <input type="text" placeholder="e.g. Duplicate Debit, Settlement Delay" value={newMajorIncidentForm.category} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, category: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary" />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Affected Partners</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {partners.map(p => {
+                    const active = newMajorIncidentForm.affectedPartners.includes(p);
+                    return (
+                      <button type="button" key={p} onClick={() => { setNewMajorIncidentForm(prev => ({ ...prev, affectedPartners: active ? prev.affectedPartners.filter(x => x !== p) : [...prev.affectedPartners, p] })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.scope; return n; }); }} className={`px-2.5 py-1 rounded text-overline font-bold uppercase transition cursor-pointer ${active ? 'bg-error text-white' : 'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`}>{p}</button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Affected Business Units</label>
+                <div className="flex flex-wrap gap-1.5">
+                  {businessUnits.map(bu => {
+                    const active = newMajorIncidentForm.affectedBus.includes(bu);
+                    return (
+                      <button type="button" key={bu} onClick={() => { setNewMajorIncidentForm(prev => ({ ...prev, affectedBus: active ? prev.affectedBus.filter(x => x !== bu) : [...prev.affectedBus, bu] })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.scope; return n; }); }} className={`px-2.5 py-1 rounded text-overline font-bold uppercase transition cursor-pointer ${active ? 'bg-error text-white' : 'bg-surface text-text-muted border border-border hover:bg-surface-hover'}`}>{bu}</button>
+                    );
+                  })}
+                </div>
+                {declareFormErrors.scope && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.scope}</p>}
+              </div>
+              <div className="col-span-2">
+                <label className="block text-xs font-medium text-text-secondary mb-1">Operational Description / Initial Findings</label>
+                <textarea rows={2} placeholder="e.g. Adyen bulk checkout callbacks are erroring with HTTP 504. Investigating middleware buffer timeouts." value={newMajorIncidentForm.description} onChange={(e) => { setNewMajorIncidentForm(prev => ({ ...prev, description: e.target.value })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.description; return n; }); }} className={`w-full bg-surface-elevated border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary ${declareFormErrors.description ? 'border-error' : 'border-border'}`} aria-invalid={!!declareFormErrors.description} />
+                {declareFormErrors.description && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.description}</p>}
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Affected Payment Partner</label>
-              <select value={newMajorIncidentForm.partner} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, partner: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary">
-                {partners.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
+          ) : (
+            <div className="space-y-5 text-xs text-text-primary">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Severity Justification</label>
+                  <textarea rows={3} placeholder="Explain why this is SEV-1 / SEV-2..." value={newMajorIncidentForm.severityJustification} onChange={(e) => { setNewMajorIncidentForm(prev => ({ ...prev, severityJustification: e.target.value })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.severityJustification; return n; }); }} className={`w-full bg-surface-elevated border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary ${declareFormErrors.severityJustification ? 'border-error' : 'border-border'}`} aria-invalid={!!declareFormErrors.severityJustification} />
+                  {newMajorIncidentForm.severity === 'CRITICAL' && <p className="text-xs text-warning-dark mt-1">Required for a SEV-1 (CRITICAL) declaration.</p>}
+                  {declareFormErrors.severityJustification && <p className="text-xs text-error mt-1" role="alert">{declareFormErrors.severityJustification}</p>}
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-text-secondary mb-1">Expected RTO</label>
+                  <input type="text" placeholder="e.g. 60 min" value={newMajorIncidentForm.expectedRto} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, expectedRto: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary" />
+                  <label className="block text-xs font-medium text-text-secondary mb-1 mt-3">Initial Stakeholder Notification</label>
+                  <select value={newMajorIncidentForm.initialNotification} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, initialNotification: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs outline-none transition-all duration-200 focus-ring text-text-primary">
+                    <option value="Slack/Teams Webhook">All Hands: Broadcast to #ops-alerts Slack Channel</option>
+                    <option value="Executive Advisory">Executive Advisory: Send Email to board@company.com</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-text-secondary mb-1">Customer Impact &amp; Refund Assessment</label>
+                <textarea rows={2} disabled placeholder="Impact summary capture pending — add to the PIR during investigation." className="w-full bg-surface border border-border rounded p-2 text-xs outline-none text-text-muted cursor-not-allowed" />
+              </div>
+              <label className="flex items-start gap-2 bg-surface border border-border rounded p-3 text-xs cursor-pointer">
+                <input type="checkbox" checked={newMajorIncidentForm.confirmDeclaration} onChange={(e) => { setNewMajorIncidentForm(prev => ({ ...prev, confirmDeclaration: e.target.checked })); setDeclareFormErrors(prev => { const n = { ...prev }; delete n.confirmDeclaration; return n; }); }} className="mt-0.5" />
+                <span className="text-text-primary font-semibold">I confirm this is a real, unfolding systemic major incident that warrants an emergency declaration and stakeholder broadcast.</span>
+              </label>
+              {declareFormErrors.confirmDeclaration && <p className="text-xs text-error" role="alert">{declareFormErrors.confirmDeclaration}</p>}
             </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Incident Severity Level</label>
-              <select value={newMajorIncidentForm.severity} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, severity: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary font-semibold">
-                <option value="CRITICAL">SEV-1 Critical Outage</option>
-                <option value="HIGH">SEV-2 High Impact</option>
-                <option value="MEDIUM">SEV-3 Moderate Degradation</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-xs font-medium text-text-secondary mb-1">Initial Stakeholder Notification</label>
-              <select value={newMajorIncidentForm.initialNotification} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, initialNotification: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary">
-                <option value="Slack/Teams Webhook">All Hands: Broadcast to #ops-alerts Slack Channel</option>
-                <option value="Executive Advisory">Executive Advisory: Send Email to board@company.com</option>
-              </select>
-            </div>
-            <div className="col-span-2">
-              <label className="block text-xs font-medium text-text-secondary mb-1">Operational Description / Initial Findings</label>
-              <textarea rows={2} placeholder="e.g. Adyen bulk checkout callbacks are erroring with HTTP 504. Investigating middleware buffer timeouts." value={newMajorIncidentForm.description} onChange={(e) => setNewMajorIncidentForm(prev => ({ ...prev, description: e.target.value }))} className="w-full bg-surface-elevated border border-border rounded p-2 text-xs focus-ring transition-all duration-200 outline-none transition-all duration-200 focus-ring text-text-primary" />
-            </div>
-          </div>
+          )}
         </Modal>
       )}
 
@@ -531,7 +706,7 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
                 </div>
                 <div className="mt-6 pt-4 border-t border-border flex justify-between items-center shrink-0">
                   <span className="text-overline text-text-muted font-bold uppercase tracking-wider">{linkedCount} Linked Complaints</span>
-                  <button onClick={() => setSelectedMajorIncidentId(m.id)} className="text-xs font-bold text-info hover:text-info transition flex items-center gap-1 cursor-pointer">Command Room âž”</button>
+                  <button onClick={() => setSelectedMajorIncidentId(m.id)} className="text-xs font-bold text-info hover:text-info transition flex items-center gap-1 cursor-pointer">Command Room →</button>
                 </div>
               </div>
             );
