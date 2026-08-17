@@ -58,7 +58,7 @@ export function syncFeedback(id: string, patch: { feedbackScore?: number | null;
 }
 
 export function syncCreateTicket(ticket: unknown) {
-  fireAndForget(withErrorLogging(api.createTicket(ticket)));
+  return withErrorLogging(api.createTicket(ticket));
 }
 
 export function syncComment(comment: unknown) {

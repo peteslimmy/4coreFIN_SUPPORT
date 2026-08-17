@@ -48,6 +48,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
     group: 'Oversight',
     permissions: [
       { id: 'audit:view', label: 'View audit logs' },
+      { id: 'audit:write', label: 'Write audit entries' },
       { id: 'audit:verify', label: 'Verify audit chain' },
       { id: 'reports:view', label: 'View reports' },
       { id: 'executive:dashboard', label: 'Access executive dashboard' },
@@ -57,6 +58,7 @@ export const PERMISSION_GROUPS: { group: string; permissions: { id: Permission; 
     group: 'Administration',
     permissions: [
       { id: 'admin:config', label: 'Manage config lists' },
+      { id: 'users:view', label: 'View users list' },
       { id: 'admin:users', label: 'Manage users & roles' },
       { id: 'admin:forms', label: 'Manage complaint forms' },
       { id: 'admin:access', label: 'Manage access control' },
@@ -165,7 +167,7 @@ export const DEFAULT_ROLES: RoleDefinition[] = [
     buScoped: false,
     permissions: [
       'tickets:view', 'tickets:unmask', 'comments:view', 'notifications:view',
-      'audit:view', 'audit:verify', 'reports:view', 'executive:dashboard',
+'audit:view', 'audit:write', 'audit:verify', 'reports:view', 'executive:dashboard',
     ],
   },
   {

@@ -32,6 +32,9 @@ export function createConfigRouter(): Router {
 
   router.put('/config/:name', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
     const { name } = req.params;
+    if (name === 'roles' && req.user!.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Requires role: SUPER_ADMIN' });
+    }
     if (CONFIG_TABLES.includes(name)) {
       await replaceJsonTable(name, req.body);
       await audit({ event: 'CONFIG_TABLE_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_TABLE_UPDATED, details: `Updated config table ${name}` });

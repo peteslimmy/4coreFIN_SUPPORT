@@ -51,6 +51,8 @@ export function createOperationsRouter(): Router {
         return buList.reduce<Record<string, string>>((acc, b) => { acc[b.name] = b.code; return acc; }, {});
       });
       add('paymentChannels', () => getConfig('paymentChannels', []));
+      add('partners', () => getConfig('partners', []));
+      add('categories', () => getConfig('categories', []));
     }
     if (wants('config') && can('admin:config')) {
       add('slaRules', () => listJsonTable('sla_rules'));
@@ -58,8 +60,6 @@ export function createOperationsRouter(): Router {
       add('ticketTemplates', () => listJsonTable('ticket_templates'));
       add('kbArticles', () => listJsonTable('kb_articles'));
       add('savedReplies', () => getConfig('savedReplies', []));
-      add('partners', () => getConfig('partners', []));
-      add('categories', () => getConfig('categories', []));
       add('buFormConfigs', () => getConfig('buFormConfigs', []));
       add('notificationConfigs', () => getConfig('notificationConfigs', []));
       add('escalationRules', () => getConfig('escalationRules', []));
@@ -126,7 +126,7 @@ export function createOperationsRouter(): Router {
   });
 
   router.patch('/notifications/:id/read', requireAuth, async (req: AuthedRequest, res: Response) => {
-    await markNotificationRead(req.params.id);
+    await markNotificationRead(req.params.id, req.user!);
     res.json({ ok: true });
   });
 

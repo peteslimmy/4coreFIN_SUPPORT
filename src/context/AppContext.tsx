@@ -168,8 +168,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   const ui = useUi();
   const { setActiveTab } = ui;
 
-  const lastLocalUpdate = useRef<Record<string, number>>({});
-
   // Retained for API compatibility with the many call sites threaded through
   // the domain contexts; the server + React Query cache are the only sources
   // of truth now. The per-mutation localStorage/IndexedDB mirrors were
@@ -372,10 +370,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       if (event === 'ticket_updated' && d?.id) {
         const patchStatus = d.status ? normalizeStatus(String(d.status)) : undefined;
         ticket.setTickets(prev => {
-          const lastLocal = lastLocalUpdate.current[String(d.id)];
-          if (lastLocal && Date.now() - lastLocal < 5000) {
-            return prev;
-          }
           return prev.map(t => t.id === String(d.id) ? { ...t, ...(d as Record<string, unknown>), ...(patchStatus ? { status: patchStatus } : {}) } : t);
         });
       } else if (event === 'ticket_created' && d?.id) {

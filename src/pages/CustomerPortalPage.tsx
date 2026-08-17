@@ -308,16 +308,27 @@ export default function CustomerPortalPage() {
     setTickets(updatedTickets);
     setAuditLogs(updatedAudits);
     saveToStorage(updatedTickets, comments, updatedAudits);
-    syncCreateTicket(record);
-    syncAudit({ ticketId: tId, action: 'CREATED_TICKET', details: newAudit.details });
-    syncAudit({ ticketId: tId, action: 'TICKET_ASSIGNED', details: assignedAudit.details });
+
+    let serverConfirmed = false;
+    try {
+      await syncCreateTicket(record);
+      await syncAudit({ ticketId: tId, action: 'CREATED_TICKET', details: newAudit.details });
+      await syncAudit({ ticketId: tId, action: 'TICKET_ASSIGNED', details: assignedAudit.details });
+      serverConfirmed = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'Server sync failed — ticket saved locally only';
+      showToast(msg, 'error');
+    }
 
     await uploadEvidence(tId);
 
     setActiveTicketId(tId);
     setActiveTab('tickets');
     setFormErrors({});
-    showToast(`Ticket ${tId} created and logged.`, 'success');
+    showToast(
+      `Ticket ${tId} ${serverConfirmed ? 'created and synced' : 'saved locally (server sync failed)'}`,
+      serverConfirmed ? 'success' : 'error'
+    );
   };
 
   const performMerge = async (existing: TicketRecord, incoming: TicketRecord) => {

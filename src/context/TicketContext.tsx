@@ -299,8 +299,13 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     };
     setAuditLogs(prev => [assignedAudit, newAudit, ...prev]);
     saveToStorage([record, ...tickets], comments, [assignedAudit, newAudit, ...auditLogs]);
-    syncCreateTicket(record);
-    showToast(`Ticket ${tId} created.`, 'success');
+
+    syncCreateTicket(record)
+      .then(() => showToast(`Ticket ${tId} created.`, 'success'))
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : 'Server sync failed — ticket saved locally only';
+        showToast(msg, 'error');
+      });
     return tId;
   }, [currentUser, currentRole, slaRules, holidays, businessUnitCodes, tickets, comments, auditLogs, saveToStorage, showToast]);
 

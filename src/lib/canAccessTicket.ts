@@ -21,6 +21,7 @@ export interface TicketAccessTarget {
   partner?: string;
   provider?: string;
   assignedAgentId?: string;
+  partnerOrgId?: number;
   partner_org_id?: number;
 }
 
@@ -39,7 +40,7 @@ export function canAccessTicket(user: TicketAccessPrincipal, ticket: TicketAcces
     const partner = (ticket.partner || ticket.provider || '').toLowerCase();
     const mine = (user.partner || user.bu || '').toLowerCase();
     const agent = (ticket.assignedAgentId || '').toLowerCase();
-    const ticketPartnerOrgId = ticket.partner_org_id;
+    const ticketPartnerOrgId = ticket.partnerOrgId ?? ticket.partner_org_id;
     const mineOrgId = user.partnerOrgId;
     // Org-scoped partner: FK equality only — mirrors the repository query
     // scope (.eq('partner_org_id', ...)). Org-less tickets stay invisible

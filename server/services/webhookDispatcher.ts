@@ -67,13 +67,18 @@ export async function dispatchWebhook(eventType: WebhookEvent, payload: unknown)
   const baseHeaders: Record<string, string> = { 'Content-Type': 'application/json', 'X-Webhook-Event': eventType };
 
   for (const webhook of active) {
+    const headers: Record<string, string> = { ...baseHeaders };
     const secret = webhook.secret || '';
-    if (secret) baseHeaders['X-Webhook-Signature-256'] = 'sha256=' + await signPayload(secret, body);
+    if (secret) {
+      headers['X-Webhook-Signature-256'] = 'sha256=' + await signPayload(secret, body);
+    } else {
+      delete headers['X-Webhook-Signature-256'];
+    }
 
     let last: { ok: boolean; status: number } = { ok: false, status: 0 };
     for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
       if (attempt > 0) await new Promise((r) => setTimeout(r, RETRY_DELAYS_MS[attempt - 1]));
-      last = await postWithTimeout(webhook.url, body, baseHeaders, DELIVER_TIMEOUT_MS);
+      last = await postWithTimeout(webhook.url, body, headers, DELIVER_TIMEOUT_MS);
       if (last.ok) {
         await supabase.from('webhooks').update({ last_fired_at: new Date().toISOString() }).eq('id', webhook.id);
         break;

@@ -98,7 +98,7 @@ export async function listTickets(
   }
   if (opts?.search) {
     const term = `%${opts.search}%`;
-    query = query.or(`customer_name.ilike.${term},customer_email.ilike.${term},description.ilike.${term},id.ilike.${term}`);
+    query = query.or(`customer_name.ilike.${term},description.ilike.${term},id.ilike.${term}`);
   }
   const tenantId = tenantScope(user);
   if (tenantId) {
@@ -108,6 +108,8 @@ export async function listTickets(
   }
   if (opts?.limit) {
     query = query.range(opts.offset ?? 0, (opts.offset ?? 0) + opts.limit - 1);
+  } else {
+    query = query.range(0, 499);
   }
   const { data, error, count } = await query;
   if (error || !data) return [];
@@ -138,11 +140,13 @@ export async function getTicketRaw(id: string): Promise<any | null> {
  * Load a single ticket enforcing the authenticated user's scope at the query
  * level. Returns null when the ticket is not in the user's scope.
  */
-function tryDecrypt(encryptedText: string): string {
+function tryDecrypt(encryptedText: string | null | undefined): string {
+  if (!encryptedText) return '';
   try {
-    return decrypt(encryptedText);
+    const result = decrypt(encryptedText);
+    return result === encryptedText ? '' : result;
   } catch {
-    return encryptedText;
+    return '';
   }
 }
 
@@ -516,8 +520,14 @@ export async function insertNotification(n: {
   broadcast('notification_created', n, tenantId);
 }
 
-export async function markNotificationRead(id: string) {
-  const { error } = await supabase.from('watcher_notifications').update({ seen: true }).eq('id', id);
+export async function markNotificationRead(id: string, user: AuthUser) {
+  const tenantId = tenantScope(user);
+  let query = supabase.from('watcher_notifications').update({ seen: true }).eq('id', id);
+  if (tenantId) {
+    query = query.eq('tenant_id', tenantId);
+  }
+  query = query.eq('recipient', user.email);
+  const { error } = await query;
   if (error) throw new Error(`markNotificationRead failed: ${error.message}`);
 }
 

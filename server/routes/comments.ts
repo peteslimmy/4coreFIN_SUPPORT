@@ -30,7 +30,7 @@ export function createCommentsRouter(): Router {
     if (!existing) return res.status(404).json({ error: 'Comment not found' });
     const c = req.body;
     await updateComment({ ...c, id: req.params.id });
-    await audit({ event: 'COMMENT_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_UPDATED, details: `Comment ${req.params.id} updated`, ticketId: existing.ticket_id });
+    await audit({ event: 'COMMENT_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_UPDATED, details: `Comment ${req.params.id} updated`, ticketId: existing.ticketId });
     res.json({ ok: true });
   });
 

@@ -3,9 +3,12 @@
 -- and migrate existing partner string data to the new table.
 
 -- Partner organizations table
+-- name must be UNIQUE: the ON CONFLICT (name) seeding below requires it
+-- (without the constraint Postgres rejects the statement with
+-- 42P10 "no unique or exclusion constraint matching the ON CONFLICT").
 CREATE TABLE IF NOT EXISTS partner_organizations (
   id SERIAL PRIMARY KEY,
-  name TEXT NOT NULL,
+  name TEXT NOT NULL UNIQUE,
   tier TEXT NOT NULL DEFAULT 'standard',
   contact_email TEXT,
   status TEXT NOT NULL DEFAULT 'active',

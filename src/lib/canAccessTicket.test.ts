@@ -29,6 +29,12 @@ describe('canAccessTicket — partner org FK isolation', () => {
     expect(canAccessTicket(user, ticket({ partner_org_id: 7, partner: 'paystack-ng' }))).toBe(true);
   });
 
+  it('matches by partnerOrgId (camelCase) — mirrors repository toCamel output', () => {
+    const user = partnerUser({ partnerOrgId: 7 });
+    expect(canAccessTicket(user, ticket({ partnerOrgId: 7, partner: 'paystack' }))).toBe(true);
+    expect(canAccessTicket(user, ticket({ partnerOrgId: 8, partner: 'Paystack' }))).toBe(false);
+  });
+
   it('falls back to case-insensitive name matching when either side lacks the FK', () => {
     const user = partnerUser(); // no partnerOrgId (pre-migration account)
     expect(canAccessTicket(user, ticket({ partner: 'paystack' }))).toBe(true);

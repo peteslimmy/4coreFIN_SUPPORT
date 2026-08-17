@@ -23,10 +23,10 @@ export default function PaymentPartnerPortalPage() {
   const [rcaForm, setRcaForm] = useState({ rootCause: '', correctiveAction: '', preventiveAction: '', notes: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  const partnerName = currentUser.bu;
+  const partnerName = (currentUser.partner || currentUser.bu || '').toLowerCase();
   const partnerTickets = useMemo(() =>
     scopedTickets.filter(t =>
-      t.partner.toLowerCase() === partnerName.toLowerCase() &&
+      (t.partner || '').toLowerCase() === partnerName &&
       (t.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
        t.customerName.toLowerCase().includes(searchQuery.toLowerCase()) ||
        t.category.toLowerCase().includes(searchQuery.toLowerCase()))

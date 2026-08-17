@@ -115,7 +115,7 @@ export async function runSlaCheck() {
           });
         }
         breachCount++;
-        broadcast('sla_breach', { ticketId: t.id, slaDeadline: t.slaDeadline }, t.tenant_id);
+        broadcast('sla_breach', { ticketId: t.id, slaDeadline: t.slaDeadline }, t.tenantId);
         dispatchWebhook('sla.breach', { ticketId: t.id, priority: t.priority, category: t.category, slaDeadline: t.slaDeadline }).catch(() => {});
       } else if (hoursLeft >= 0 && hoursLeft < riskThreshold) {
         for (const recipient of recipients) {
@@ -130,7 +130,7 @@ export async function runSlaCheck() {
           });
         }
         riskCount++;
-        broadcast('sla_at_risk', { ticketId: t.id, hoursLeft }, t.tenant_id);
+        broadcast('sla_at_risk', { ticketId: t.id, hoursLeft }, t.tenantId);
       }
     } catch (e) {
       console.error(`SLA monitor error for ticket ${t.id}:`, e);

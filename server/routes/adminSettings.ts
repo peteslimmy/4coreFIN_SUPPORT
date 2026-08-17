@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { requireAuth, type AuthedRequest } from '../auth';
+import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } from '../services/settingsService';
 import { uploadFileToStorage, deleteFile } from '../services/storageService';
@@ -36,7 +36,7 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Update single setting ─────────────────────────────
-  router.put('/admin/settings/:key', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.put('/admin/settings/:key', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res) => {
     const { key } = req.params;
     let value = req.body.value;
 
