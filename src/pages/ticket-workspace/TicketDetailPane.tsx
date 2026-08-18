@@ -8,7 +8,7 @@ import TicketActivitySection from './TicketActivitySection';
 import type { TicketRecord } from '../../types/app';
 import { TicketStatus, UserRole, TicketPriority } from '../../types/app';
 import { useApp } from '../../context/AppContext';
-import { formatCurrency, formatSlaDuration, getTicketStatusStep, TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
+import { formatCurrency, formatSlaCountdown, getTicketStatusStep, TICKET_STATUS_ORDER, TICKET_STATUS_LABELS } from '../../lib/utils';
 import { syncTicketUpdate, syncKbArticles } from '../../lib/sync';
 import { resolveSlaDuration, type SlaSource } from '../../lib/slaCalculator';
 import { getAllTransitionBlockers } from '../../lib/ticketStateMachine';
@@ -124,8 +124,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
             <span className="flex items-center gap-1.5 text-xs text-text-muted min-w-0">
               <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
               <span className="truncate">
-                Owner: <strong className="font-semibold text-text-primary">{activeTicket.partner}</strong>
-                {activeTicket.assignedAgentId && <span className="text-text-muted"> · {activeTicket.assignedAgentId}</span>}
+                Owner: <strong className="font-semibold text-text-primary">{activeTicket.assignedAgentId ? activeTicket.assignedAgentId.replace(/ Team\s*$/i, '') : activeTicket.partner}</strong>
               </span>
             </span>
           </div>
@@ -200,7 +199,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               <div className="bg-error/5 border-b border-error/15 px-5 py-3">
                 <div className="flex items-center gap-2">
                   <AlertTriangle className="w-4 h-4 text-error shrink-0" />
-                  <span className="text-xs font-bold text-error">{activeTicket.partner} Partner Team / SLA Breached -{formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
+                  <span className="text-xs font-bold text-error">{activeTicket.partner} Partner Team / SLA Breached -{formatSlaCountdown(new Date(activeTicket.slaDeadline).getTime(), now)}</span>
                 </div>
               </div>
             );
@@ -209,16 +208,19 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
           <div className="p-5">
             <div className="flex items-center gap-2 mb-5">
               <span className="w-5 h-5 rounded bg-primary-light flex items-center justify-center text-primary"><Info className="w-3 h-3" /></span>
-              <h3 className="text-xs font-heading font-bold text-text-muted uppercase tracking-wide">Ticket Info</h3>
+              <h3 className="text-xs font-heading font-bold text-text-muted uppercase tracking-wide">Ticket Information</h3>
             </div>
             <div className="grid grid-cols-2 lg:grid-cols-3 gap-y-4 gap-x-6">
               <div>
                 <p className="text-caption text-text-muted font-medium mb-1">Customer Name</p>
                 <p className="text-body-sm font-semibold text-text-primary">{activeTicket.customerName}</p>
+                {activeTicket.submittedByName && (
+                  <p className="text-caption text-text-muted font-medium mt-1">Logged by: <span className="font-semibold text-text-secondary">{activeTicket.submittedByName}</span></p>
+                )}
               </div>
               <div>
                 <p className="text-caption text-text-muted font-medium mb-1">Transaction ID</p>
-                <p className="text-body-sm font-mono font-bold text-accent">{activeTicket.transactionId}</p>
+                <p className="text-body-sm font-semibold text-text-primary">{activeTicket.transactionId}</p>
               </div>
               <div>
                 <p className="text-caption text-text-muted font-medium mb-1">Issue Category</p>
@@ -226,7 +228,7 @@ export default function TicketDetailPane(props: TicketDetailPaneProps) {
               </div>
               <div>
                 <p className="text-caption text-text-muted font-medium mb-1">Amount</p>
-                <p className="text-h3 font-heading font-bold text-text-primary">{activeTicket.amount ? formatCurrency(activeTicket.amount) : 'Undefined'}</p>
+                <p className="text-body-sm font-semibold text-text-primary">{activeTicket.amount ? formatCurrency(activeTicket.amount) : 'Undefined'}</p>
               </div>
               <div>
                 <p className="text-caption text-text-muted font-medium mb-1">Opened</p>

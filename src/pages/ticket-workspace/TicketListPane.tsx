@@ -6,7 +6,7 @@ import StatusBadge from '../../components/ui/StatusBadge';
 import { TicketPriority, TicketStatus } from '../../types/app';
 import { useApp } from '../../context/AppContext';
 import { useUi } from '../../context/UiContext';
-import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, formatSlaDuration } from '../../lib/utils';
+import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, formatSlaCountdown } from '../../lib/utils';
 import { syncTicketUpdate } from '../../lib/sync';
 
 interface TicketListPaneProps {
@@ -182,11 +182,11 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
                    </div>
                    <div className="flex items-center gap-2">
 {slaBreached ? (
-                        <span className="bg-error/10 text-error font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-error/20 shrink-0">Breached -{formatSlaDuration(new Date(t.slaDeadline).getTime(), now)}</span>
+                        <span className="bg-error/10 text-error font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-error/20 shrink-0">Breached -{formatSlaCountdown(new Date(t.slaDeadline).getTime(), now)}</span>
                       ) : slaAtRisk ? (
-                        <span className="bg-warning/10 text-warning font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-warning/20 shrink-0">At risk -{formatSlaDuration(start, now)}</span>
+                        <span className="bg-warning/10 text-warning font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-warning/20 shrink-0">At risk -{formatSlaCountdown(start, now)}</span>
                       ) : (
-                        <span className="bg-success/10 text-success font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-success/20 shrink-0">{formatSlaDuration(now, deadlineMs)} left</span>
+                        <span className="bg-success/10 text-success font-bold text-[10px] px-1.5 py-0.5 rounded-full border border-success/20 shrink-0">{formatSlaCountdown(now, deadlineMs)} Left</span>
                       )}
                    </div>
                  </div>

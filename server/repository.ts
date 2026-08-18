@@ -198,6 +198,46 @@ export async function resolvePartnerOrgId(partner: string): Promise<number | nul
   return id;
 }
 
+/**
+ * Non-PII subset of a ticket that is safe to broadcast to realtime clients.
+ * PII (customerEmail/customerPhone/cardPan/submittedByPhone) is encrypted at
+ * rest and must never leave the server through an event payload; viewers read
+ * those fields through the normal getTicket/listTickets masking path instead.
+ */
+export function ticketEventFields(ticket: any): Record<string, unknown> {
+  return {
+    id: ticket.id,
+    status: ticket.status,
+    priority: ticket.priority,
+    category: ticket.category,
+    businessUnit: ticket.businessUnit,
+    partner: ticket.partner,
+    createdAt: ticket.createdAt,
+    customerName: ticket.customerName || '',
+    customerId: ticket.customerId || null,
+    amount: ticket.amount,
+    transactionId: ticket.transactionId || '',
+    bankName: ticket.bankName || '',
+    description: ticket.description || '',
+    slaDeadline: ticket.slaDeadline,
+    slaPausedMs: ticket.slaPausedMs || 0,
+    slaPauseStartedAt: ticket.slaPauseStartedAt || null,
+    isEscalated: !!ticket.isEscalated,
+    escalationCount: ticket.escalationCount || 0,
+    assignedAgentId: ticket.assignedAgentId || '',
+    majorIncidentId: ticket.majorIncidentId || null,
+    feedbackScore: ticket.feedbackScore ?? null,
+    feedbackComment: ticket.feedbackComment || null,
+    rootCause: ticket.rootCause || null,
+    correctiveAction: ticket.correctiveAction || null,
+    submittedBy: ticket.submittedBy || 'BU_SUPPORT',
+    submittedByName: ticket.submittedByName || '',
+    isDeleted: !!ticket.isDeleted,
+    watchers: ticket.watchers || [],
+    duplicateOf: ticket.duplicateOf || null,
+  };
+}
+
 export async function upsertTicket(ticket: any) {
   // Encrypt PII at rest before persisting. The encrypted format is
   // iv:tag:cipherhex; Supabase stores it as text, and read paths will
@@ -251,7 +291,7 @@ export async function upsertTicket(ticket: any) {
 
   const { error } = await supabase.from('tickets').upsert(row, { onConflict: 'id' });
   if (error) throw new Error(`upsertTicket failed: ${error.message}`);
-  broadcast('ticket_updated', { id: ticket.id }, row.tenant_id);
+  broadcast('ticket_updated', ticketEventFields(ticket), row.tenant_id);
 
   // Keep the customer's total_tickets counter in sync with live ticket state.
   if (ticket.customerId) {
@@ -307,6 +347,7 @@ export async function insertComment(comment: any) {
     ticketId: comment.ticketId,
     tenantId: comment.tenantId || (await ticketTenantId(comment.ticketId)),
     author: comment.author,
+    authorEmail: comment.authorEmail || '',
     role: comment.role,
     message: comment.message,
     timestamp: comment.timestamp,
@@ -529,6 +570,8 @@ export async function markNotificationRead(id: string, user: AuthUser) {
   query = query.eq('recipient', user.email);
   const { error } = await query;
   if (error) throw new Error(`markNotificationRead failed: ${error.message}`);
+  // Broadcast so the same user's other open sessions clear the badge live.
+  broadcast('notification_read', { id }, tenantId);
 }
 
 // ─── Evidence ──────────────────────────────────────────────────────────

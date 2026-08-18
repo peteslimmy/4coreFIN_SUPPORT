@@ -58,6 +58,18 @@ export function formatSlaDuration(fromMs: number, toMs: number): string {
 }
 
 /**
+ * Compact h/m/s countdown for SLA displays, e.g. "10h 17m 00". Callers add
+ * their own phrasing ("Left", "Breached -", ...) for consistency.
+ */
+export function formatSlaCountdown(fromMs: number, toMs: number): string {
+  const diff = Math.abs(toMs - fromMs);
+  const h = Math.floor(diff / MS_HOUR);
+  const m = Math.floor((diff % MS_HOUR) / MS_MINUTE);
+  const s = Math.floor((diff % MS_MINUTE) / 1000);
+  return `${h}h ${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}`;
+}
+
+/**
  * Sign-aware SLA label: when `deadlineMs < now` returns a breach label such as
  * "Breached -2 days" / "Breached -8 hours"; otherwise "On Track · 5 hours".
  */

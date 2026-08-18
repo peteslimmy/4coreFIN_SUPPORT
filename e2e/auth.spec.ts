@@ -4,7 +4,7 @@ import { login, DEMO_EMAIL } from './helpers';
 test.describe('Public landing page', () => {
   test('renders the split landing/login page at /', async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByRole('heading', { name: /4CoreFin/i })).toBeVisible({ timeout: 15_000 });
+    await expect(page.getByText(/4CoreFin/i)).toBeVisible({ timeout: 15_000 });
     await expect(page.getByRole('heading', { name: /Sign in/i })).toBeVisible();
   });
 

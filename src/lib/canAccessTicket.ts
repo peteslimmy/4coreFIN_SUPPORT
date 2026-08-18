@@ -42,13 +42,14 @@ export function canAccessTicket(user: TicketAccessPrincipal, ticket: TicketAcces
     const agent = (ticket.assignedAgentId || '').toLowerCase();
     const ticketPartnerOrgId = ticket.partnerOrgId ?? ticket.partner_org_id;
     const mineOrgId = user.partnerOrgId;
-    // Org-scoped partner: FK equality only — mirrors the repository query
-    // scope (.eq('partner_org_id', ...)). Org-less tickets stay invisible
-    // (they are either pre-migration or unowned). Name-based fallback applies
-    // only while the account itself has no org id.
+    // Org-scoped partner: FK equality is the sole criterion, mirroring the
+    // repository query filter (.eq('partner_org_id', ...)). A ticket with a
+    // different org — or none at all — is invisible; the name fallback below
+    // never applies once the account carries an org id.
     if (mineOrgId != null) {
       return ticketPartnerOrgId != null && ticketPartnerOrgId === mineOrgId;
     }
+    // Pre-migration account without an org id: case-insensitive name match.
     return (
       partner === mine ||
       agent === mine ||

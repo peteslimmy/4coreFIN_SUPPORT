@@ -62,7 +62,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
     { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
   { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
   { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operations' },
-    { id: 'customer_portal', label: 'Submit Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Complaints' },
+    { id: 'customer_portal', label: 'Log Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Complaints' },
     { id: 'payment_partner_portal', label: 'Payment Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Payment Partner Desk' },
     { id: 'profile_settings', label: 'Profile & Security', icon: User, section: 'Account' },
   ];
@@ -154,7 +154,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
             <div className="flex-1 min-w-0">
               <p className="text-xs font-semibold text-text-primary truncate">{currentUser.firstName + ' ' + currentUser.lastName}</p>
               <p className="text-caption text-text-muted truncate">
-                {currentRole} · {currentUser.bu || currentUser.partner}
+                {currentUser.bu || currentUser.partner}
               </p>
             </div>
             <button

@@ -148,6 +148,20 @@ function seedQueryCacheFromBootstrap(data: BootstrapData): void {
   set(queryKeys.config.roles(), getRoles(data.roles));
 }
 
+/**
+ * Merge a server notification list into local state without dropping any
+ * optimistic/local-only entries. Server rows win on id conflicts.
+ */
+function mergeNotifications(
+  prev: WatcherNotification[],
+  server: WatcherNotification[],
+): WatcherNotification[] {
+  const byId = new Map<string, WatcherNotification>();
+  for (const n of server) byId.set(n.id, n);
+  for (const n of prev) if (!byId.has(n.id)) byId.set(n.id, n);
+  return [...byId.values()].sort((a, b) => String(b.timestamp).localeCompare(String(a.timestamp)));
+}
+
 export function AppProvider({ children }: { children: ReactNode }) {
   return (
     <UiProvider>
@@ -393,10 +407,51 @@ function AppProviderInner({ children }: { children: ReactNode }) {
         }
       } else if (event === 'evidence_added' && d?.id) {
         ticket.setEvidence(prev => prev.some(e => e.id === String(d.id)) ? prev : [d as unknown as FileEvidence, ...prev]);
+      } else if (event === 'ticket_deleted' && d?.id) {
+        ticket.setTickets(prev => prev.filter(t => t.id !== String(d.id)));
+      } else if (event === 'notification_created' && d?.id && d?.recipient) {
+        if (String(d.recipient).toLowerCase() === shell.currentUser.email.toLowerCase()) {
+          const notif = d as unknown as WatcherNotification;
+          ticket.setWatcherNotifications(prev => {
+            if (prev.some(n => n.id === notif.id)) return prev;
+            const dup = prev.some(n =>
+              n.recipient?.toLowerCase() === String(notif.recipient).toLowerCase() &&
+              n.ticketId === notif.ticketId &&
+              n.message === notif.message
+            );
+            return dup ? prev : [notif, ...prev];
+          });
+        }
+      } else if (event === 'notification_read' && d?.id) {
+        ticket.setWatcherNotifications(prev => prev.map(n => n.id === String(d.id) ? { ...n, seen: true } : n));
       }
     });
     return disconnect;
   }, [shell.isAuthenticated, showToast, shell.currentUser, ticket]);
+
+  // Periodic poll as a resilience fallback: SSE delivers live events but a
+  // reconnect gap (server restart, network blip) can drop the events that
+  // fired during downtime. A lightweight, low-frequency ticket+notification
+  // refresh recovers those misses without the cost of a full bootstrap.
+  useEffect(() => {
+    if (!shell.isAuthenticated) return;
+    const timer = window.setInterval(async () => {
+      try {
+        const data = await api.bootstrap(['tickets', 'watcherNotifications']);
+        if (data.tickets) {
+          ticket.setTickets(data.tickets);
+          seedQueryCacheFromBootstrap(data);
+        }
+        if (data.watcherNotifications) {
+          ticket.setWatcherNotifications(prev => mergeNotifications(prev, data.watcherNotifications));
+          seedQueryCacheFromBootstrap(data);
+        }
+      } catch {
+        // transient failure — the next tick retries automatically
+      }
+    }, 45_000);
+    return () => window.clearInterval(timer);
+  }, [shell.isAuthenticated, ticket]);
 
   // Persist state to localStorage whenever these values change — removed with
   // the offline mirrors; the server is the source of truth on every load.

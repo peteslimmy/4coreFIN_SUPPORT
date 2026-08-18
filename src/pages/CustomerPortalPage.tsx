@@ -1,10 +1,10 @@
 import React, { useState, useMemo, useRef, useEffect } from 'react';
-import { Plus, Upload, Ticket, Clock, CheckCircle, Star, Mail, Search, ThumbsUp, FileText, X, Download } from 'lucide-react';
-import { TicketStatus, TicketPriority, type TicketRecord, type AuditLog, type FileEvidence, type CommentRecord } from '../types/app';
+import { Plus, Upload, Ticket, Clock, CheckCircle, Mail, Search, FileText, X, User } from 'lucide-react';
+import { TicketStatus, TicketPriority, UserRole, type TicketRecord, type AuditLog, type FileEvidence, type CommentRecord, type CustomerRecord } from '../types/app';
 import { calculateSlaDeadline } from '../lib/slaCalculator';
 import { useApp } from '../context/AppContext';
 import { useUi } from '../context/UiContext';
-import { syncCreateTicket, syncTicketUpdate, syncEvidenceUpload, syncComment, syncAudit, syncFeedback } from '../lib/sync';
+import { syncCreateTicket, syncTicketUpdate, syncEvidenceUpload, syncComment, syncAudit } from '../lib/sync';
 import { compressFiles } from '../lib/imageCompression';
 import { parseNaira } from '../lib/currencyFormat';
 import { getBuFormConfig, validateFieldValue } from '../lib/formConfigs';
@@ -31,6 +31,7 @@ interface NewTicketForm {
   description: string; terminalId: string;
   bankName: string; nipSessionId: string;
   requiresAmount: 'yes' | 'no';
+  customerName: string; customerEmail: string; customerPhone: string; customerId?: string;
 }
 const defaultNewTicket: NewTicketForm = {
   category: 'Failed Payment',
@@ -42,7 +43,11 @@ const defaultNewTicket: NewTicketForm = {
   terminalId: '',
   bankName: 'Undefined',
   nipSessionId: '',
-  requiresAmount: 'no'
+  requiresAmount: 'no',
+  customerName: '',
+  customerEmail: '',
+  customerPhone: '',
+  customerId: undefined
 };
 
 export default function CustomerPortalPage() {
@@ -50,17 +55,30 @@ export default function CustomerPortalPage() {
     isLoading, ticketTemplates, partners, categories, currentUser, showToast,
     tickets, setTickets, comments, setAuditLogs, saveToStorage,
     slaRules, holidays, currentRole, auditLogs,
-    setEvidence, evidence, buFormConfigs, setComments, paymentChannels
+    setEvidence, buFormConfigs, setComments, paymentChannels, customers
   } = useApp();
   const { setActiveTicketId, setActiveTab } = useUi();
 
-  const [customerView, setCustomerView] = useState<'file_complaint' | 'my_tickets'>('file_complaint');
-  const [customerEmail, setCustomerEmail] = useState('');
-  const [lookupEmail, setLookupEmail] = useState('');
-  const [surveyInput, setSurveyInput] = useState<Record<string, { score: number; comment: string }>>({});
+  const [customerView, setCustomerView] = useState<'file_complaint' | 'customer_records'>('file_complaint');
+  const [recordQuery, setRecordQuery] = useState('');
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
+  const [recordPickerOpen, setRecordPickerOpen] = useState(false);
 
-  const [newTicket, setNewTicket] = useState<NewTicketForm>(defaultNewTicket);
+  const [newTicket, setNewTicket] = useState<NewTicketForm>(() => {
+    if (currentRole === UserRole.CUSTOMER && currentUser?.email) {
+      return {
+        ...defaultNewTicket,
+        customerName: (currentUser.firstName + ' ' + currentUser.lastName).trim(),
+        customerEmail: currentUser.email,
+        customerPhone: currentUser.phone || ''
+      };
+    }
+    return defaultNewTicket;
+  });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
+  const [identityErrors, setIdentityErrors] = useState<Record<string, string>>({});
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerPickerOpen, setCustomerPickerOpen] = useState(false);
   const [uploadedFiles, setUploadedFiles] = useState<File[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -87,41 +105,45 @@ export default function CustomerPortalPage() {
     });
   }
 
-  const customerTickets = useMemo(() => {
-    if (!lookupEmail.trim()) return [];
+  const customerMatches = useMemo(() => {
+    const q = customerQuery.trim().toLowerCase();
+    if (!q) return [];
+    return customers
+      .filter(c => c.email.toLowerCase().includes(q) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [customerQuery, customers]);
+
+  const recordMatches = useMemo(() => {
+    const q = recordQuery.trim().toLowerCase();
+    if (!q) return [];
+    return customers
+      .filter(c => c.email.toLowerCase().includes(q) || `${c.firstName} ${c.lastName}`.toLowerCase().includes(q))
+      .slice(0, 8);
+  }, [recordQuery, customers]);
+
+  const selectedCustomerTickets = useMemo(() => {
+    if (!selectedCustomer) return [];
     return tickets.filter(t =>
-      t.customerEmail.toLowerCase().includes(lookupEmail.toLowerCase().trim())
+      t.customerEmail.toLowerCase() === selectedCustomer.email.toLowerCase()
     );
-  }, [tickets, lookupEmail]);
+  }, [selectedCustomer, tickets]);
 
-  if (customerView === 'my_tickets' && currentUser?.email && !lookupEmail) {
-    setCustomerEmail(currentUser.email);
-    setLookupEmail(currentUser.email);
-  }
+  const pickCustomer = (c: CustomerRecord) => {
+    setNewTicket(prev => ({
+      ...prev,
+      customerId: c.id,
+      customerName: `${c.firstName} ${c.lastName}`.trim(),
+      customerEmail: c.email,
+      customerPhone: c.phone || ''
+    }));
+    setIdentityErrors({});
+    setCustomerQuery('');
+    setCustomerPickerOpen(false);
+  };
 
-  const handleSubmitSurvey = (ticketId: string) => {
-    const survey = surveyInput[ticketId];
-    if (!survey || survey.score === 0) {
-      showToast('Please select a rating score.', 'error');
-      return;
-    }
-
-    const updated = tickets.map(t => {
-      if (t.id === ticketId) {
-        return { ...t, feedbackScore: survey.score, feedbackComment: survey.comment };
-      }
-      return t;
-    });
-    setTickets(updated);
-    saveToStorage(updated);
-    syncFeedback(ticketId, { feedbackScore: survey.score, feedbackComment: survey.comment });
-    showToast('Thank you for your feedback! Your response helps us improve.', 'success');
-
-    setSurveyInput(prev => {
-      const next = { ...prev };
-      delete next[ticketId];
-      return next;
-    });
+  const clearCustomer = () => {
+    setNewTicket(prev => ({ ...prev, customerId: undefined, customerName: '', customerEmail: '', customerPhone: '' }));
+    setCustomerQuery('');
   };
 
   const generateTicketId = (bu: string) => {
@@ -136,6 +158,10 @@ export default function CustomerPortalPage() {
 
   const validate = () => {
     const errs: Record<string, string> = {};
+    if (!newTicket.customerName.trim()) errs.customerName = 'Customer name is required';
+    if (!newTicket.customerEmail.trim()) errs.customerEmail = 'Customer email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newTicket.customerEmail.trim())) errs.customerEmail = 'Enter a valid email address';
+    setIdentityErrors(errs);
     if (newTicket.requiresAmount === 'yes' && parseNaira(newTicket.amount) <= 0) errs.amount = 'Valid transaction amount is required';
     if (!newTicket.description.trim()) errs.description = 'Incident description is required';
     for (const f of buFormConfig.fields) {
@@ -192,13 +218,22 @@ export default function CustomerPortalPage() {
 
   const stepErrorCounts = useMemo(() => {
     const counts: Record<number, number> = {};
-    Object.values(txErrors).forEach(v => { if (v) counts[1] = (counts[1] || 0) + 1; });
-    if (formErrors.description) counts[2] = (counts[2] || 0) + 1;
+    Object.values(identityErrors).forEach(v => { if (v) counts[0] = (counts[0] || 0) + 1; });
+    Object.values(txErrors).forEach(v => { if (v) counts[2] = (counts[2] || 0) + 1; });
+    if (formErrors.description) counts[3] = (counts[3] || 0) + 1;
     return counts;
-  }, [txErrors, formErrors]);
+  }, [identityErrors, txErrors, formErrors]);
 
   const handleStepValidate = (stepIndex: number) => {
-    if (stepIndex === 1) {
+    if (stepIndex === 0) {
+      const errs: Record<string, string> = {};
+      if (!newTicket.customerName.trim()) errs.customerName = 'Customer name is required';
+      if (!newTicket.customerEmail.trim()) errs.customerEmail = 'Customer email is required';
+      else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newTicket.customerEmail.trim())) errs.customerEmail = 'Enter a valid email address';
+      setIdentityErrors(errs);
+      return Object.keys(errs).length === 0;
+    }
+    if (stepIndex === 2) {
       const errs: Record<string, string> = {};
       for (const f of buFormConfig.fields) {
         if (!f.enabled) continue;
@@ -208,7 +243,7 @@ export default function CustomerPortalPage() {
       setTxErrors(errs);
       return Object.keys(errs).length === 0;
     }
-    if (stepIndex === 2) {
+    if (stepIndex === 3) {
       const descOk = newTicket.description.trim().length > 0;
       if (!descOk) setFormErrors(prev => ({ ...prev, description: 'Incident description is required' }));
       return descOk;
@@ -238,11 +273,15 @@ export default function CustomerPortalPage() {
     const txAmount = String(txValues['amount'] ?? '').trim();
     const txBank = String(txValues['bankName'] ?? '').trim();
     const txId = String(txValues['transactionId'] ?? '').trim();
+    const isCustomerRole = currentRole === UserRole.CUSTOMER;
+    const staffName = (currentUser.firstName + ' ' + currentUser.lastName).trim();
 
     return {
       id: tId,
-      customerName: currentUser.firstName + ' ' + currentUser.lastName,
-      customerEmail: currentUser.email,
+      customerName: newTicket.customerName.trim(),
+      customerEmail: newTicket.customerEmail.trim(),
+      customerPhone: newTicket.customerPhone.trim() || undefined,
+      customerId: newTicket.customerId,
       businessUnit: currentUser.bu,
       partner: newTicket.partner,
       category: newTicket.category,
@@ -260,7 +299,8 @@ export default function CustomerPortalPage() {
       feedbackScore: null,
       feedbackComment: null,
       watchers: [],
-      submittedBy: 'CUSTOMER',
+      submittedBy: isCustomerRole ? 'CUSTOMER' : 'BU_SUPPORT',
+      submittedByName: isCustomerRole ? undefined : staffName,
       bankName: txBank || 'Undefined',
       customFields: Object.keys(customFields).length > 0 ? customFields : undefined
     };
@@ -431,9 +471,9 @@ export default function CustomerPortalPage() {
         ) : (
         <>
         <PageHeader
-          title="Customer Complaint Portal"
-          subtitle="File and track payment-related complaints"
-          breadcrumbs={[{ label: 'Home' }, { label: 'Customer Portal' }]}
+          title="Complaint Intake"
+          subtitle="Log complaints on behalf of customers and look up customer records"
+          breadcrumbs={[{ label: 'Home' }, { label: 'Complaints' }]}
         />
       {/* View Toggle */}
       <div className="flex gap-2 mb-6 flex-wrap">
@@ -443,15 +483,15 @@ export default function CustomerPortalPage() {
           icon={<Plus className="w-3.5 h-3.5" />}
           className="w-full sm:w-auto"
         >
-          File a Complaint
+          Log Complaint
         </Button>
         <Button
-          onClick={() => setCustomerView('my_tickets')}
-          variant={customerView === 'my_tickets' ? 'primary' : 'secondary'}
+          onClick={() => setCustomerView('customer_records')}
+          variant={customerView === 'customer_records' ? 'primary' : 'secondary'}
           icon={<Ticket className="w-3.5 h-3.5" />}
           className="w-full sm:w-auto"
         >
-          My Tickets
+          Customer Records
         </Button>
       </div>
 
@@ -477,7 +517,8 @@ export default function CustomerPortalPage() {
                     if (!val) return;
                     const tmpl = ticketTemplates.find(t => t.id === val);
                     if (!tmpl) return;
-                    setNewTicket({
+                    setNewTicket(prev => ({
+                      ...prev,
                       category: tmpl.category,
                       priority: tmpl.priority,
                       transactionId: 'TXN_' + Math.floor(Math.random() * 1000000000000),
@@ -488,7 +529,7 @@ export default function CustomerPortalPage() {
                       bankName: 'Undefined',
                       nipSessionId: '',
                       requiresAmount: tmpl.amount ? 'yes' : 'no'
-                    } as NewTicketForm);
+                    } as NewTicketForm));
                     setTxValues(prev => ({
                       ...prev,
                       amount: tmpl.amount || '',
@@ -518,10 +559,88 @@ export default function CustomerPortalPage() {
           <SliderForm
             steps={[
               {
+                label: 'Customer',
+                title: 'Customer Identity',
+                subtitle: 'Who is the complaint about? Existing customers can be looked up or entered fresh.',
+                errorCount: stepErrorCounts[0] || 0,
+                content: (
+                  <div className="space-y-4">
+                    <div className="relative">
+                      <Input
+                        label="Find Existing Customer"
+                        icon={<Search className="w-4 h-4" />}
+                        value={customerQuery}
+                        onChange={(e) => { setCustomerQuery(e.target.value); setCustomerPickerOpen(true); }}
+                        onFocus={() => setCustomerPickerOpen(true)}
+                        onBlur={() => setTimeout(() => setCustomerPickerOpen(false), 150)}
+                        placeholder="Search by name or email (optional)"
+                        helperText={newTicket.customerId ? 'Customer linked to this complaint.' : 'No match? Just type the details below and a customer record is created automatically.'}
+                      />
+                      {customerPickerOpen && (
+                        <div className="absolute z-20 mt-1 w-full rounded-lg border border-border bg-surface-elevated shadow-lg max-h-56 overflow-y-auto">
+                          {customerMatches.length === 0 ? (
+                            <p className="px-3 py-2 text-xs text-text-muted">No matching customers</p>
+                          ) : (
+                            customerMatches.map(c => (
+                              <button
+                                key={c.id}
+                                type="button"
+                                onMouseDown={(e) => { e.preventDefault(); pickCustomer(c); }}
+                                className="w-full text-left px-3 py-2 hover:bg-surface-hover transition flex items-center justify-between gap-2"
+                              >
+                                <span className="truncate">
+                                  <span className="text-sm font-semibold text-text-primary">{c.firstName} {c.lastName}</span>
+                                  <span className="ml-2 text-xs text-text-muted">{c.email}</span>
+                                </span>
+                                <span className="shrink-0 text-[10px] font-semibold text-primary">{c.totalTickets} ticket{c.totalTickets === 1 ? '' : 's'}</span>
+                              </button>
+                            ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                    {newTicket.customerId && (
+                      <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
+                        <p className="text-xs text-text-secondary">Linked to existing customer <span className="font-semibold text-text-primary">{newTicket.customerEmail}</span></p>
+                        <button type="button" onClick={clearCustomer} className="flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-error transition focus-ring">
+                          <X className="w-3.5 h-3.5" /> Unlink
+                        </button>
+                      </div>
+                    )}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      <Input
+                        label="Customer Name"
+                        required
+                        value={newTicket.customerName}
+                        onChange={(e) => { setNewTicket(prev => ({ ...prev, customerName: e.target.value, customerId: undefined })); setIdentityErrors(prev => { const n = { ...prev }; delete n.customerName; return n; }); }}
+                        placeholder="e.g. Chinedu Okonkwo"
+                        error={identityErrors.customerName}
+                      />
+                      <Input
+                        label="Customer Email"
+                        type="email"
+                        required
+                        value={newTicket.customerEmail}
+                        onChange={(e) => { setNewTicket(prev => ({ ...prev, customerEmail: e.target.value, customerId: undefined })); setIdentityErrors(prev => { const n = { ...prev }; delete n.customerEmail; return n; }); }}
+                        placeholder="customer@example.com"
+                        error={identityErrors.customerEmail}
+                      />
+                      <Input
+                        label="Customer Phone"
+                        value={newTicket.customerPhone}
+                        onChange={(e) => setNewTicket(prev => ({ ...prev, customerPhone: e.target.value, customerId: undefined }))}
+                        placeholder="+234..."
+                        helperText="Optional"
+                      />
+                    </div>
+                  </div>
+                ),
+              },
+              {
                 label: 'Details',
                 title: 'Incident Details',
                 subtitle: 'Select the partner and issue category.',
-                errorCount: stepErrorCounts[0] || 0,
+                errorCount: stepErrorCounts[1] || 0,
                 content: (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Input label="Mapped Business Unit (Auto-detected)" value={currentUser.bu} disabled />
@@ -534,7 +653,7 @@ export default function CustomerPortalPage() {
                 label: 'Transaction',
                 title: 'Transaction Information',
                 subtitle: 'Provide transaction details for the payment incident.',
-                errorCount: stepErrorCounts[1] || 0,
+                errorCount: stepErrorCounts[2] || 0,
                 content: (
                   <div className="space-y-4">
                     <DynamicFormStep
@@ -571,7 +690,7 @@ export default function CustomerPortalPage() {
                 label: 'Submit',
                 title: 'Description & Evidence',
                 subtitle: 'Describe the issue and attach supporting documents.',
-                errorCount: stepErrorCounts[2] || 0,
+                errorCount: stepErrorCounts[3] || 0,
                 content: (
                   <div className="space-y-4">
                     <Textarea label="Incident Description" value={newTicket.description} onChange={(e) => { setNewTicket(prev => ({ ...prev, description: e.target.value })); clearError('description'); }} rows={4} placeholder="Please provide explicit details of failed checkout, terminal responses, errors..." required error={formErrors.description} />
@@ -619,93 +738,92 @@ export default function CustomerPortalPage() {
         </div>
       )}
 
-      {customerView === 'my_tickets' && (
+      {customerView === 'customer_records' && (
         <div className="space-y-6">
-          {/* Email Lookup */}
           <div className="bg-surface-elevated rounded-xl p-6">
             <div className="flex items-center gap-3 mb-4">
               <Mail className="w-5 h-5 text-accent" />
               <div>
-                <h3 className="font-bold text-base text-text-primary">Track Your Complaints</h3>
-                <p className="text-xs text-text-muted">{lookupEmail ? 'Your tickets are shown below' : 'Enter your email to view your submitted tickets and their status'}</p>
+                <h3 className="font-bold text-base text-text-primary">Look Up Customer Record</h3>
+                <p className="text-xs text-text-muted">Search by email or name to view a customer's profile and complaint history.</p>
               </div>
             </div>
-            <div className="flex gap-2 items-center">
-              <div className="flex-1">
-                <Input
-                  type="email"
-                  value={customerEmail}
-                  onChange={(e) => setCustomerEmail(e.target.value)}
-                  placeholder="you@email.com"
-                  className="flex-1"
-                  disabled={!!lookupEmail}
-                />
-              </div>
-              {!lookupEmail ? (
-                <Button
-                  onClick={() => {
-                    if (!customerEmail.trim()) {
-                      showToast('Please enter your email address.', 'error');
-                      return;
-                    }
-                    setLookupEmail(customerEmail.trim());
-                  }}
-                  icon={<Search className="w-4 h-4" />}
-                >
-                  Look Up
-                </Button>
-              ) : (
-                <>
-                  {customerTickets.length > 0 && (
-                    <Button
-                      onClick={() => {
-                        const csv = "data:text/csv;charset=utf-8," + "ID,Status,Category,Description,Created,Amount,TransactionID\n" + customerTickets.map(t => `"${t.id}","${t.status}","${t.category}","${t.description}","${t.createdAt}","${t.amount || 'Undefined'}","${t.transactionId}"`).join('\n');
-                        const encoded = encodeURI(csv);
-                        const link = document.createElement('a');
-                        link.setAttribute('href', encoded);
-                        link.setAttribute('download', `gdpr-export-${lookupEmail}.csv`);
-                        document.body.appendChild(link);
-                        link.click();
-                        document.body.removeChild(link);
-                        showToast('GDPR data export downloaded.', 'success');
-                      }}
-                      variant="ghost"
-                      size="sm"
-                      icon={<Download className="w-3.5 h-3.5" />}
-                    >
-                      GDPR Export
-                    </Button>
+            <div className="relative">
+              <Input
+                icon={<Search className="w-4 h-4" />}
+                value={recordQuery}
+                onChange={(e) => { setRecordQuery(e.target.value); setRecordPickerOpen(true); }}
+                onFocus={() => setRecordPickerOpen(true)}
+                onBlur={() => setTimeout(() => setRecordPickerOpen(false), 150)}
+                placeholder="customer@example.com or name..."
+              />
+              {recordPickerOpen && (
+                <div className="absolute z-20 mt-1 w-full rounded-lg border border-border bg-surface-elevated shadow-lg max-h-56 overflow-y-auto">
+                  {recordMatches.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-text-muted">No matching customers</p>
+                  ) : (
+                    recordMatches.map(c => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); setSelectedCustomer(c); setRecordQuery(`${c.firstName} ${c.lastName}`.trim()); setRecordPickerOpen(false); }}
+                        className="w-full text-left px-3 py-2 hover:bg-surface-hover transition flex items-center justify-between gap-2"
+                      >
+                        <span className="truncate">
+                          <span className="text-sm font-semibold text-text-primary">{c.firstName} {c.lastName}</span>
+                          <span className="ml-2 text-xs text-text-muted">{c.email}</span>
+                        </span>
+                        <span className="shrink-0 text-[10px] font-semibold text-primary">{c.totalTickets} ticket{c.totalTickets === 1 ? '' : 's'}</span>
+                      </button>
+                    ))
                   )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {selectedCustomer && (
+            <div className="space-y-4">
+              <div className="bg-surface-elevated rounded-xl shadow-card p-5">
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-primary-light flex items-center justify-center text-primary shrink-0">
+                      <User className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-text-primary">{selectedCustomer.firstName} {selectedCustomer.lastName}</h4>
+                      <p className="text-xs text-text-muted">{selectedCustomer.email}{selectedCustomer.phone ? ` · ${selectedCustomer.phone}` : ''}</p>
+                    </div>
+                  </div>
                   <Button
-                    onClick={() => { setCustomerEmail(''); setLookupEmail(''); }}
+                    onClick={() => { setSelectedCustomer(null); setRecordQuery(''); }}
                     variant="ghost"
                     size="sm"
                   >
                     Change
                   </Button>
-                </>
-              )}
-            </div>
-          </div>
+                </div>
+                <div className="flex items-center gap-6 mt-3 pt-3 border-t border-border text-xs text-text-muted">
+                  <span>Business Unit: <strong className="text-text-primary">{selectedCustomer.businessUnit}</strong></span>
+                  <span>Total Tickets: <strong className="text-text-primary">{selectedCustomer.totalTickets}</strong></span>
+                  <span>Since: <strong className="text-text-primary">{new Date(selectedCustomer.createdAt).toLocaleDateString()}</strong></span>
+                </div>
+              </div>
 
-          {/* Tickets List */}
-          {lookupEmail && (
-            <div className="space-y-4">
-              {customerTickets.length === 0 ? (
-                <EmptyState icon={<Ticket className="w-12 h-12" />} title="No tickets found" message="Check the email you used when filing the complaint" />
-              ) : (
-                customerTickets.map(ticket => (
-                  <div key={ticket.id} className="bg-surface-elevated rounded-xl shadow-card p-5 space-y-3">
+              <div className="space-y-4">
+                {selectedCustomerTickets.length === 0 ? (
+                  <EmptyState icon={<Ticket className="w-12 h-12" />} title="No tickets found" message="This customer has no complaints on record yet" />
+                ) : (
+                  selectedCustomerTickets.map(ticket => (
+                    <div key={ticket.id} className="bg-surface-elevated rounded-xl shadow-card p-5 space-y-3">
                       <div className="flex items-start justify-between gap-4">
                         <div>
-                           <h4 className="font-bold text-text-primary text-sm">{ticket.id}</h4>
-                           <p className="text-caption text-text-muted mt-0.5">{ticket.category}</p>
+                          <h4 className="font-bold text-text-primary text-sm">{ticket.id}</h4>
+                          <p className="text-caption text-text-muted mt-0.5">{ticket.category}</p>
                         </div>
                         <StatusBadge status={ticket.status} size="sm" label={ticket.status.replace(/_/g, ' ')} />
                       </div>
-
-<p className="text-xs text-text-muted line-clamp-2">{ticket.description}</p>
-
+                      <p className="text-xs text-text-muted line-clamp-2">{ticket.description}</p>
                       <div className="flex items-center gap-4 text-[11px] text-text-muted font-medium">
                         <span className="flex items-center gap-1">
                           <Clock className="w-3.5 h-3.5" />
@@ -715,93 +833,18 @@ export default function CustomerPortalPage() {
                           <CheckCircle className="w-3.5 h-3.5" />
                           {ticket.partner}
                         </span>
+                        {ticket.submittedByName && (
+                          <span className="flex items-center gap-1">
+                            <User className="w-3.5 h-3.5" />
+                            Logged by {ticket.submittedByName}
+                          </span>
+                        )}
                       </div>
-
-                      {(() => {
-                        const ticketEvs = evidence.filter(e => e.ticketId === ticket.id);
-                        if (ticketEvs.length === 0) return null;
-                        return (
-                          <div className="flex items-center gap-2 flex-wrap pt-1">
-                            {ticketEvs.map(ev => (
-                              ev.url ? (
-                                <a key={ev.id} href={ev.url} target="_blank" rel="noreferrer" className="flex items-center gap-1.5 px-2 py-1 bg-surface border border-border rounded text-[10px] font-medium text-text-primary hover:border-accent/30 transition-colors" title={ev.fileName}>
-                                  {ev.fileType?.startsWith('image/') ? (
-                                    <img src={ev.url} alt={ev.fileName} loading="lazy" className="w-4 h-4 rounded object-cover" />
-                                  ) : (
-                                    <FileText className="w-3.5 h-3.5 text-text-muted" />
-                                  )}
-                                  <span className="max-w-[140px] truncate">{ev.fileName}</span>
-                                </a>
-                              ) : (
-                                <span key={ev.id} className="flex items-center gap-1.5 px-2 py-1 bg-surface border border-border rounded text-[10px] font-medium text-text-primary">
-                                  <FileText className="w-3.5 h-3.5 text-text-muted" />
-                                  <span className="max-w-[140px] truncate">{ev.fileName}</span>
-                                </span>
-                              )
-                            ))}
-                          </div>
-                        );
-                      })()}
-
-                      {/* Satisfaction Survey for Closed Tickets */}
-                      {ticket.status === TicketStatus.CLOSED && !ticket.feedbackScore && (
-                        <div className="bg-surface border border-border rounded-lg p-4 mt-2">
-                          <h5 className="text-xs font-bold text-text-primary flex items-center gap-1.5 mb-3">
-                            <Star className="w-4 h-4 text-warning" />
-                            Rate Your Experience
-                          </h5>
-                          <div className="flex gap-1 mb-3">
-                            {[1, 2, 3, 4, 5].map(star => (
-                              <button
-                                key={star}
-                                onClick={() => setSurveyInput(prev => ({
-                                  ...prev,
-                                  [ticket.id]: { ...prev[ticket.id] || { score: 0, comment: '' }, score: star }
-                                }))}
-                                className={`p-1.5 rounded transition cursor-pointer ${
-                                  (surveyInput[ticket.id]?.score || 0) >= star
-                                    ? 'text-warning'
-                                    : 'text-text-muted hover:text-warning-dark'
-                                }`}
-                              >
-                                <Star className="w-5 h-5 fill-current" />
-                              </button>
-                            ))}
-                          </div>
-                          <Textarea
-                            placeholder="Share your feedback (optional)..."
-                            value={surveyInput[ticket.id]?.comment || ''}
-                            onChange={(e) => setSurveyInput(prev => ({
-                              ...prev,
-                              [ticket.id]: { ...prev[ticket.id] || { score: 0, comment: '' }, comment: e.target.value }
-                            }))}
-                            rows={2}
-                            className="mb-3"
-                          />
-                          <Button
-                            onClick={() => handleSubmitSurvey(ticket.id)}
-                            size="sm"
-                            icon={<ThumbsUp className="w-3.5 h-3.5" />}
-                          >
-                            Submit Feedback
-                          </Button>
-                        </div>
-                      )}
-
-                      {/* Show existing feedback */}
-                      {ticket.feedbackScore && (
-                        <div className="flex items-center gap-2 text-xs text-text-muted">
-                          <Star className="w-4 h-4 text-warning fill-current" />
-                          <span className="font-bold">Your rating: {ticket.feedbackScore}/5</span>
-                          {ticket.feedbackComment && (
-                            <span className="text-text-muted">— "{ticket.feedbackComment}"</span>
-                          )}
-                        </div>
-                      )}
                     </div>
-))
+                  ))
                 )}
               </div>
+            </div>
           )}
         </div>
       )}
@@ -811,7 +854,7 @@ export default function CustomerPortalPage() {
         open={dupModalOpen}
         candidates={dupCandidates}
         incoming={{
-          customerName: currentUser.firstName + ' ' + currentUser.lastName,
+          customerName: newTicket.customerName.trim() || currentUser.firstName + ' ' + currentUser.lastName,
           category: newTicket.category,
           amount: pendingRecord?.amount || 0,
           evidenceCount: uploadedFiles.length,
@@ -832,7 +875,7 @@ export default function CustomerPortalPage() {
                 onClick={() => { setSuccessRecord(null); setActiveTab('tickets'); }}
                 className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring"
               >
-                View My Tickets
+                View in Ticket Workspace
               </button>
               <button
                 onClick={() => setSuccessRecord(null)}

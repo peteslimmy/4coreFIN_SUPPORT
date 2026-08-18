@@ -30,7 +30,6 @@
     "@vitejs/plugin-react": "^5.2.0",
     "bcryptjs": "^3.0.3",
     "compression": "^1.8.1",
-    "dexie": "^4.4.4",
     "dotenv": "^17.4.2",
     "express": "^4.22.2",
     "express-rate-limit": "^8.6.2",
@@ -84,8 +83,5 @@
     "typescript-eslint": "^8.66.0",
     "vite": "^6.2.3",
     "vitest": "^4.1.10"
-  },
-  "allowScripts": {
-    "better-sqlite3@12.11.1": true
   }
 }

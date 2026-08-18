@@ -5,6 +5,7 @@ import { resolveSlaDuration, effectiveSlaDeadline } from '../src/lib/slaCalculat
 import { TicketPriority } from '../src/types/app';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
+import { notifyByEmail, appHomeUrl } from './services/notifyEmails';
 import { buildId } from './lib/ids';
 
 const FALLBACK_RISK_FRACTION = 0.25;
@@ -102,6 +103,11 @@ export async function runSlaCheck() {
             recipient,
             seen: false,
           });
+          void notifyByEmail(
+            recipient,
+            `[4C] SLA Breach — Ticket ${t.id}`,
+            `<h3>[SLA_BREACH] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> breached its SLA deadline (<strong>${t.priority}</strong> / ${t.category || '—'}). Immediate action is required.</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+          );
         }
         // Audit the breach once per ticket, not on every monitor tick.
         if (await claimAlert('SLA_BREACH', t.id, '__audit__')) {
@@ -128,6 +134,11 @@ export async function runSlaCheck() {
             recipient,
             seen: false,
           });
+          void notifyByEmail(
+            recipient,
+            `[4C] SLA At Risk — Ticket ${t.id}`,
+            `<h3>[SLA_AT_RISK] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> is at risk — <strong>${hoursLeft.toFixed(1)}h</strong> remaining before SLA breach (<strong>${t.priority}</strong> / ${t.category || '—'}).</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+          );
         }
         riskCount++;
         broadcast('sla_at_risk', { ticketId: t.id, hoursLeft }, t.tenantId);

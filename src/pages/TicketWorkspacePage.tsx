@@ -8,10 +8,10 @@ import type { CommentRecord, WatcherNotification, AuditLog } from '../types/app'
 import { TicketStatus, TicketPriority } from '../types/app';
 import { useApp } from '../context/AppContext';
 import { useUi } from '../context/UiContext';
-import { syncComment, syncNotification, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
+import { syncComment, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
 import { isBuSupportRole } from '../lib/rbac';
 import { isAddressed, applyMention, fullNameOf, mentionCandidates, resolveMention } from '../lib/mention';
-import { formatSlaDuration } from '../lib/utils';
+import { formatSlaCountdown } from '../lib/utils';
 import TicketListPane from './ticket-workspace/TicketListPane';
 import TicketDetailPane from './ticket-workspace/TicketDetailPane';
 import ActivityPanel from './ticket-workspace/ActivityPanel';
@@ -66,17 +66,16 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
+    const id = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(id);
   }, []);
 
   const activeTicket = tickets.find(t => t.id === activeTicketId) || null;
   const slaCountdown = activeTicket ? (() => {
-    const diff = new Date(activeTicket.slaDeadline).getTime() - now;
-    if (diff <= 0) return `Breached -${formatSlaDuration(new Date(activeTicket.slaDeadline).getTime(), now)}`;
-    const h = Math.floor(diff / 3600000);
-    const m = Math.floor((diff % 3600000) / 60000);
-    return `${h}h ${m}m remaining`;
+    const deadlineMs = new Date(activeTicket.slaDeadline).getTime();
+    const diff = deadlineMs - now;
+    if (diff <= 0) return `Breached -${formatSlaCountdown(deadlineMs, now)}`;
+    return `${formatSlaCountdown(now, deadlineMs)} Left`;
   })() : '';
 
   const clearError = (field: string) => setFormErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
@@ -315,30 +314,39 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     if (!activeTicket) return;
     setIsSendingComment(true);
     try {
-      const newComment: CommentRecord = { id: 'cm-' + Date.now(), ticketId: activeTicket.id, message: trimmed, timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole, seen: false, isInternal: false };
-      const updatedComments = [...comments, newComment];
+      const mentioned = resolveMention(trimmed, users);
+      const directTarget =
+        mentioned && mentioned.email.toLowerCase() !== currentUser.email.toLowerCase()
+          ? mentioned.email
+          : null;
+
+      const baseComment: CommentRecord = {
+        id: 'cm-' + Date.now(),
+        ticketId: activeTicket.id,
+        message: trimmed,
+        timestamp: new Date().toISOString(),
+        author: currentUser.firstName + ' ' + currentUser.lastName,
+        authorEmail: currentUser.email,
+        role: currentRole,
+        seen: false,
+        isInternal: false,
+      };
+      const syncPayload = {
+        ...baseComment,
+        ...(replyingTo ? { parentCommentId: replyingTo } : {}),
+        ...(directTarget ? { notifyRecipients: [directTarget] } : {}),
+      } as CommentRecord;
+
+      const updatedComments = [...comments, syncPayload];
       setComments(updatedComments);
       setCommentText('');
       setReplyingTo(null);
       saveToStorage(tickets, updatedComments, auditLogs, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
       try {
-        await syncComment(newComment);
-        const mentioned = resolveMention(trimmed, users);
-        if (mentioned && mentioned.email.toLowerCase() !== currentUser.email.toLowerCase()) {
-          const direct: WatcherNotification = {
-            id: 'wn-' + Date.now() + '-' + Math.floor(Math.random() * 1000),
-            timestamp: new Date().toISOString(),
-            ticketId: activeTicket.id,
-            message: `@${fullNameOf(mentioned)}, you were mentioned on ticket ${activeTicket.id}.`,
-            recipient: mentioned.email,
-            seen: false,
-          };
-          setWatcherNotifications(prev => {
-            const updatedWN = [direct, ...prev];
-            saveToStorage(tickets, updatedComments, auditLogs, majorIncidents, updatedWN, users, slaRules, holidays, ticketTemplates, kbArticles);
-            return updatedWN;
-          });
-          syncNotification(direct);
+        syncComment(syncPayload);
+        if (directTarget && mentioned) {
+          // The @mention target is notified server-side (in-app + email) when
+          // the comment syncs; only the confirmation here is client-local.
           showToast(`Comment sent to ${fullNameOf(mentioned)}.`, 'success');
         } else {
           notifyWatchers(activeTicket, `New comment on ticket ${activeTicket.id}`);

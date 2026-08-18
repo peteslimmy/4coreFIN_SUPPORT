@@ -4,8 +4,10 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { audit, AuditAction } from '../auditEvents';
-import { listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable } from '../repository';
+import { listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable, ticketEventFields } from '../repository';
 import { dispatchWebhook } from '../services/webhookDispatcher';
+import { notifyByEmail, appHomeUrl } from '../services/notifyEmails';
+import { broadcast } from '../broadcast';
 import { tenantIdForBu } from '../tenant';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { getCachedRoles } from '../middleware/requirePermission';
@@ -17,6 +19,24 @@ import { TicketStatus, TicketPriority, UserRole } from '../../src/types/app';
 import { applyTransition, getAvailableTransitions, getTransitionBlockers } from '../../src/lib/ticketStateMachine';
 import type { SlaRule } from '../../src/types/admin';
 import type { HolidayRecord } from '../../src/types/admin';
+
+/** Roles that file complaints on behalf of customers. The logging officer is
+ *  always recorded so tickets never conflate the customer with the submitter. */
+const STAFF_SUBMITTER_ROLES = ['BU_SUPPORT', 'BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3', 'PARTNER', 'SUPER_ADMIN', 'EXECUTIVE'];
+
+/** Dedupe a watcher list and drop the acting user so senders don't email themselves. */
+function ticketWatcherRecipients(watchers: string[] | undefined, excludeEmail: string): string[] {
+  const ex = (excludeEmail || '').trim().toLowerCase();
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const w of watchers || []) {
+    const e = (w || '').trim();
+    if (!e || e.toLowerCase() === ex || seen.has(e.toLowerCase())) continue;
+    seen.add(e.toLowerCase());
+    out.push(e);
+  }
+  return out;
+}
 
 async function buildTicketId(businessUnit: string | undefined, existing: string[]): Promise<string> {
   const buRaw = await getConfig<any[]>('businessUnits', []);
@@ -141,9 +161,24 @@ export function createTicketsRouter(): Router {
     const now = new Date().toISOString();
     const existingAll = await listTickets(req.user!, { includeDeleted: true });
     let entry: any = { ...ticket, id: ticket.id || (await buildTicketId(ticket.businessUnit, existingAll.map((t: any) => t.id))), createdAt: now, createdBy: req.user!.name };
-    const customerId = await findOrCreateCustomer({ email: ticket.customerEmail || '', businessUnit: ticket.businessUnit || (req.user!.role === 'PARTNER' ? req.user!.bu : undefined), name: ticket.customerName || undefined });
+    // Customer identity comes strictly from the request body. For staff
+    // submissions, record the officer who logged the complaint so tickets keep
+    // the customer (body) and submitter (session) as distinct identities.
+    if (STAFF_SUBMITTER_ROLES.includes(req.user!.role)) {
+      if (!ticket.submittedBy) entry.submittedBy = 'BU_SUPPORT';
+      if (!ticket.submittedByName) entry.submittedByName = req.user!.name;
+    }
+    const customerId = await findOrCreateCustomer({ email: ticket.customerEmail || '', businessUnit: ticket.businessUnit || (req.user!.role === 'PARTNER' ? req.user!.bu : undefined), name: ticket.customerName || undefined, phone: ticket.customerPhone });
     if (customerId) entry = { ...entry, customerId: customerId.id };
     await upsertTicket(entry);
+    broadcast('ticket_created', ticketEventFields(entry), entry.tenantId || tenantIdForBu(entry.businessUnit));
+    for (const w of ticketWatcherRecipients(entry.watchers, req.user!.email)) {
+      void notifyByEmail(
+        w,
+        `[4C] New ticket ${entry.id}`,
+        `<h3>New ticket ${entry.id}</h3><p><strong>Business unit:</strong> ${entry.businessUnit || '—'}</p><p><strong>Category:</strong> ${entry.category || '—'}</p><p><strong>Priority:</strong> ${entry.priority || '—'}</p><p>${entry.description || ''}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+      );
+    }
     await audit({ event: 'TICKET_CREATED', ticketId: entry.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_CREATED, details: `Ticket ${entry.id} created` });
     res.status(201).json(entry);
   });
@@ -169,17 +204,23 @@ export function createTicketsRouter(): Router {
     delete body.status;
 
     if (targetStatus !== undefined && targetStatus !== existing.status) {
-      const available = getAvailableTransitions(existing, req.user!.role as UserRole);
+      // Evaluate the machine against the prospective merged record: the client
+      // sends required fields (e.g. rcaDetails for RESOLVE) in the same PATCH
+      // as the status change. Evaluating against the raw DB row would reject
+      // every transition whose required fields are supplied in-band, leaving
+      // the server permanently out of sync with the optimistic client state.
+      const prospective = { ...existing, ...body };
+      const available = getAvailableTransitions(prospective, req.user!.role as UserRole);
       const rule = available.find((r) => r.to === targetStatus);
       if (!rule) {
         const allowed = available.map((r) => ({ to: r.to, label: r.label }));
         return res.status(400).json({ error: `Transition ${existing.status} → ${targetStatus} is not allowed for role ${req.user!.role}`, allowed });
       }
-      const blockers = getTransitionBlockers(existing, rule);
+      const blockers = getTransitionBlockers(prospective, rule);
       if (blockers.length > 0) {
         return res.status(400).json({ error: `Transition blocked: ${blockers.join(', ')}`, blockers });
       }
-      const mutated = applyTransition(existing, targetStatus, req.user!.role as UserRole, { actor: req.user!.name });
+      const mutated = applyTransition(prospective, targetStatus, req.user!.role as UserRole, { actor: req.user!.name });
       const updated = { ...mutated, ...body };
       const cid = await findOrCreateCustomer({ email: existing.customerEmail || '', businessUnit: existing.businessUnit || (req.user!.role === 'PARTNER' ? existing.businessUnit : undefined), name: existing.customerName || undefined });
       if (cid) updated.customerId = cid.id;
@@ -187,6 +228,13 @@ export function createTicketsRouter(): Router {
       const transitionDetails = `Ticket ${req.params.id} transitioned ${existing.status} → ${targetStatus} by ${req.user!.role} via "${rule.label}"`;
       await audit({ event: 'TICKET_TRANSITION', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_TRANSITION, details: transitionDetails });
       dispatchWebhook('ticket.transitioned', { id: existing.id, from: existing.status, to: targetStatus, actorRole: req.user!.role }).catch(() => {});
+      for (const w of ticketWatcherRecipients(existing.watchers, req.user!.email)) {
+        void notifyByEmail(
+          w,
+          `[4C] Ticket ${req.params.id} — ${existing.status} → ${targetStatus}`,
+          `<h3>Ticket ${req.params.id} updated</h3><p>Status changed from <strong>${existing.status}</strong> to <strong>${targetStatus}</strong> by ${req.user!.name}.</p><p>${updated.description || ''}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+        );
+      }
       res.json(updated);
       return;
     }
@@ -260,6 +308,7 @@ export function createTicketsRouter(): Router {
     await upsertTicket({ ...existing, isDeleted: true });
     await audit({ event: 'TICKET_DELETED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_DELETED, details: `Ticket ${req.params.id} soft-deleted` });
     dispatchWebhook('ticket.deleted', { id: req.params.id }).catch(() => {});
+    broadcast('ticket_deleted', { id: req.params.id }, existing.tenantId || null);
     res.json({ ok: true });
   });
 
