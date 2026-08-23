@@ -327,6 +327,131 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ description, categories }),
     }),
+
+  globalSearch: (q: string) =>
+    apiFetch<{ tickets: any[]; customers: any[]; kbArticles: any[]; documents: any[]; shortcuts: any[] }>(
+      `/api/search?q=${encodeURIComponent(q)}`
+    ),
+
+  getSearchShortcuts: () =>
+    apiFetch<{ id: string; name: string; query: string; icon?: string }[]>('/api/search/shortcuts'),
+
+  getRecentSearches: () =>
+    apiFetch<{ query: string; searchedAt: string }[]>('/api/search/recent'),
+
+  // ── Escalation Engine ──
+  listEscalationRules: () => apiFetch<any[]>('/api/escalation/rules'),
+  createEscalationRule: (rule: unknown) =>
+    apiFetch('/api/escalation/rules', { method: 'POST', body: JSON.stringify(rule) }),
+  updateEscalationRule: (id: string, patch: unknown) =>
+    apiFetch(`/api/escalation/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteEscalationRule: (id: string) =>
+    apiFetch(`/api/escalation/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  triggerEscalationCheck: () =>
+    apiFetch<{ escalated: number; scanned: number }>('/api/escalation/check', { method: 'POST' }),
+  listEscalationLog: () => apiFetch<any[]>('/api/escalation/log'),
+
+  // ── Partner Portal ──
+  getPartnerScorecard: () => apiFetch<any>('/api/partner/scorecard'),
+  getPartnerScorecardHistory: (limit?: number) =>
+    apiFetch<any[]>(`/api/partner/scorecard/history${limit ? `?limit=${limit}` : ''}`),
+  getPartnerMetrics: () => apiFetch<any>('/api/partner/metrics'),
+  listPartnerSavedReplies: () => apiFetch<any[]>('/api/partner/saved-replies'),
+  createPartnerSavedReply: (reply: { title: string; body: string }) =>
+    apiFetch('/api/partner/saved-replies', { method: 'POST', body: JSON.stringify(reply) }),
+  updatePartnerSavedReply: (id: string, patch: { title?: string; body?: string }) =>
+    apiFetch(`/api/partner/saved-replies/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deletePartnerSavedReply: (id: string) =>
+    apiFetch(`/api/partner/saved-replies/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  listPartnerTickets: (filters?: Record<string, unknown>) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters || {})) {
+      if (v !== undefined && v !== null) params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return apiFetch<any[]>(`/api/partner/tickets${qs ? `?${qs}` : ''}`);
+  },
+
+  // ── Surveys / CSAT ──
+  listSurveyCampaigns: () => apiFetch<any[]>('/api/surveys/campaigns'),
+  createSurveyCampaign: (camp: unknown) =>
+    apiFetch('/api/surveys/campaigns', { method: 'POST', body: JSON.stringify(camp) }),
+  updateSurveyCampaign: (id: string, patch: unknown) =>
+    apiFetch(`/api/surveys/campaigns/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteSurveyCampaign: (id: string) =>
+    apiFetch(`/api/surveys/campaigns/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  getSurveyCampaignStats: (id: string) =>
+    apiFetch<any>(`/api/surveys/campaigns/${encodeURIComponent(id)}/stats`),
+  listSurveyResponses: (campaignId: string, page = 1) =>
+    apiFetch<any>(`/api/surveys/campaigns/${encodeURIComponent(campaignId)}/responses?page=${page}`),
+  submitSurveyResponse: (data: unknown) =>
+    apiFetch('/api/surveys/submit', { method: 'POST', body: JSON.stringify(data) }),
+  getSurveyOverall: () => apiFetch<any>('/api/surveys/overall'),
+
+  // ── Email Ingestion ──
+  listEmailInbox: (filters?: Record<string, unknown>) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters || {})) {
+      if (v !== undefined && v !== null) params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return apiFetch<any[]>(`/api/email/inbox${qs ? `?${qs}` : ''}`);
+  },
+  getEmailMessage: (id: string) =>
+    apiFetch<any>(`/api/email/inbox/${encodeURIComponent(id)}`),
+  processEmail: (id: string) =>
+    apiFetch(`/api/email/inbox/${encodeURIComponent(id)}/process`, { method: 'PATCH' }),
+  listEmailRules: () => apiFetch<any[]>('/api/email/rules'),
+  createEmailRule: (rule: unknown) =>
+    apiFetch('/api/email/rules', { method: 'POST', body: JSON.stringify(rule) }),
+  updateEmailRule: (id: string, patch: unknown) =>
+    apiFetch(`/api/email/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteEmailRule: (id: string) =>
+    apiFetch(`/api/email/rules/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+
+  // ── Documents ──
+  listDocumentFolders: () => apiFetch<any[]>('/api/documents/folders'),
+  createDocumentFolder: (folder: unknown) =>
+    apiFetch('/api/documents/folders', { method: 'POST', body: JSON.stringify(folder) }),
+  listDocuments: (filters?: Record<string, unknown>) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters || {})) {
+      if (v !== undefined && v !== null) params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return apiFetch<any[]>(`/api/documents${qs ? `?${qs}` : ''}`);
+  },
+  createDocument: (doc: unknown) =>
+    apiFetch('/api/documents', { method: 'POST', body: JSON.stringify(doc) }),
+  updateDocument: (id: string, patch: unknown) =>
+    apiFetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  deleteDocument: (id: string) =>
+    apiFetch(`/api/documents/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+  listDocumentVersions: (id: string) =>
+    apiFetch<any[]>(`/api/documents/${encodeURIComponent(id)}/versions`),
+  createDocumentVersion: (id: string, version: unknown) =>
+    apiFetch(`/api/documents/${encodeURIComponent(id)}/versions`, { method: 'POST', body: JSON.stringify(version) }),
+  getDocumentStats: () => apiFetch<any>('/api/documents/stats/summary'),
+
+  // ── Notifications Preferences ──
+  getNotificationPreferences: () => apiFetch<any>('/api/notifications/preferences'),
+  updateNotificationPreferences: (prefs: unknown) =>
+    apiFetch('/api/notifications/preferences', { method: 'PUT', body: JSON.stringify(prefs) }),
+  listNotificationTemplates: () => apiFetch<any[]>('/api/notifications/templates'),
+  getNotificationTemplate: (code: string) =>
+    apiFetch<any>(`/api/notifications/templates/${encodeURIComponent(code)}`),
+  createNotificationTemplate: (tmpl: unknown) =>
+    apiFetch('/api/notifications/templates', { method: 'POST', body: JSON.stringify(tmpl) }),
+  updateNotificationTemplate: (code: string, patch: unknown) =>
+    apiFetch(`/api/notifications/templates/${encodeURIComponent(code)}`, { method: 'PATCH', body: JSON.stringify(patch) }),
+  listNotificationDeliveryLog: (filters?: Record<string, unknown>) => {
+    const params = new URLSearchParams();
+    for (const [k, v] of Object.entries(filters || {})) {
+      if (v !== undefined && v !== null) params.set(k, String(v));
+    }
+    const qs = params.toString();
+    return apiFetch<any[]>(`/api/notifications/delivery-log${qs ? `?${qs}` : ''}`);
+  },
 };
 
 /**

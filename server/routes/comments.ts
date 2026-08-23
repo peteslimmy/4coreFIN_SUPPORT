@@ -53,31 +53,35 @@ export function createCommentsRouter(): Router {
     if (!ticket) return res.status(404).json({ error: 'Ticket not found' });
     const entry = { ...c, id: typeof c.id === 'string' && c.id.trim() ? c.id : buildId('cmt'), timestamp: new Date().toISOString(), author: req.user!.name, authorEmail: req.user!.email, role: req.user!.role, seen: false, seenBy: [] };
     await insertComment(entry);
-    await audit({ event: 'COMMENT_ADDED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_ADDED, details: `Comment ${entry.id} added to ticket ${c.ticketId}`, ticketId: c.ticketId });
 
     // Who should hear about this comment: the author of the comment being
     // replied to, @mention targets in the message, and any explicit addresses.
+    // The user list is fetched at most once per request and shared by both
+    // parent-author resolution and @mention expansion.
+    let usersCache: Awaited<ReturnType<typeof listUsersPublic>> | null = null;
+    const resolveUsers = async () => {
+      if (usersCache === null) {
+        try {
+          usersCache = await listUsersPublic();
+        } catch {
+          usersCache = []; // mention resolution must never block delivery
+        }
+      }
+      return usersCache;
+    };
+
     const recipients = new Set<string>();
     if (c.parentCommentId) {
       const parent = await getScopedComment(c.parentCommentId, req.user!);
       if (parent?.authorEmail) {
         recipients.add(parent.authorEmail);
       } else if (parent?.author) {
-        try {
-          const users = await listUsersPublic();
-          const byName = users.find((u) => u.name?.toLowerCase() === String(parent.author).toLowerCase());
-          if (byName?.email) recipients.add(byName.email);
-        } catch {
-          // legacy rows without an author address are best-effort
-        }
+        // legacy rows without an author address are best-effort
+        const byName = (await resolveUsers()).find((u) => u.name?.toLowerCase() === String(parent.author).toLowerCase());
+        if (byName?.email) recipients.add(byName.email);
       }
     }
-    try {
-      const users = await listUsersPublic();
-      for (const email of mentionEmails(entry.message, users)) recipients.add(email);
-    } catch {
-      // mention resolution must never block the comment from being delivered
-    }
+    for (const email of mentionEmails(entry.message, await resolveUsers())) recipients.add(email);
     for (const r of Array.isArray(c.notifyRecipients) ? c.notifyRecipients : []) {
       if (typeof r === 'string' && r.trim()) recipients.add(r.trim());
     }
@@ -87,26 +91,33 @@ export function createCommentsRouter(): Router {
     const html = `<h3>New comment on ${entry.ticketId}</h3><p><strong>From:</strong> ${escapeHtml(entry.author)}</p><blockquote style="border-left:3px solid #e2e8f0;padding-left:12px;color:#334155;">${escapeHtml(snippet)}</blockquote><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`;
     const text = `New comment from ${entry.author} on ${entry.ticketId}: ${snippet}`;
 
-    let idx = 0;
-    for (const recipient of recipients) {
-      if (recipient.toLowerCase() === (req.user!.email || '').toLowerCase()) continue;
-      try {
-        await insertNotification({
-          id: `wn-cmt-${entry.id}-${idx}`,
-          timestamp: new Date().toISOString(),
-          ticketId: entry.ticketId,
-          message: `New comment from ${entry.author} on ${entry.ticketId}: “${snippet}”`,
-          recipient,
-          seen: false,
-        });
-      } catch {
-        // a notifications hiccup must not fail the comment write
-      }
-      void notifyByEmail(recipient, subject, html, text);
-      idx++;
-    }
-
     res.status(201).json(entry);
+
+    // Notification fan-out happens after the response is flushed: recipients
+    // are independent, so inserts run in parallel instead of N sequential
+    // round-trips. Failures never fail the already-delivered comment.
+    let idx = 0;
+    await Promise.all(
+      Array.from(recipients).map(async (recipient) => {
+        if (recipient.toLowerCase() === (req.user!.email || '').toLowerCase()) return;
+        const slot = idx++;
+        try {
+          await insertNotification({
+            id: `wn-cmt-${entry.id}-${slot}`,
+            timestamp: new Date().toISOString(),
+            ticketId: entry.ticketId,
+            message: `New comment from ${entry.author} on ${entry.ticketId}: “${snippet}”`,
+            recipient,
+            seen: false,
+          });
+        } catch {
+          // a notifications hiccup must not fail the comment write
+        }
+        void notifyByEmail(recipient, subject, html, text);
+      })
+    );
+    // Off critical path — see POST /tickets.
+    audit({ event: 'COMMENT_ADDED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_ADDED, details: `Comment ${entry.id} added to ticket ${c.ticketId}`, ticketId: c.ticketId }).catch(() => {});
   });
 
   router.patch('/comments/:id', requireAuth, requirePermission('comments:create'), async (req: AuthedRequest, res: Response) => {
@@ -114,8 +125,9 @@ export function createCommentsRouter(): Router {
     if (!existing) return res.status(404).json({ error: 'Comment not found' });
     const c = req.body;
     await updateComment({ ...c, id: req.params.id });
-    await audit({ event: 'COMMENT_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_UPDATED, details: `Comment ${req.params.id} updated`, ticketId: existing.ticketId });
     res.json({ ok: true });
+    // Off critical path — see POST /comments.
+    audit({ event: 'COMMENT_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.COMMENT_UPDATED, details: `Comment ${req.params.id} updated`, ticketId: existing.ticketId }).catch(() => {});
   });
 
   return router;

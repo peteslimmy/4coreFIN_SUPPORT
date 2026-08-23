@@ -13,6 +13,11 @@ interface SseClient {
 
 const sseClients = new Set<SseClient>();
 
+// Bound live streams per user: every open tab holds an SSE connection, and
+// unbounded growth lets a single account exhaust sockets/memory. When the
+// cap is hit, the user's oldest connections are closed so fresh tabs win.
+const MAX_SSE_PER_USER = 5;
+
 /** Export for graceful shutdown */
 export function getSseClients(): ReadonlySet<SseClient> {
   return sseClients;
@@ -39,7 +44,32 @@ export function addSseClient(
   tenantId: string | null,
   global: boolean
 ) {
-  sseClients.add({ res, userId, role, bu, tenantId, global });
+  // Enforce the per-user connection cap before registering the new client.
+  const existing: SseClient[] = [];
+  for (const c of sseClients) {
+    if (c.userId === userId) existing.push(c);
+  }
+  const excess = existing.length - (MAX_SSE_PER_USER - 1);
+  if (excess > 0) {
+    for (const stale of existing.slice(0, excess)) {
+      try {
+        stale.res.write('event: reconnect\ndata: {"reason":"connection_limit"}\n\n');
+        stale.res.end();
+      } catch {
+        // socket already gone
+      }
+      sseClients.delete(stale);
+    }
+  }
+
+  const client: SseClient = { res, userId, role, bu, tenantId, global };
+  sseClients.add(client);
+  // Eagerly drop the client when the socket closes so dead connections do not
+  // linger until the next broadcast prunes them (matters when broadcasts are
+  // sparse but connections churn).
+  res.on('close', () => {
+    sseClients.delete(client);
+  });
 }
 
 export function removeSseClient(res: Response) {

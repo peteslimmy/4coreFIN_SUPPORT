@@ -27,6 +27,9 @@ COMMENT ON COLUMN business_hours.close_time_local IS 'Local closing time for the
 -- Helper function: given a tenant_id and a local datetime, return the next local
 -- business-hour start time. Returns NULL when the tenant has no business_hours
 -- configuration (in which case the system falls back to 24/7 behavior).
+-- Drop-first: earlier revisions used different parameter names (p_tenant);
+-- CREATE OR REPLACE cannot rename input parameters in place.
+DROP FUNCTION IF EXISTS get_next_business_start(text, timestamp without time zone);
 CREATE OR REPLACE FUNCTION get_next_business_start(tenant_id TEXT, at_local TIMESTAMP) RETURNS TIMESTAMP AS $$
 DECLARE
   row_record RECORD;
@@ -62,56 +65,66 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Helper function: compute how many business hours elapse from a local start time,
--- given a duration in hours. Useful for SLA deadline computation.
+-- Helper function: compute the local timestamp reached after accumulating
+-- `durationHours` of business time from a local start time.
+-- Drop-first: earlier revisions used different parameter names (p_tenant).
+DROP FUNCTION IF EXISTS business_hours_elapsed(timestamp without time zone, integer, text);
 CREATE OR REPLACE FUNCTION business_hours_elapsed(start_local TIMESTAMP, durationHours INTEGER, tenant_id TEXT) RETURNS TIMESTAMP AS $$
 DECLARE
   current_local TIMESTAMP := start_local;
-  elapsed INTEGER := 0;
-  current_time TIME;
+  remaining_hours NUMERIC := durationHours;
   ob TIME;
   cb TIME;
-  dow INTEGER;
 BEGIN
-  WHILE elapsed < durationHours LOOP
-    -- Get current day's business hours for this tenant
+  WHILE remaining_hours > 0 LOOP
+    -- Get current day's business hours for this tenant (qualify column names —
+    -- unqualified "tenant_id = tenant_id" is ambiguous against the parameter).
     SELECT open_time_local, close_time_local INTO ob, cb
     FROM business_hours
-    WHERE tenant_id = tenant_id
-      AND day_of_week = EXTRACT(dow FROM current_local AT TIME ZONE (SELECT tz_name FROM business_hours WHERE tenant_id = tenant_id LIMIT 1))
+    WHERE business_hours.tenant_id = business_hours_elapsed.tenant_id
+      AND day_of_week = EXTRACT(dow FROM current_local AT TIME ZONE (
+            SELECT tz_name FROM business_hours bh WHERE bh.tenant_id = business_hours_elapsed.tenant_id LIMIT 1))
       AND is_active = true
     LIMIT 1;
 
     IF ob IS NULL THEN
       -- No biz-hours config; treat as 24h days for backward compatibility
-      current_local := current_local + INTERVAL '1 day';
+      IF remaining_hours >= 24 THEN
+        current_local := current_local + INTERVAL '1 day';
+        remaining_hours := remaining_hours - 24;
+      ELSE
+        current_local := current_local + make_interval(hours => remaining_hours);
+        remaining_hours := 0;
+      END IF;
       CONTINUE;
     END IF;
 
-    current_time := current_local::time;
-
-    -- If currently inside business hours
-    IF current_time >= ob AND current_time < cb THEN
-      -- Hours remaining today
-      local_hours_today := cb - current_time;
-      IF elapsed + EXTRACT(hour FROM local_hours_today) * 60 + EXTRACT(minute FROM local_hours_today) / 60 >= durationHours - elapsed THEN
-        -- Deadline fits within today's window
-        RETURN current_local + INTERVAL '1 hour' * (durationHours - elapsed);
-      END IF;
-      elapsed := elapsed + EXTRACT(hour FROM local_hours_today) * 60 + EXTRACT(minute FROM local_hours_today) / 60;
-      current_local := current_local::date + cb; -- advance to close of business
+    -- If currently inside business hours, consume hours until close of business
+    IF current_local::time >= ob AND current_local::time < cb THEN
+      DECLARE
+        hours_left_today NUMERIC := EXTRACT(EPOCH FROM (cb - current_local::time)) / 3600.0;
+      BEGIN
+        IF hours_left_today >= remaining_hours THEN
+          current_local := current_local + make_interval(hours => remaining_hours);
+          remaining_hours := 0;
+        ELSE
+          remaining_hours := remaining_hours - hours_left_today;
+          current_local := date_trunc('day', current_local) + cb;
+        END IF;
+      END;
     ELSE
-      -- Outside business hours: jump to next business start
-      current_local := current_local::date + cb; -- start of next business day close... actually jump to next open
-      -- More correctly: set to next business open
-      current_local := get_next_business_start(tenant_id, current_local);
-      IF current_local IS NULL THEN
-        -- Fallback 24/7
-        current_local := current_local + INTERVAL '1 hour' * (durationHours - elapsed);
-        EXIT;
-      END IF;
-      -- Don't advance elapsed; the time jumped, we re-evaluate in the next loop iteration
-      CONTINUE;
+      -- Outside business hours: jump to next business start; fall back to
+      -- 24/7 accumulation when the tenant has no usable next-start config.
+      DECLARE
+        next_start TIMESTAMP := get_next_business_start(tenant_id, current_local);
+      BEGIN
+        IF next_start IS NULL OR next_start <= current_local THEN
+          current_local := current_local + make_interval(hours => remaining_hours);
+          remaining_hours := 0;
+        ELSE
+          current_local := next_start;
+        END IF;
+      END;
     END IF;
   END LOOP;
 

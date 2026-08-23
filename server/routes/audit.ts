@@ -3,9 +3,8 @@ import { z } from 'zod';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
-import { appendAuditLog, listAuditLogs, listAuditLogsForVerification } from '../repository';
+import { appendAuditLog, listAuditLogs, verifyAuditChainPaged } from '../repository';
 import { AuditAction } from '../auditCatalog';
-import { verifyAuditChain } from '../compliance';
 
 export function createAuditRouter(): Router {
   const router = Router();
@@ -31,9 +30,9 @@ export function createAuditRouter(): Router {
 
   router.get('/audit-log/verify', requireAuth, requirePermission('audit:verify'), async (_req: AuthedRequest, res: Response) => {
     // The ledger is globally linked, so verification requires the full chain in
-    // chronological (oldest-first) order — not the newest-first preview slice.
-    const logs = await listAuditLogsForVerification();
-    const result = verifyAuditChain(logs);
+    // chronological (oldest-first) order — streamed in pages to keep memory
+    // flat regardless of ledger size.
+    const result = await verifyAuditChainPaged();
     res.json(result);
   });
 

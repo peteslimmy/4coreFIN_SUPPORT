@@ -10,11 +10,11 @@ const variantStyles: Record<BadgeVariant, string> = {
 };
 
 const dotColors: Record<BadgeVariant, string> = {
-  success: 'bg-emerald-500',
-  warning: 'bg-amber-500',
-  error: 'bg-red-500',
-  info: 'bg-blue-500',
-  neutral: 'bg-secondary',
+  success: 'var(--color-success)',
+  warning: 'var(--color-warning)',
+  error: 'var(--color-error)',
+  info: 'var(--color-info)',
+  neutral: 'var(--color-secondary)',
 };
 
 export default function Badge({ variant = 'neutral', size = 'md', dot, children, className = '' }: BadgeProps) {
@@ -27,7 +27,7 @@ export default function Badge({ variant = 'neutral', size = 'md', dot, children,
         size === 'sm' ? 'px-2 py-0.5 text-xs' : 'px-2.5 py-1 text-sm'
       } ${variantStyles[variant]} ${className}`}
     >
-      {dot && <motion.span animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 2 }} className={`w-1.5 h-1.5 rounded-full ${dotColors[variant]}`} />}
+      {dot && <motion.span animate={{ scale: [1, 1.3, 1] }} transition={{ repeat: Infinity, duration: 2 }} className="w-1.5 h-1.5 rounded-full" style={{ backgroundColor: dotColors[variant] }} />}
       {children}
     </motion.span>
   );

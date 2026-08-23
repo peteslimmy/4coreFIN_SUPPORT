@@ -7,8 +7,20 @@ if (!ENCRYPTION_KEY) {
 }
 
 function getKey(): Buffer {
-  return Buffer.from(ENCRYPTION_KEY, 'hex');
+  const key = Buffer.from(ENCRYPTION_KEY, 'hex');
+  // Fail at startup, not on the first encrypt/decrypt call: a wrong-length
+  // key makes every stored PII field unreadable and surfaces as a cryptic
+  // OpenSSL error deep inside a request handler.
+  if (key.length !== 32) {
+    throw new Error(
+      `ENCRYPTION_KEY must decode to exactly 32 bytes (64 hex chars) for ${ALGORITHM}; got ${key.length} bytes`
+    );
+  }
+  return key;
 }
+
+// Validate eagerly so a misconfigured deployment crashes at boot.
+getKey();
 
 export function encrypt(text: string): string {
   const key = getKey();

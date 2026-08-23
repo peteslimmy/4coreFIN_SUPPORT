@@ -24,6 +24,9 @@ const Card = ({
   return (
     <div
       onClick={onClick}
+      onKeyDown={onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(); } } : undefined}
+      role={onClick ? 'button' : undefined}
+      tabIndex={onClick ? 0 : undefined}
       className={`bg-surface-card border border-border rounded-xl shadow-1 ${onClick ? 'cursor-pointer' : ''} ${hoverable ? 'transition-shadow hover:shadow-3' : ''} ${className}`}
     >
       {hasHeader && (

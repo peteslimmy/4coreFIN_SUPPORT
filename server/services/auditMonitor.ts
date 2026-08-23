@@ -1,6 +1,5 @@
 import { supabase } from '../supabase';
-import { verifyAuditChain, type AuditEntry } from '../compliance';
-import { listAuditLogsForVerification } from '../repository';
+import { verifyAuditChainPaged } from '../repository';
 
 export interface AuditVerificationResult {
   valid: boolean;
@@ -10,25 +9,15 @@ export interface AuditVerificationResult {
 }
 
 export async function verifyAuditChainNow(businessUnit?: string): Promise<AuditVerificationResult> {
-  // Fetch the audit logs relevant to this business unit.
-  let logs: AuditEntry[] = [];
-
-  if (businessUnit) {
-    // Filter by tenant_id (BU mapping)
-    const tenantId = await getTenantIdForBu(businessUnit);
-    if (tenantId) {
-      const tenantLogs = await listAuditLogsForVerification(); // fetch full chain; in production use paginated
-      logs = tenantLogs.filter((l) => l.actor || l.ticketId);
-    }
-  } else {
-    logs = await listAuditLogsForVerification();
-  }
-
-  const result = verifyAuditChain(logs);
+  // The ledger is globally linked, so verification always walks the full
+  // chain. Paged streaming keeps memory flat regardless of ledger size; a
+  // tenant-scoped partial slice could never validate a globally-chained
+  // ledger, so the businessUnit argument is recorded for reporting only.
+  const result = await verifyAuditChainPaged();
   return {
     valid: result.valid,
     brokenIndex: result.brokenIndex,
-    totalEntries: logs.length,
+    totalEntries: result.checked,
     businessUnit: businessUnit || 'global',
   };
 }

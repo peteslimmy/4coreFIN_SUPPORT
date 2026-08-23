@@ -200,20 +200,20 @@ export default function TicketActivitySection({
             const initials = c.author.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
             return (
               <div className={`flex ${isMine ? "justify-end" : "justify-start"} ${isReply ? "ml-5" : ""}`}>
-                <div className="max-w-[85%] min-w-0 rounded-lg border px-2.5 py-1.5 bg-white text-black border-border">
+                <div className="max-w-[85%] min-w-0 rounded-lg border px-2.5 py-1.5 bg-surface text-text-primary border-border">
                   <div className={`flex items-center gap-1 mb-0.5 ${isMine ? "flex-row-reverse" : ""}`}>
                     <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold shrink-0 ${
                       isExternal ? "bg-accent/15 text-accent" : isMine ? "bg-accent/20 text-accent" : "bg-surface-hover text-text-secondary"
                     }`}>{initials}</span>
                     <div className="min-w-0 flex-1 text-left">
-                      <span className="font-semibold text-black text-[10px]">{c.author}</span>
-                      <span className="text-[8px] text-black/50 ml-1.5 font-medium">{c.role}</span>
+                      <span className="font-semibold text-text-primary text-[10px]">{c.author}</span>
+                      <span className="text-[8px] text-text-primary/50 ml-1.5 font-medium">{c.role}</span>
                     </div>
-                    <span title={new Date(c.timestamp).toLocaleString()} className="text-[8px] text-black/50 font-mono shrink-0">
+                    <span title={new Date(c.timestamp).toLocaleString()} className="text-[8px] text-text-primary/50 font-mono shrink-0">
                       {relativeTime(c.timestamp)}
                     </span>
                   </div>
-                  <p className="text-black leading-snug text-[11px] break-words">
+                  <p className="text-text-primary leading-snug text-[11px] break-words">
                     {renderMessage(c.message)}
                   </p>
                   <div className={`flex items-center justify-between mt-0.5 ${isMine ? "flex-row-reverse" : ""}`}>
@@ -228,13 +228,13 @@ export default function TicketActivitySection({
                             requestAnimationFrame(() => textareaRef.current?.focus());
                           }
                         }}
-                        className="text-[9px] font-semibold text-black/50 hover:text-black transition focus-ring cursor-pointer">
+                        className="text-[9px] font-semibold text-text-primary/50 hover:text-text-primary transition focus-ring cursor-pointer">
                         {replyingTo === c.id ? "Cancel" : "Reply"}
                       </button>
                     )}
                     {Array.isArray(c.seenBy) && c.seenBy.length > 0 && (
-                      <span title={c.seenBy.join(", ")} className="text-[9px] text-black/50 flex items-center gap-0.5">
-                        <Check className="w-2.5 h-2.5 text-black/60" /> {c.seenBy.length}
+                      <span title={c.seenBy.join(", ")} className="text-[9px] text-text-primary/50 flex items-center gap-0.5">
+                        <Check className="w-2.5 h-2.5 text-text-primary/60" /> {c.seenBy.length}
                       </span>
                     )}
                   </div>

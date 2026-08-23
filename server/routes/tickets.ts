@@ -4,7 +4,8 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { audit, AuditAction } from '../auditEvents';
-import { listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable, ticketEventFields } from '../repository';
+import { listTickets, getTicket, getScopedTicket, upsertTicket, findOrCreateCustomer, listJsonTable, ticketEventFields, nextTicketSequence } from '../repository';
+import { supabase } from '../supabase';
 import { dispatchWebhook } from '../services/webhookDispatcher';
 import { notifyByEmail, appHomeUrl } from '../services/notifyEmails';
 import { broadcast } from '../broadcast';
@@ -12,7 +13,7 @@ import { tenantIdForBu } from '../tenant';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
 import { getCachedRoles } from '../middleware/requirePermission';
 import { getConfig } from '../repository';
-import { nextTicketId, normalizeBusinessUnits } from '../../src/lib/buCodes';
+import { normalizeBusinessUnits, yymmdd } from '../../src/lib/buCodes';
 import { buildId } from '../lib/ids';
 import { computeSlaDeadline } from '../../src/lib/slaCalculator';
 import { TicketStatus, TicketPriority, UserRole } from '../../src/types/app';
@@ -38,7 +39,14 @@ function ticketWatcherRecipients(watchers: string[] | undefined, excludeEmail: s
   return out;
 }
 
-async function buildTicketId(businessUnit: string | undefined, existing: string[]): Promise<string> {
+/**
+ * Build a BU-scoped ticket id without loading every ticket into memory.
+ * Primary path: atomic per-(BU,date) counter via the next_ticket_id_sequence
+ * RPC — collision-free under concurrent submissions.
+ * Fallback (RPC unavailable): scan only ids sharing today's prefix instead of
+ * fetching the full ticket list.
+ */
+async function buildTicketId(businessUnit: string | undefined): Promise<string> {
   const buRaw = await getConfig<any[]>('businessUnits', []);
   const buUnits = normalizeBusinessUnits(buRaw);
   const now = new Date();
@@ -46,7 +54,21 @@ async function buildTicketId(businessUnit: string | undefined, existing: string[
   if (!code) {
     return buildId('tkt');
   }
-  return nextTicketId(businessUnit!, buUnits, existing, now);
+  const dateKey = yymmdd(now);
+  // Atomic reservation — safe at any concurrency level.
+  const seq = await nextTicketSequence(code.toUpperCase(), dateKey);
+  if (seq !== null) {
+    return `${code}-${dateKey}-${String(seq).padStart(3, '0')}`;
+  }
+  // Legacy fallback: prefix-bounded max computation (single indexed column).
+  const prefix = `${code}-${dateKey}-`;
+  const { data } = await supabase.from('tickets').select('id').ilike('id', `${prefix}%`);
+  let max = 0;
+  for (const r of data ?? []) {
+    const n = parseInt(String((r as any).id).slice(prefix.length), 10);
+    if (!Number.isNaN(n) && n > max) max = n;
+  }
+  return `${prefix}${String(max + 1).padStart(3, '0')}`;
 }
 
 const createTicketSchema = z.object({
@@ -159,8 +181,11 @@ export function createTicketsRouter(): Router {
       }
     }
     const now = new Date().toISOString();
-    const existingAll = await listTickets(req.user!, { includeDeleted: true });
-    let entry: any = { ...ticket, id: ticket.id || (await buildTicketId(ticket.businessUnit, existingAll.map((t: any) => t.id))), createdAt: now, createdBy: req.user!.name };
+    // ID generation no longer scans the whole ticket table — an atomic counter
+    // (or prefix-bounded fallback) reserves the next sequence. On the rare
+    // duplicate-id race (fallback path), retry once with a fresh reservation
+    // instead of silently overwriting an existing row.
+    let entry: any = { ...ticket, id: ticket.id || (await buildTicketId(ticket.businessUnit)), createdAt: now, createdBy: req.user!.name };
     // Customer identity comes strictly from the request body. For staff
     // submissions, record the officer who logged the complaint so tickets keep
     // the customer (body) and submitter (session) as distinct identities.
@@ -170,7 +195,19 @@ export function createTicketsRouter(): Router {
     }
     const customerId = await findOrCreateCustomer({ email: ticket.customerEmail || '', businessUnit: ticket.businessUnit || (req.user!.role === 'PARTNER' ? req.user!.bu : undefined), name: ticket.customerName || undefined, phone: ticket.customerPhone });
     if (customerId) entry = { ...entry, customerId: customerId.id };
-    await upsertTicket(entry);
+    if (!ticket.id) entry.version = 1;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        // expectNew: server-generated ids must collide loudly (unique
+        // violation) rather than silently overwriting an existing ticket.
+        await upsertTicket(entry, { expectNew: !ticket.id });
+        break;
+      } catch (e: any) {
+        const dup = /duplicate key|unique constraint|already exists/i.test(String(e?.message || ''));
+        if (!dup || attempt === 1 || ticket.id) throw e;
+        entry = { ...entry, id: await buildTicketId(ticket.businessUnit) };
+      }
+    }
     broadcast('ticket_created', ticketEventFields(entry), entry.tenantId || tenantIdForBu(entry.businessUnit));
     for (const w of ticketWatcherRecipients(entry.watchers, req.user!.email)) {
       void notifyByEmail(
@@ -179,8 +216,10 @@ export function createTicketsRouter(): Router {
         `<h3>New ticket ${entry.id}</h3><p><strong>Business unit:</strong> ${entry.businessUnit || '—'}</p><p><strong>Category:</strong> ${entry.category || '—'}</p><p><strong>Priority:</strong> ${entry.priority || '—'}</p><p>${entry.description || ''}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
       );
     }
-    await audit({ event: 'TICKET_CREATED', ticketId: entry.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_CREATED, details: `Ticket ${entry.id} created` });
     res.status(201).json(entry);
+    // Audit trail is written off the client's critical path — the response is
+    // already flushed; a failed audit log must not fail the created ticket.
+    audit({ event: 'TICKET_CREATED', ticketId: entry.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_CREATED, details: `Ticket ${entry.id} created` }).catch((err) => req.app?.locals?.logger?.warn?.({ err }, 'audit write failed'));
   });
 
   router.patch('/tickets/:id', requireAuth, requirePermission('tickets:edit'), validateBody(updateTicketSchema), async (req: AuthedRequest, res: Response) => {
@@ -224,9 +263,15 @@ export function createTicketsRouter(): Router {
       const updated = { ...mutated, ...body };
       const cid = await findOrCreateCustomer({ email: existing.customerEmail || '', businessUnit: existing.businessUnit || (req.user!.role === 'PARTNER' ? existing.businessUnit : undefined), name: existing.customerName || undefined });
       if (cid) updated.customerId = cid.id;
-      await upsertTicket(updated);
+      try {
+        await upsertTicket(updated, { expectedVersion: typeof (existing as any).version === 'number' ? (existing as any).version : undefined });
+      } catch (e: any) {
+        if (e?.code === 'CONCURRENT_MODIFICATION') {
+          return res.status(409).json({ error: 'Ticket was modified by another user. Reload and retry.', code: 'CONCURRENT_MODIFICATION' });
+        }
+        throw e;
+      }
       const transitionDetails = `Ticket ${req.params.id} transitioned ${existing.status} → ${targetStatus} by ${req.user!.role} via "${rule.label}"`;
-      await audit({ event: 'TICKET_TRANSITION', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_TRANSITION, details: transitionDetails });
       dispatchWebhook('ticket.transitioned', { id: existing.id, from: existing.status, to: targetStatus, actorRole: req.user!.role }).catch(() => {});
       for (const w of ticketWatcherRecipients(existing.watchers, req.user!.email)) {
         void notifyByEmail(
@@ -236,6 +281,8 @@ export function createTicketsRouter(): Router {
         );
       }
       res.json(updated);
+      // Off critical path — see POST /tickets.
+      audit({ event: 'TICKET_TRANSITION', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_TRANSITION, details: transitionDetails }).catch(() => {});
       return;
     }
 
@@ -273,11 +320,20 @@ export function createTicketsRouter(): Router {
     }
 
     const updated = { ...existing, ...body };
+    delete (updated as any).version;
     const cid2 = await findOrCreateCustomer({ email: existing.customerEmail || '', businessUnit: existing.businessUnit || (req.user!.role === 'PARTNER' ? existing.businessUnit : undefined), name: existing.customerName || undefined });
     if (cid2) updated.customerId = cid2.id;
-    await upsertTicket(updated);
-    await audit({ event: 'TICKET_UPDATED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_UPDATED, details: `Ticket ${req.params.id} patched` });
+    try {
+      await upsertTicket(updated, { expectedVersion: typeof (existing as any).version === 'number' ? (existing as any).version : undefined });
+    } catch (e: any) {
+      if (e?.code === 'CONCURRENT_MODIFICATION') {
+        return res.status(409).json({ error: 'Ticket was modified by another user. Reload and retry.', code: 'CONCURRENT_MODIFICATION' });
+      }
+      throw e;
+    }
     res.json(updated);
+    // Off critical path — see POST /tickets.
+    audit({ event: 'TICKET_UPDATED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_UPDATED, details: `Ticket ${req.params.id} patched` }).catch(() => {});
   });
 
   router.patch('/tickets/:id/feedback', requireAuth, requirePermission('tickets:view'), validateBody(z.object({ feedbackScore: z.number().int().min(1).max(5).nullable().optional(), feedbackComment: z.string().max(500).nullable().optional() })), async (req: AuthedRequest, res: Response) => {
@@ -298,18 +354,20 @@ export function createTicketsRouter(): Router {
       feedbackComment: body.feedbackComment !== undefined ? body.feedbackComment : existing.feedbackComment,
     };
     await upsertTicket(updated);
-    await audit({ event: 'TICKET_FEEDBACK', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_FEEDBACK, details: `Feedback submitted for ticket ${req.params.id}` });
     res.json(updated);
+    // Off critical path — see POST /tickets.
+    audit({ event: 'TICKET_FEEDBACK', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_FEEDBACK, details: `Feedback submitted for ticket ${req.params.id}` }).catch(() => {});
   });
 
   router.delete('/tickets/:id', requireAuth, requirePermission('tickets:delete'), async (req: AuthedRequest, res: Response) => {
     const existing = await getScopedTicket(req.params.id, req.user!);
     if (!existing) return res.status(404).json({ error: 'Ticket not found' });
     await upsertTicket({ ...existing, isDeleted: true });
-    await audit({ event: 'TICKET_DELETED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_DELETED, details: `Ticket ${req.params.id} soft-deleted` });
     dispatchWebhook('ticket.deleted', { id: req.params.id }).catch(() => {});
     broadcast('ticket_deleted', { id: req.params.id }, existing.tenantId || null);
     res.json({ ok: true });
+    // Off critical path — see POST /tickets.
+    audit({ event: 'TICKET_DELETED', ticketId: req.params.id, actor: req.user!.name, role: req.user!.role, action: AuditAction.TICKET_DELETED, details: `Ticket ${req.params.id} soft-deleted` }).catch(() => {});
   });
 
   return router;

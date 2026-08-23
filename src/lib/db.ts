@@ -15,6 +15,7 @@ const LEGACY_LS_KEYS = [
   '4c_business_units', '4c_business_unit_codes', '4c_partners',
   '4c_payment_channels', '4c_categories', '4c_evidence', '4c_bu_form_configs',
   '4c_ticket_form_configs', '4c_roles',
+  'complaint_draft_v1',
 ];
 
 const LEGACY_IDB_NAME = '4CoreFinSupportDB';

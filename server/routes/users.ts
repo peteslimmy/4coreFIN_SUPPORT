@@ -5,7 +5,7 @@ import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { listUsersPublic, upsertUser, deleteUser } from '../repository';
 import { audit, AuditAction } from '../auditEvents';
-import { hashPassword, supabaseCreateUser, supabaseUpdateUser, supabaseDeleteUser, findUserById, supabaseSetBan } from '../auth';
+import { hashPasswordAsync, supabaseCreateUser, supabaseUpdateUser, supabaseDeleteUser, findUserById, supabaseSetBan } from '../auth';
 import { buildId, buildToken, buildPassword } from '../lib/ids';
 import { sendUserInvite } from '../services/emailService';
 
@@ -77,7 +77,7 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
     const userId = id || buildId('usr');
     const resolvedAccountType = accountType ?? inferAccountType(validatedRole);
     const created = await supabaseCreateUser(email, password, name);
-    const passwordHash = hashPassword(password);
+    const passwordHash = await hashPasswordAsync(password);
     const activationToken = buildToken(32);
     try {
       await upsertUser({ id: userId, name, email, role: validatedRole, bu, partner, accountType: resolvedAccountType, phone, passwordHash, authUserId: created.id, mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
@@ -125,7 +125,7 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
     if (current.auth_user_id) {
       await supabaseUpdateUser(current.auth_user_id, { password: tempPassword });
     }
-    await upsertUser({ id: current.id, passwordHash: hashPassword(tempPassword), mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
+    await upsertUser({ id: current.id, passwordHash: await hashPasswordAsync(tempPassword), mustChangePassword: true, isActive: false, activationToken, activatedAt: null });
     const invite = await sendUserInvite({
       to: current.email,
       name: current.name,
@@ -159,12 +159,14 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
         name: patch.name,
       });
     }
-    const passwordHash = patch.password ? hashPassword(patch.password) : undefined;
+    const passwordHash = patch.password ? await hashPasswordAsync(patch.password) : undefined;
     // An admin resetting the password forces the user to choose a new one.
     const mustChangePassword = patch.password ? true : undefined;
+    // Increment token version to invalidate existing sessions on password change.
+    const tokenVersion = patch.password ? (current?.token_version ?? 0) + 1 : undefined;
     // If password is being changed and user was pending activation, auto-activate
     const activateOnPasswordChange = patch.password && current?.isActive === false;
-    await upsertUser({ ...patch, id: req.params.id, passwordHash, mustChangePassword });
+    await upsertUser({ ...patch, id: req.params.id, passwordHash, mustChangePassword, tokenVersion });
     // Auto-activate if password was changed and user was pending
     if (activateOnPasswordChange) {
       await upsertUser({ id: req.params.id, isActive: true, activationToken: null, activatedAt: new Date().toISOString() });

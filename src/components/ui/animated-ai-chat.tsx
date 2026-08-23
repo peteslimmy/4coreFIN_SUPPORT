@@ -139,6 +139,12 @@ const [value, setValue] = useState("");
   const [, setRecentCommand] = useState<string | null>(null);
   const [mousePosition, setMousePosition] = useState({ x: 0, y: 0 });
   const commandPaletteRef = useRef<HTMLDivElement>(null);
+  // Pending recent-command highlight timers, cleared on unmount.
+  const commandTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => {
+    for (const t of commandTimers.current) clearTimeout(t);
+    commandTimers.current = [];
+  }, []);
 
   const { textareaRef, adjustHeight } = useAutoResizeTextarea({
     minHeight: 60,
@@ -196,8 +202,9 @@ const [value, setValue] = useState("");
           const selectedCommand = commandSuggestions[activeSuggestion];
           setValue(selectedCommand.prefix + ' ');
           setShowCommandPalette(false);
-setRecentCommand(selectedCommand.label);
-        setTimeout(() => setRecentCommand(null), 3500);
+          setRecentCommand(selectedCommand.label);
+          const t = setTimeout(() => setRecentCommand(null), 3500);
+          commandTimers.current.push(t);
         }
       } else if (e.key === 'Escape') {
         e.preventDefault();

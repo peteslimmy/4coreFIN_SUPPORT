@@ -4,6 +4,14 @@ export default function useRipple(disabled?: boolean) {
   const [ripples, setRipples] = useState<Array<{ id: number; x: number; y: number; size: number }>>([]);
   const nextId = useRef(0);
   const prefersReducedMotion = useRef(false);
+  // Track expiry timers so pending ripples are cleared on unmount instead of
+  // firing state updates into a dead component.
+  const timers = useRef<Set<ReturnType<typeof setTimeout>>>(new Set());
+
+  useEffect(() => () => {
+    for (const t of timers.current) clearTimeout(t);
+    timers.current.clear();
+  }, []);
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
@@ -21,7 +29,11 @@ export default function useRipple(disabled?: boolean) {
     const y = e.clientY - rect.top - size / 2;
     const id = nextId.current++;
     setRipples(prev => [...prev, { id, x, y, size }]);
-    setTimeout(() => setRipples(prev => prev.filter(r => r.id !== id)), 600);
+    const t = setTimeout(() => {
+      timers.current.delete(t);
+      setRipples(prev => prev.filter(r => r.id !== id));
+    }, 600);
+    timers.current.add(t);
   }, [disabled]);
   const rippleElements = ripples.map(r => (
     <span key={r.id} className="pointer-events-none absolute rounded-full bg-white/30 animate-ripple"

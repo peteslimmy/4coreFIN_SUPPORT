@@ -30,8 +30,10 @@ RUN addgroup -g 1001 -S nodejs && \
 
 # Copy built assets and production dependencies from builder
 COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
-COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
+
+# Install only production dependencies
+RUN npm ci --omit=dev && npm cache clean --force
 
 # Switch to non-root user
 USER nextjs

@@ -8,6 +8,7 @@ import EmptyState from '../components/ui/EmptyState';
 import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 interface WatcherNotificationsPageProps {
   watcherNotifications: WatcherNotification[];
@@ -31,6 +32,17 @@ export default function WatcherNotificationsPage({
   const userNotifs = watcherNotifications.filter(n => n.recipient.toLowerCase() === currentUser.email.toLowerCase());
   const unreadCount = userNotifs.filter(n => !n.seen).length;
   const watchingCount = tickets.filter(t => (t.watchers || []).includes(currentUser.email)).length;
+  const [showClearConfirm, setShowClearConfirm] = React.useState(false);
+
+  const handleClearAll = () => {
+    const updatedWN = watcherNotifications.filter(n =>
+      n.recipient.toLowerCase() !== currentUser.email.toLowerCase()
+    );
+    setWatcherNotifications(updatedWN);
+    saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN);
+    showToast('Your notification feed cleared.', 'info');
+    setShowClearConfirm(false);
+  };
 
   return (
     <PageTransition>
@@ -58,14 +70,7 @@ export default function WatcherNotificationsPage({
                 Mark All as Read
               </button>
               <button
-                onClick={() => {
-                  const updatedWN = watcherNotifications.filter(n =>
-                    n.recipient.toLowerCase() !== currentUser.email.toLowerCase()
-                  );
-                  setWatcherNotifications(updatedWN);
-                  saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN);
-                  showToast('Your notification feed cleared.', 'info');
-                }}
+                onClick={() => setShowClearConfirm(true)}
                 className="px-3 py-1.5 bg-error-light hover:bg-error/15 text-error text-caption font-semibold rounded-lg transition border border-error/20 cursor-pointer"
               >
                 Clear All
@@ -142,6 +147,15 @@ export default function WatcherNotificationsPage({
           </div>
         )}
       </div>
+      <ConfirmModal
+        isOpen={showClearConfirm}
+        onClose={() => setShowClearConfirm(false)}
+        onConfirm={handleClearAll}
+        title="Clear All Notifications"
+        message="This will permanently remove all notifications from your feed. This action cannot be undone."
+        confirmLabel="Clear All"
+        variant="danger"
+      />
       </PageContainer>
     </PageTransition>
   );

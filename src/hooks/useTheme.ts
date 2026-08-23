@@ -17,7 +17,6 @@ export function applyTheme(settings: Record<string, string>) {
   // Apply color tokens
   if (settings['theme.primary']) root.style.setProperty('--primary', settings['theme.primary']);
   if (settings['theme.secondary']) root.style.setProperty('--secondary', settings['theme.secondary']);
-  if (settings['theme.accent']) root.style.setProperty('--accent', settings['theme.accent']);
   if (settings['theme.border_radius']) root.style.setProperty('--radius', settings['theme.border_radius']);
 
   // Theme mode (light-first: default is light, .dark toggles to dark)

@@ -7,6 +7,7 @@ import { supabase } from '../supabase';
 import { registerDeliveryAttempt } from '../services/webhookDispatcher';
 import { dispatchWebhook } from '../services/webhookDispatcher';
 import { buildId } from '../lib/ids';
+import { checkWebhookUrl } from '../lib/webhookUrlGuard';
 
 export function createWebhooksRouter(): Router {
   const router = Router();
@@ -39,6 +40,10 @@ export function createWebhooksRouter(): Router {
     if (!name || !url) {
       return res.status(400).json({ error: 'name and url are required' });
     }
+    const urlCheck = await checkWebhookUrl(String(url));
+    if (!urlCheck.ok) {
+      return res.status(400).json({ error: urlCheck.reason });
+    }
     const id = buildId('wh');
     const secret = randomBytes(32).toString('hex');
     const { error } = await supabase.from('webhooks').insert({
@@ -64,6 +69,12 @@ export function createWebhooksRouter(): Router {
     }
     if (Object.keys(patch).length === 0) {
       return res.status(400).json({ error: 'No updatable fields provided' });
+    }
+    if (Object.prototype.hasOwnProperty.call(patch, 'url')) {
+      const urlCheck = await checkWebhookUrl(String(patch.url));
+      if (!urlCheck.ok) {
+        return res.status(400).json({ error: urlCheck.reason });
+      }
     }
     patch.updated_at = new Date().toISOString();
 
@@ -129,7 +140,10 @@ const { error } = await supabase.from('webhooks').delete().eq('id', req.params.i
     if (!wh) return res.status(404).json({ error: 'Webhook not found' });
     if (!wh.is_active) return res.status(400).json({ error: 'Webhook is inactive' });
 
-    await dispatchWebhook('ticket.updated', { _test: true, firedBy: req.user!.name });
+    // Fire-and-forget: a full retry cycle across all matching webhooks can
+    // take 40s+, which must never hold the HTTP response open. Delivery
+    // outcomes are observable via GET /admin/webhooks/:id/deliveries.
+    void dispatchWebhook('ticket.updated', { _test: true, firedBy: req.user!.name }).catch(() => {});
     res.json({ ok: true, message: `Test dispatch queued for ${wh.url}` });
   });
 

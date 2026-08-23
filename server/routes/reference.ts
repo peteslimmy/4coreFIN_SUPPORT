@@ -2,7 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import {
   requireAuth,
-  hashPassword,
+  hashPasswordAsync,
   supabaseCreateUser,
   supabaseUpdateUser,
   supabaseDeleteUser,
@@ -362,7 +362,7 @@ export function createReferenceRouter(): Router {
         }
         const userId = item.id || buildId('usr');
         const accountType = item.accountType || (item.role === 'PARTNER' ? 'PARTNER' : 'BU');
-        const passwordHash = hashPassword(item.password);
+        const passwordHash = await hashPasswordAsync(item.password);
         const activationToken = buildToken(32);
         // Provision a Supabase Auth identity so the user can actually sign in.
         const identity = await supabaseCreateUser(item.email, item.password, item.name);
@@ -440,7 +440,7 @@ export function createReferenceRouter(): Router {
             name: merged.data.name,
           });
         }
-        await upsertUser({ ...rest, id: req.params.id, passwordHash: password ? hashPassword(password) : undefined });
+        await upsertUser({ ...rest, id: req.params.id, passwordHash: password ? await hashPasswordAsync(password) : undefined });
         await audit({ event: `REFERENCE_USERS_UPDATED`, actor: req.user!.name, role: req.user!.role, action: ('REFERENCE_USERS_UPDATED') as AuditAction, details: `Updated ${def.label}: ${req.params.id}` });
         return res.json({ ...rest, id: req.params.id });
       }

@@ -21,7 +21,9 @@ class PageErrorBoundaryClass extends React.Component<Props, State> {
   }
 
   componentDidCatch(error: Error, info: React.ErrorInfo) {
-    console.error(`[${this.props.pageName || 'Page'}] Error:`, error, info.componentStack);
+    if (import.meta.env.DEV) {
+      console.error(`[${this.props.pageName || 'Page'}] Error:`, error, info.componentStack);
+    }
   }
 
   handleRetry = () => {
@@ -40,10 +42,12 @@ class PageErrorBoundaryClass extends React.Component<Props, State> {
             </div>
             <h3 className="text-h3 font-bold text-text-primary mb-1">{p.pageName || 'Page'} Error</h3>
             <p className="text-sm text-text-muted mb-4">Something went wrong loading this page.</p>
+            {import.meta.env.DEV && (
             <details className="text-left text-xs text-text-muted bg-surface rounded-lg p-3 mb-4 max-h-32 overflow-y-auto">
               <summary className="cursor-pointer font-semibold">Error details</summary>
               <p className="mt-2 font-mono">{s.error?.message}</p>
             </details>
+            )}
             <button
               onClick={this.handleRetry}
               className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-light transition"

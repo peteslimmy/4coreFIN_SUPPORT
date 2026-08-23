@@ -252,8 +252,8 @@ export default function CustomersPage() {
                   </div>
                 </div>
                 <div className="flex gap-2">
-                  <button onClick={() => handleEdit(selected)} aria-label={`Edit ${selected.name}`} className="p-2 text-text-muted hover:text-primary transition cursor-pointer focus-ring rounded"><Edit2 className="w-4 h-4" /></button>
-                  <button onClick={() => handleDelete(selected.id)} aria-label={`Delete ${selected.name}`} className="p-2 text-text-muted hover:text-error transition cursor-pointer focus-ring rounded"><Trash2 className="w-4 h-4" /></button>
+                  <button onClick={() => handleEdit(selected)} aria-label={`Edit ${selected.firstName} ${selected.lastName}`} className="p-2 text-text-muted hover:text-primary transition cursor-pointer focus-ring rounded"><Edit2 className="w-4 h-4" /></button>
+                  <button onClick={() => handleDelete(selected.id)} aria-label={`Delete ${selected.firstName} ${selected.lastName}`} className="p-2 text-text-muted hover:text-error transition cursor-pointer focus-ring rounded"><Trash2 className="w-4 h-4" /></button>
                 </div>
               </div>
               <div className="mt-4 pt-4 border-t border-border grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">

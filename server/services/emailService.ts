@@ -136,17 +136,75 @@ export async function sendUserInvite(payload: InvitePayload): Promise<EmailResul
   }
 }
 
+// ── SMTP configuration caching & connection pooling ─────────────────────
+// Every send previously re-fetched SMTP settings from the DB and built a
+// fresh nodemailer transport (new TCP+TLS handshake per email). Under burst
+// notification fan-out that multiplies latency and socket churn. Settings
+// are now cached briefly (admin edits propagate within the TTL) and the
+// transporter is pooled, recreated only when the connection parameters
+// actually change.
+
+const SMTP_SETTINGS_TTL_MS = 60_000;
+const SMTP_KEYS = [
+  'smtp.host',
+  'smtp.port',
+  'smtp.security',
+  'smtp.username',
+  'smtp.password',
+  'smtp.from_email',
+  'smtp.from_name',
+];
+
+let smtpSettingsCache: { settings: Record<string, any>; expiresAt: number } | null = null;
+
+/** Drop the cached SMTP settings (e.g. immediately after an admin update). */
+export function invalidateSmtpSettingsCache(): void {
+  smtpSettingsCache = null;
+}
+
+async function getSmtpSettings(): Promise<Record<string, any>> {
+  if (smtpSettingsCache && smtpSettingsCache.expiresAt > Date.now()) {
+    return smtpSettingsCache.settings;
+  }
+  const settings = await getSettings(SMTP_KEYS);
+  smtpSettingsCache = { settings, expiresAt: Date.now() + SMTP_SETTINGS_TTL_MS };
+  return settings;
+}
+
+interface TransporterKeyParts {
+  host: string;
+  port: string;
+  secure: boolean;
+  user: string;
+  pass: string;
+}
+
+let transporterCache: { key: string; transporter: nodemailer.Transporter } | null = null;
+
+function getTransporter(p: TransporterKeyParts): nodemailer.Transporter {
+  const key = `${p.host}|${p.port}|${p.secure}|${p.user}|${p.pass}`;
+  if (transporterCache?.key === key) return transporterCache.transporter;
+  // Close the stale pool; nodemailer's close() is fire-and-forget (void).
+  transporterCache?.transporter.close();
+  const transporter = nodemailer.createTransport({
+    host: p.host,
+    port: Number(p.port),
+    secure: p.secure,
+    auth: p.user ? { user: p.user, pass: p.pass } : undefined,
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 20_000,
+  });
+  transporterCache = { key, transporter };
+  return transporter;
+}
+
 export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
   try {
-    const s = await getSettings([
-      'smtp.host',
-      'smtp.port',
-      'smtp.security',
-      'smtp.username',
-      'smtp.password',
-      'smtp.from_email',
-      'smtp.from_name',
-    ]);
+    const s = await getSmtpSettings();
 
     const host = s['smtp.host'];
     if (!host || !s['smtp.port']) {
@@ -158,17 +216,19 @@ export async function sendEmail(payload: EmailPayload): Promise<EmailResult> {
       try {
         password = decrypt(password);
       } catch {
-        // keep stored value as-is
+        // Decryption failed (wrong ENCRYPTION_KEY or corrupted blob). Sending
+        // the raw ciphertext as the SMTP password would transmit the
+        // encrypted credential to a third-party server — fail instead.
+        return { ok: false, error: 'SMTP password decryption failed' };
       }
     }
 
-    const transporter = nodemailer.createTransport({
+    const transporter = getTransporter({
       host,
-      port: Number(s['smtp.port']),
+      port: String(s['smtp.port']),
       secure: s['smtp.security'] === 'ssl',
-      auth: s['smtp.username']
-        ? { user: s['smtp.username'], pass: password }
-        : undefined,
+      user: s['smtp.username'] || '',
+      pass: password,
     });
 
     const fromName = s['smtp.from_name'] || '4CoreFin Support';

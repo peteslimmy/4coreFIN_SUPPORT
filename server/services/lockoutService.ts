@@ -1,5 +1,6 @@
 import { supabase } from '../supabase';
 import { logger, logSecurityEvent } from '../logger';
+import { escapeLike } from '../lib/escapeLike';
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_DURATION_MS = 15 * 60 * 1000; // 15 minutes
@@ -17,7 +18,7 @@ export async function isAccountLocked(email: string): Promise<LockoutResult> {
   const { data: user, error } = await supabase
     .from('users')
     .select('id, failed_login_attempts, locked_until, last_failed_login')
-    .ilike('email', email)
+    .ilike('email', escapeLike(email))
     .single();
 
   if (error || !user) {
@@ -51,7 +52,7 @@ export async function recordFailedLogin(email: string, ip?: string, userAgent?: 
   const { data: user, error: findError } = await supabase
     .from('users')
     .select('id, failed_login_attempts, locked_until')
-    .ilike('email', email)
+    .ilike('email', escapeLike(email))
     .single();
 
   if (findError || !user) {

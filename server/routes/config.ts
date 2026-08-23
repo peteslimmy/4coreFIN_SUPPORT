@@ -13,6 +13,68 @@ import { businessUnitNames } from '../../src/lib/buCodes';
 const CONFIG_TABLES = ['sla_rules', 'holidays', 'ticket_templates', 'kb_articles'];
 const CONFIG_KEYS = ['businessUnits', 'businessUnitCodes', 'paymentChannels', 'partners', 'categories', 'notificationConfigs', 'savedReplies', 'buFormConfigs', 'roles', 'escalationRules', 'settings'];
 
+// ── Zod schemas for config PUT routes ────────────────────────────────────
+const roleDefinitionSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  description: z.string().optional(),
+  isSystem: z.boolean().optional(),
+  buScoped: z.boolean().optional(),
+  permissions: z.union([z.array(z.string()), z.literal('*')]),
+});
+
+const formFieldDefinitionSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().min(1),
+  type: z.enum(['text', 'number', 'currency', 'select', 'date', 'textarea', 'file']),
+  options: z.array(z.string()).optional(),
+  placeholder: z.string().optional(),
+  required: z.boolean().optional(),
+  enabled: z.boolean().optional(),
+  duplicateKey: z.boolean().optional(),
+  order: z.number().int().optional(),
+  helpText: z.string().optional(),
+  validation: z.object({
+    min: z.number().optional(),
+    max: z.number().optional(),
+    pattern: z.string().optional(),
+    message: z.string().optional(),
+  }).optional(),
+  showIf: z.object({
+    field: z.string().optional(),
+    equals: z.union([z.string(), z.number(), z.boolean()]).optional(),
+  }).optional(),
+});
+
+const buFormConfigSchema = z.object({
+  bu: z.string().min(1),
+  fields: z.array(formFieldDefinitionSchema),
+  version: z.number().int().optional(),
+  updatedAt: z.string().optional(),
+  updatedBy: z.string().optional(),
+});
+
+const rolesPutSchema = z.array(roleDefinitionSchema);
+const savedRepliesPutSchema = z.array(z.string().min(1));
+const partnersPutSchema = z.array(z.string().min(1));
+const businessUnitsPutSchema = z.array(z.object({ name: z.string().min(1), code: z.string().optional() }));
+const categoriesPutSchema = z.array(z.object({ name: z.string().min(1), description: z.string().optional(), slaHours: z.number().int().min(0).optional() }));
+const notificationConfigsPutSchema = z.array(z.object({ id: z.string().optional(), stage: z.string().min(1), email: z.string().email() }));
+const settingsPutSchema = z.record(z.string(), z.unknown());
+const buFormConfigsPutSchema = z.array(buFormConfigSchema);
+
+// Map config keys to their validation schemas (undefined = no validation)
+const CONFIG_PUT_SCHEMAS: Record<string, z.ZodTypeAny> = {
+  roles: rolesPutSchema,
+  savedReplies: savedRepliesPutSchema,
+  partners: partnersPutSchema,
+  businessUnits: businessUnitsPutSchema,
+  categories: categoriesPutSchema,
+  notificationConfigs: notificationConfigsPutSchema,
+  settings: settingsPutSchema,
+  buFormConfigs: buFormConfigsPutSchema,
+};
+
 export function createConfigRouter(): Router {
   const router = Router();
 
@@ -34,6 +96,14 @@ export function createConfigRouter(): Router {
     const { name } = req.params;
     if (name === 'roles' && req.user!.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ error: 'Requires role: SUPER_ADMIN' });
+    }
+    // Validate body against known schema if one exists for this config key
+    const schema = CONFIG_PUT_SCHEMAS[name];
+    if (schema) {
+      const parsed = schema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: `Invalid ${name} data`, details: parsed.error.flatten().fieldErrors });
+      }
     }
     if (CONFIG_TABLES.includes(name)) {
       await replaceJsonTable(name, req.body);
@@ -114,7 +184,7 @@ export function createConfigRouter(): Router {
     res.json(roles ?? DEFAULT_ROLES);
   });
 
-  router.put('/roles', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res: Response) => {
+  router.put('/roles', requireAuth, requireRoles('SUPER_ADMIN'), validateBody(rolesPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('roles', req.body);
     await audit({ event: 'ROLES_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ROLES_UPDATED, details: 'Roles config updated' });
     res.json(req.body);
@@ -125,7 +195,7 @@ export function createConfigRouter(): Router {
     res.json(settings ?? {});
   });
 
-  router.put('/settings', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res: Response) => {
+  router.put('/settings', requireAuth, requireRoles('SUPER_ADMIN'), validateBody(settingsPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('settings', req.body);
     await audit({ event: 'SETTINGS_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.SETTINGS_UPDATED, details: 'Settings updated' });
     res.json(req.body);
@@ -158,7 +228,7 @@ export function createConfigRouter(): Router {
     res.json(saved);
   });
 
-  router.put('/saved-replies', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/saved-replies', requireAuth, requirePermission('admin:config'), validateBody(savedRepliesPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('savedReplies', req.body);
     res.json(req.body);
   });
@@ -175,7 +245,7 @@ export function createConfigRouter(): Router {
     res.json(configs);
   });
 
-  router.put('/notification-configs', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/notification-configs', requireAuth, requirePermission('admin:config'), validateBody(notificationConfigsPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('notificationConfigs', req.body);
     res.json(req.body);
   });
@@ -186,7 +256,7 @@ export function createConfigRouter(): Router {
     res.json(bus);
   });
 
-  router.put('/business-units', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/business-units', requireAuth, requirePermission('admin:config'), validateBody(businessUnitsPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('businessUnits', req.body);
     await audit({ event: 'CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_UPDATED, details: `Updated business units` });
     res.json(req.body);
@@ -197,7 +267,7 @@ export function createConfigRouter(): Router {
     res.json(partners);
   });
 
-  router.put('/partners', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/partners', requireAuth, requirePermission('admin:config'), validateBody(partnersPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('partners', req.body);
     res.json(req.body);
   });
@@ -207,7 +277,7 @@ export function createConfigRouter(): Router {
     res.json(categories);
   });
 
-  router.put('/categories', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/categories', requireAuth, requirePermission('admin:config'), validateBody(categoriesPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('categories', req.body);
     res.json(req.body);
   });

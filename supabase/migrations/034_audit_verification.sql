@@ -66,11 +66,24 @@ END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
 -- pg_cron job: verify the global audit chain every 5 minutes.
--- To verify a specific BU, replace NULL with the BU name, e.g. 'ALPHA'.
-SELECT cron.schedule('verify-audit-chain-global', '*/5 * * * *', '
-  SELECT set_config('app.tenant_id', NULL, false);
-  PERFORM verify_audit_chain_for_bu(NULL);
-');
+-- Guarded: pg_cron is an optional extension and may not be installed.
+-- The command uses dollar-quoting so inner single quotes survive, and
+-- plain SELECTs (PERFORM is PL/pgSQL-only).
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'pg_cron') THEN
+    PERFORM cron.schedule(
+      'verify-audit-chain-global',
+      '*/5 * * * *',
+      $cmd$
+      SELECT set_config('app.tenant_id', '', true);
+      SELECT verify_audit_chain_for_bu(NULL);
+      $cmd$
+    );
+  ELSE
+    RAISE NOTICE 'pg_cron not installed; skipping audit chain schedule (verification available via /api/audit/verify).';
+  END IF;
+END $$;
 
 -- Also schedule per-business-unit verification every 15 minutes.
 -- Adjust the BU list as new tenants are created.

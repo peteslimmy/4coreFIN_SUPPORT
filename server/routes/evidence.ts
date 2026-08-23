@@ -4,7 +4,7 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { audit, AuditAction } from '../auditEvents';
-import { listEvidence, insertEvidence, deleteEvidence, getScopedTicket } from '../repository';
+import { listEvidence, insertEvidence, deleteEvidence, getScopedTicket, getEvidenceById } from '../repository';
 import { uploadFile, deleteFile } from '../services/storageService';
 import { buildId } from '../lib/ids';
 
@@ -139,8 +139,8 @@ export function createEvidenceRouter(): Router {
   });
 
   router.delete('/evidence/:id', requireAuth, requirePermission('tickets:edit'), async (req: AuthedRequest, res: Response) => {
-    const all = await listEvidence(undefined, req.user!);
-    const ev = all.find(e => e.id === req.params.id);
+    // Direct scoped lookup — no full-table scan to find one row.
+    const ev = await getEvidenceById(req.params.id, req.user!);
     if (!ev) return res.status(404).json({ error: 'Evidence not found' });
     const ticket = await getScopedTicket(ev.ticketId, req.user!);
     if (!ticket) return res.status(404).json({ error: 'Evidence not found' });

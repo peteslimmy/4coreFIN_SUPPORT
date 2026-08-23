@@ -13,6 +13,8 @@ export interface UiDomain {
   setActiveTab: Dispatch<SetStateAction<string>>;
   activeTicketId: string;
   setActiveTicketId: Dispatch<SetStateAction<string>>;
+  compactDensity: boolean;
+  setCompactDensity: Dispatch<SetStateAction<boolean>>;
 }
 
 const UiContext = createContext<UiDomain | null>(null);
@@ -33,7 +35,7 @@ const KNOWN_TABS = new Set([
   'tickets', 'customer_portal', 'dashboard', 'payment_partner_portal',
   'customers', 'audit_logs', 'watcher_notifications', 'kb',
   'major_incidents', 'admin_settings', 'reference_data', 'profile_settings',
-  'ai_chat',
+  'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot',
 ]);
 
 function isAppPath(): boolean {
@@ -71,6 +73,7 @@ export function UiProvider({ children }: { children: ReactNode }) {
   const [statusFilter, setStatusFilter] = useState<string>('ALL');
   const [activeTab, setActiveTab] = useState<string>(initial.tab);
   const [activeTicketId, setActiveTicketId] = useState<string>(initial.ticketId);
+  const [compactDensity, setCompactDensity] = useState<boolean>(false);
 
   // External navigation (back/forward) restores tab + ticket selection
   // without remounting the application.
@@ -100,7 +103,8 @@ export function UiProvider({ children }: { children: ReactNode }) {
     statusFilter, setStatusFilter,
     activeTab, setActiveTab,
     activeTicketId, setActiveTicketId,
-  }), [commentText, searchQuery, priorityFilter, statusFilter, activeTab, activeTicketId]);
+    compactDensity, setCompactDensity,
+  }), [commentText, searchQuery, priorityFilter, statusFilter, activeTab, activeTicketId, compactDensity]);
 
   return <UiContext.Provider value={value}>{children}</UiContext.Provider>;
 }

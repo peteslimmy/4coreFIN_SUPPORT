@@ -1,10 +1,25 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
-import { requireAuth, type AuthedRequest, hashPassword, supabaseSignIn, supabaseUpdateUser, findUserByEmail, findUserById } from '../auth';
+import { requireAuth, type AuthedRequest, hashPasswordAsync, supabaseSignIn, supabaseUpdateUser, findUserByEmail, findUserById } from '../auth';
 import { uploadFile } from '../services/storageService';
 import { upsertUser } from '../repository';
 import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
+import { validateBody } from '../middleware/validateBody';
+
+const ALLOWED_AVATAR_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/gif']);
+const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5MB
+
+const updateProfileSchema = z.object({
+  display_name: z.string().max(100).optional(),
+  title: z.string().max(100).optional(),
+  bio: z.string().max(1000).optional(),
+  timezone: z.string().max(50).optional(),
+  locale: z.string().max(10).optional(),
+  name: z.string().min(1).max(100).optional(),
+  phone: z.string().max(20).optional(),
+});
 
 export function createProfileRouter(): Router {
   const router = Router();
@@ -37,7 +52,7 @@ export function createProfileRouter(): Router {
   });
 
   // ── Update profile ───────────────────────────────────────────
-  router.put('/profile', requireAuth, async (req: AuthedRequest, res) => {
+  router.put('/profile', requireAuth, validateBody(updateProfileSchema), async (req: AuthedRequest, res) => {
     const { display_name, title, bio, timezone, locale, name, phone } = req.body;
 
     // Update user table fields
@@ -72,7 +87,13 @@ export function createProfileRouter(): Router {
     req.on('end', async () => {
       try {
         const buffer = Buffer.concat(chunks);
+        if (buffer.length > MAX_AVATAR_SIZE) {
+          return res.status(413).json({ error: 'Avatar too large (max 5MB)' });
+        }
         const contentType = req.headers['content-type'] || 'image/png';
+        if (!ALLOWED_AVATAR_TYPES.has(contentType)) {
+          return res.status(400).json({ error: 'Invalid file type. Allowed: PNG, JPEG, WebP, GIF' });
+        }
         const url = await uploadFile(buffer, 'avatar.png', contentType, 'avatars');
         if (!url) return res.status(500).json({ error: 'Upload failed' });
 
@@ -119,8 +140,8 @@ export function createProfileRouter(): Router {
     }
 
     const current = await findUserById(req.user!.id);
-    const newHash = hashPassword(newPassword);
-    const update: any = { passwordHash: newHash, mustChangePassword: false };
+    const newHash = await hashPasswordAsync(newPassword);
+    const update: any = { passwordHash: newHash, mustChangePassword: false, tokenVersion: (current?.token_version ?? 0) + 1 };
     // A pending-activation user completes their activation here: the temp
     // password is replaced with their own, the one-time token is consumed, and
     // the account flips to active. Legacy provisioned users (inactive, forced
@@ -194,7 +215,7 @@ export function createProfileRouter(): Router {
 
       const appUser = await findUserByEmail(data.user.email || '');
       if (appUser) {
-        await upsertUser({ id: appUser.id, passwordHash: hashPassword(newPassword), mustChangePassword: false });
+        await upsertUser({ id: appUser.id, passwordHash: await hashPasswordAsync(newPassword), mustChangePassword: false, tokenVersion: (appUser.token_version ?? 0) + 1 });
       }
 
       await audit({ event: 'USER_PASSWORD_RESET', actor: data.user.email || 'unknown', role: 'SYSTEM', action: AuditAction.USER_PASSWORD_RESET, details: `Password reset completed for user ${data.user.email}` });

@@ -91,6 +91,7 @@ export type AuthUser = {
   tenantId?: string;
   mustChangePassword?: boolean; // set when a freshly-provisioned user must set their own password
   partnerOrgId?: number; // FK to partner_organizations (migration 044); set for PARTNER accounts
+  tokenVersion?: number; // incremented on password change to invalidate existing JWTs
 };
 
 /**

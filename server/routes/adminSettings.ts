@@ -4,10 +4,11 @@ import { requirePermission } from '../middleware/requirePermission';
 import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } from '../services/settingsService';
 import { uploadFileToStorage, deleteFile } from '../services/storageService';
 import { encrypt, decrypt, maskValue } from '../services/encryptionService';
-import { sendEmail } from '../services/emailService';
+import { sendEmail, invalidateSmtpSettingsCache } from '../services/emailService';
 import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
 import { buildId } from '../lib/ids';
+import { validateSvgBuffer } from '../lib/svgSanitize';
 
 export function createAdminSettingsRouter(): Router {
   const router = Router();
@@ -36,14 +37,29 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Update single setting ─────────────────────────────
+  const ALLOWED_SETTING_KEYS = new Set([
+    'branding.logo_light', 'branding.logo_dark', 'branding.favicon',
+    'branding.hero_image', 'branding.feature_images', 'branding.org_name', 'branding.logo_size',
+    'theme.primary', 'theme.secondary', 'theme.accent', 'theme.mode', 'theme.border_radius', 'theme.font_family',
+    'smtp.host', 'smtp.port', 'smtp.security', 'smtp.username', 'smtp.password',
+    'smtp.from_email', 'smtp.from_name',
+    'integrations.api_keys', 'integrations.webhooks',
+    'auth.session_timeout', 'auth.require_mfa', 'auth.password_min_length',
+    'auth.password_require_uppercase', 'auth.password_require_number', 'auth.password_require_special',
+  ]);
+
   router.put('/admin/settings/:key', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res) => {
     const { key } = req.params;
+    if (!ALLOWED_SETTING_KEYS.has(key)) {
+      return res.status(400).json({ error: `Unknown setting key: ${key}` });
+    }
     let value = req.body.value;
 
     // Encrypt sensitive fields
     if (key === 'smtp.password' && value && !value.includes('••••')) {
       value = encrypt(value);
     }
+    if (key.startsWith('smtp.')) invalidateSmtpSettingsCache();
 
     try {
       await setSetting(key, value, req.user!.id);
@@ -67,10 +83,17 @@ export function createAdminSettingsRouter(): Router {
       return res.status(400).json({ error: 'Expected settings object' });
     }
 
+    // Reject unknown keys
+    const unknownKeys = Object.keys(settings).filter(k => !ALLOWED_SETTING_KEYS.has(k));
+    if (unknownKeys.length > 0) {
+      return res.status(400).json({ error: `Unknown setting keys: ${unknownKeys.join(', ')}` });
+    }
+
     // Encrypt sensitive fields
     if (settings['smtp.password'] && !settings['smtp.password'].includes('••••')) {
       settings['smtp.password'] = encrypt(settings['smtp.password']);
     }
+    if (Object.keys(settings).some((k) => k.startsWith('smtp.'))) invalidateSmtpSettingsCache();
 
     await setSettings(settings, req.user!.id);
     await audit({
@@ -94,6 +117,15 @@ export function createAdminSettingsRouter(): Router {
 
     // Legacy value: already a full URL (may be an expired signed URL) — pass through
     if (typeof value === 'string' && /^https?:\/\//.test(value)) {
+      try {
+        const parsed = new URL(value);
+        const allowedHost = new URL(process.env.APP_BASE_URL || 'http://localhost:3001').host;
+        if (parsed.host !== allowedHost && !parsed.host.endsWith(`.${allowedHost}`)) {
+          return res.status(400).json({ error: 'Invalid branding URL' });
+        }
+      } catch {
+        return res.status(400).json({ error: 'Invalid branding URL' });
+      }
       return res.redirect(value);
     }
 
@@ -115,6 +147,12 @@ export function createAdminSettingsRouter(): Router {
         const filename = String(req.headers['x-filename'] || 'upload.png');
         const folder = String(req.headers['x-folder'] || 'branding');
         const settingKey = String(req.headers['x-setting-key'] || '');
+
+        // Sanitize SVG uploads to prevent XSS
+        if (contentType === 'image/svg+xml') {
+          const svgError = validateSvgBuffer(buffer);
+          if (svgError) return res.status(415).json({ error: svgError });
+        }
 
         const path = await uploadFileToStorage(buffer, filename, contentType, folder);
         if (!path) return res.status(500).json({ error: 'Upload failed' });

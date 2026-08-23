@@ -181,6 +181,15 @@ export default function CustomerPortalPage() {
 
   const clearError = (field: string) => setFormErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
 
+  // Clear draft PII on tab close for PII safety
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      try { localStorage.removeItem('complaint_draft_v1'); } catch { /* ignore */ }
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, []);
+
   const DRAFT_KEY = 'complaint_draft_v1';
 
   useEffect(() => {

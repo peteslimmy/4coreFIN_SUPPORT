@@ -6,6 +6,7 @@ import { tenantIdForBu, GLOBAL_TENANT_ID } from './tenant';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
 import { buildId } from './lib/ids';
+import { escapeLike } from './lib/escapeLike';
 
 // ─── Tenant scoping helpers ────────────────────────────────────────────
 
@@ -94,10 +95,10 @@ export async function listTickets(
     query = query.eq('business_unit', opts.businessUnit);
   }
   if (opts?.partner) {
-    query = query.ilike('partner', `%${opts.partner}%`);
+    query = query.ilike('partner', `%${escapeLike(opts.partner)}%`);
   }
   if (opts?.search) {
-    const term = `%${opts.search}%`;
+    const term = `%${escapeLike(opts.search)}%`;
     query = query.or(`customer_name.ilike.${term},description.ilike.${term},id.ilike.${term}`);
   }
   const tenantId = tenantScope(user);
@@ -181,20 +182,38 @@ export async function getTicket(id: string, user: AuthUser, unmask = false): Pro
 
 // ─── Partner organization resolution ───────────────────────────────────
 
-const partnerOrgIdCache = new Map<string, number | null>();
+// TTL-bounded cache (previously unbounded — a slow memory leak). Entries
+// expire after 10 minutes and the map is capped so pathological partner-name
+// churn cannot grow the heap without limit.
+const PARTNER_ORG_CACHE_TTL_MS = 10 * 60_000;
+const PARTNER_ORG_CACHE_MAX = 1_000;
+const partnerOrgIdCache = new Map<string, { id: number | null; expiresAt: number }>();
 
 /** Look up (and cache) the partner_organizations id for a partner name. */
 export async function resolvePartnerOrgId(partner: string): Promise<number | null> {
   const name = String(partner || '').trim().toLowerCase();
   if (!name) return null;
-  if (partnerOrgIdCache.has(name)) return partnerOrgIdCache.get(name)!;
+  const cached = partnerOrgIdCache.get(name);
+  if (cached && cached.expiresAt > Date.now()) return cached.id;
   const { data } = await supabase
     .from('partner_organizations')
     .select('id')
     .ilike('name', name)
     .maybeSingle();
   const id = (data?.id as number | undefined) ?? null;
-  partnerOrgIdCache.set(name, id);
+  if (partnerOrgIdCache.size >= PARTNER_ORG_CACHE_MAX) {
+    // Drop expired entries first, then evict oldest-inserted as a fallback.
+    const now = Date.now();
+    for (const [k, v] of partnerOrgIdCache) {
+      if (v.expiresAt <= now) partnerOrgIdCache.delete(k);
+    }
+    while (partnerOrgIdCache.size >= PARTNER_ORG_CACHE_MAX) {
+      const oldest = partnerOrgIdCache.keys().next().value;
+      if (oldest === undefined) break;
+      partnerOrgIdCache.delete(oldest);
+    }
+  }
+  partnerOrgIdCache.set(name, { id, expiresAt: Date.now() + PARTNER_ORG_CACHE_TTL_MS });
   return id;
 }
 
@@ -238,7 +257,7 @@ export function ticketEventFields(ticket: any): Record<string, unknown> {
   };
 }
 
-export async function upsertTicket(ticket: any) {
+export async function upsertTicket(ticket: any, opts?: { expectedVersion?: number; expectNew?: boolean }) {
   // Encrypt PII at rest before persisting. The encrypted format is
   // iv:tag:cipherhex; Supabase stores it as text, and read paths will
   // decrypt after fetch so the app always sees unmasked plaintext.
@@ -287,10 +306,40 @@ export async function upsertTicket(ticket: any) {
     rcaDetails: ticket.rcaDetails || null,
     customFields: ticket.customFields || {},
     duplicateOf: ticket.duplicateOf || null,
+    // CAS writes bump the version; plain upserts preserve whatever the caller
+    // carries (soft-delete re-upserts an existing row) or default to 1 on create.
+    version:
+      opts?.expectedVersion !== undefined && opts.expectedVersion > 0
+        ? opts.expectedVersion + 1
+        : (typeof ticket.version === 'number' && ticket.version > 0 ? ticket.version : 1),
   });
 
-  const { error } = await supabase.from('tickets').upsert(row, { onConflict: 'id' });
-  if (error) throw new Error(`upsertTicket failed: ${error.message}`);
+  if (opts?.expectedVersion !== undefined && opts.expectedVersion > 0) {
+    // Optimistic concurrency control: only write when the row still carries
+    // the version the caller read. A concurrent PATCH between read and write
+    // makes the WHERE clause match zero rows instead of silently overwriting.
+    const { data, error } = await supabase
+      .from('tickets')
+      .update(row)
+      .eq('id', row.id)
+      .eq('version', opts.expectedVersion)
+      .select('id');
+    if (error) throw new Error(`upsertTicket failed: ${error.message}`);
+    if (!data || data.length === 0) {
+      const err: any = new Error('Ticket was modified by another user. Reload and retry.');
+      err.code = 'CONCURRENT_MODIFICATION';
+      throw err;
+    }
+  } else if (opts?.expectNew) {
+    // Server-generated ids on the creation path must fail loudly on a
+    // duplicate instead of silently overwriting an existing ticket via
+    // upsert. Callers catch the unique-violation and reserve a new id.
+    const { error } = await supabase.from('tickets').insert(row);
+    if (error) throw new Error(`upsertTicket failed: ${error.message}`);
+  } else {
+    const { error } = await supabase.from('tickets').upsert(row, { onConflict: 'id' });
+    if (error) throw new Error(`upsertTicket failed: ${error.message}`);
+  }
   broadcast('ticket_updated', ticketEventFields(ticket), row.tenant_id);
 
   // Keep the customer's total_tickets counter in sync with live ticket state.
@@ -299,6 +348,25 @@ export async function upsertTicket(ticket: any) {
   }
 
   dispatchWebhook('ticket.updated', { id: ticket.id, status: ticket.status, priority: ticket.priority }).catch(() => {});
+}
+
+/**
+ * Atomically reserve the next sequence number for a BU-prefixed ticket id.
+ * Uses the next_ticket_id_sequence RPC (single-statement upsert-and-return),
+ * making concurrent creations collision-free. Returns null when the RPC is
+ * unavailable so callers can fall back to the legacy prefix-scan computation.
+ */
+export async function nextTicketSequence(buCode: string, dateKey: string): Promise<number | null> {
+  try {
+    const { data, error } = await (supabase as any).rpc('next_ticket_id_sequence', {
+      p_bu_code: buCode,
+      p_date_key: dateKey,
+    });
+    if (!error && typeof data === 'number' && Number.isFinite(data) && data > 0) return data;
+  } catch {
+    // RPC missing (migration not yet applied / fake client in tests) — fall back.
+  }
+  return null;
 }
 
 export async function recalcCustomerTotalTickets(customerId: string): Promise<void> {
@@ -318,6 +386,39 @@ export async function recalcCustomerTotalTickets(customerId: string): Promise<vo
   if (updErr) console.error('recalcCustomerTotalTickets failed:', updErr.message);
 }
 
+/**
+ * Lightweight facet counts for the executive dashboard. Projects only the
+ * three grouping columns (no PII decryption, no JSONB payload) instead of
+ * hydrating every ticket through listTickets. Intended for global-visibility
+ * roles only (executive:dashboard gate).
+ */
+export async function ticketFacetCounts(): Promise<{
+  byBu: Record<string, number>;
+  byStatus: Record<string, number>;
+  byPriority: Record<string, number>;
+}> {
+  const out = {
+    byBu: {} as Record<string, number>,
+    byStatus: {} as Record<string, number>,
+    byPriority: {} as Record<string, number>,
+  };
+  const { data, error } = await supabase
+    .from('tickets')
+    .select('business_unit, status, priority')
+    .eq('is_deleted', false);
+  if (error || !data) return out;
+  const bump = (m: Record<string, number>, key?: string | null) => {
+    if (!key) return;
+    m[key] = (m[key] || 0) + 1;
+  };
+  for (const row of data as any[]) {
+    bump(out.byBu, row.business_unit);
+    bump(out.byStatus, row.status);
+    bump(out.byPriority, row.priority);
+  }
+  return out;
+}
+
 // ─── Comments ──────────────────────────────────────────────────────────
 
 /** Normalize a comment row's seenBy to always be an array (JSONB may hold a
@@ -327,7 +428,7 @@ function normalizeComment(comment: Record<string, any>): Record<string, any> {
   return { ...comment, seenBy: Array.isArray(seenBy) ? seenBy : [] };
 }
 
-export async function listComments(ticketIds?: string[], user?: AuthUser) {
+export async function listComments(ticketIds?: string[], user?: AuthUser, limit?: number) {
   let query = supabase.from('comments').select('*').order('timestamp', { ascending: false });
   if (ticketIds && ticketIds.length > 0) {
     query = query.in('ticket_id', ticketIds);
@@ -336,6 +437,9 @@ export async function listComments(ticketIds?: string[], user?: AuthUser) {
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   }
+  // Bound the result set for bulk consumers (bootstrap); per-ticket callers
+  // pass no limit and rely on the ticket filter.
+  if (limit && limit > 0) query = query.limit(limit);
   const { data, error } = await query;
   if (error || !data) return [];
   return data.map((c) => normalizeComment(toCamel(c)));
@@ -409,7 +513,22 @@ export async function getLatestAuditHash(): Promise<string> {
   return data?.hash || '';
 }
 
-export async function appendAuditLog(input: {
+// Audit writes are hash-chained (each entry embeds the previous entry's
+// hash), so they must be strictly serialized. Callers increasingly invoke
+// audit() off the response critical path; without a queue, two concurrent
+// writes could both observe the same previousHash and fork the chain.
+// The in-process promise chain guarantees process-wide FIFO ordering and is
+// failure-tolerant: one failed write does not block subsequent entries.
+//
+// KNOWN LIMITATION (multi-process deployments): this queue serializes writes
+// only within a single Node.js process. Under PM2 cluster / multi-pod
+// deployments, two instances appending simultaneously can both read the same
+// previousHash and fork the chain. verifyAuditChainPaged() detects the fork,
+// but prevention requires a DB-level advisory lock or chain constraint
+// (planned migration). Single-process deployment is the supported mode.
+let auditQueue: Promise<unknown> = Promise.resolve();
+
+export function appendAuditLog(input: {
   ticketId: string | null;
   actor: string;
   role: string;
@@ -417,49 +536,55 @@ export async function appendAuditLog(input: {
   details: string;
   event?: string | null;
 }): Promise<AuditEntry> {
-  const previousHash = await getLatestAuditHash();
-  const entry: AuditEntry = {
-    id: buildId('aud'),
-    timestamp: new Date().toISOString(),
-    ticketId: input.ticketId,
-    actor: input.actor,
-    role: input.role,
-    action: input.action,
-    event: input.event ?? null,
-    details: input.details,
-    previousHash,
+  const run = async (): Promise<AuditEntry> => {
+    const previousHash = await getLatestAuditHash();
+    const entry: AuditEntry = {
+      id: buildId('aud'),
+      timestamp: new Date().toISOString(),
+      ticketId: input.ticketId,
+      actor: input.actor,
+      role: input.role,
+      action: input.action,
+      event: input.event ?? null,
+      details: input.details,
+      previousHash,
+    };
+    entry.hash = computeAuditHash(entry);
+
+    let tenantId = await ticketTenantId(input.ticketId);
+    if (tenantId === GLOBAL_TENANT_ID) {
+      const { data: actorRow } = await supabase
+        .from('users')
+        .select('tenant_id')
+        .eq('name', input.actor)
+        .limit(1)
+        .maybeSingle();
+      tenantId = actorRow?.tenant_id || GLOBAL_TENANT_ID;
+    }
+
+    const { error } = await supabase.from('audit_logs').insert({
+      id: entry.id,
+      timestamp: entry.timestamp,
+      ticket_id: entry.ticketId,
+      tenant_id: tenantId,
+      actor: entry.actor,
+      role: entry.role,
+      action: entry.action,
+      event: entry.event,
+      details: entry.details,
+      hash: entry.hash,
+      previous_hash: entry.previousHash || '',
+      immutable: true,
+    });
+    if (error) throw new Error(`appendAuditLog failed: ${error.message}`);
+
+    broadcast('audit_created', { id: entry.id, action: entry.action }, tenantId);
+    return entry;
   };
-  entry.hash = computeAuditHash(entry);
-
-  let tenantId = await ticketTenantId(input.ticketId);
-  if (tenantId === GLOBAL_TENANT_ID) {
-    const { data: actorRow } = await supabase
-      .from('users')
-      .select('tenant_id')
-      .eq('name', input.actor)
-      .limit(1)
-      .maybeSingle();
-    tenantId = actorRow?.tenant_id || GLOBAL_TENANT_ID;
-  }
-
-  const { error } = await supabase.from('audit_logs').insert({
-    id: entry.id,
-    timestamp: entry.timestamp,
-    ticket_id: entry.ticketId,
-    tenant_id: tenantId,
-    actor: entry.actor,
-    role: entry.role,
-    action: entry.action,
-    event: entry.event,
-    details: entry.details,
-    hash: entry.hash,
-    previous_hash: entry.previousHash || '',
-    immutable: true,
-  });
-  if (error) throw new Error(`appendAuditLog failed: ${error.message}`);
-
-  broadcast('audit_created', { id: entry.id, action: entry.action }, tenantId);
-  return entry;
+  const result = auditQueue.then(run, run);
+  // Keep the queue alive regardless of individual failures.
+  auditQueue = result.catch(() => undefined);
+  return result;
 }
 
 export async function listAuditLogs(limit = 500, user?: AuthUser): Promise<AuditEntry[]> {
@@ -516,12 +641,67 @@ export async function listAuditLogsForVerification(): Promise<AuditEntry[]> {
   }));
 }
 
+/**
+ * Memory-bounded chain verification.
+ *
+ * Chain validation only ever needs the previous entry's hash, so the ledger
+ * can be verified by streaming fixed-size pages oldest-first instead of
+ * hydrating up to 20k rows (and their full detail strings) at once. Heap use
+ * is O(pageSize) regardless of ledger length. Short-circuits at the first
+ * break, reporting its global index.
+ */
+export async function verifyAuditChainPaged(
+  pageSize = 1000
+): Promise<{ valid: boolean; brokenIndex: number | null; checked: number }> {
+  const cols = 'id, timestamp, ticket_id, actor, role, action, event, details, hash, previous_hash';
+  let expectedPrevious = '';
+  let offset = 0;
+  let index = 0;
+
+  for (;;) {
+    const { data, error } = await supabase
+      .from('audit_logs')
+      .select(cols)
+      .order('timestamp', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + pageSize - 1);
+    if (error || !data || data.length === 0) break;
+
+    for (const r of data as any[]) {
+      const prevHash = r.previous_hash || '';
+      if (prevHash !== expectedPrevious) {
+        return { valid: false, brokenIndex: index, checked: index };
+      }
+      const expectedHash = computeAuditHash({
+        id: r.id,
+        timestamp: r.timestamp,
+        ticketId: r.ticket_id,
+        actor: r.actor,
+        role: r.role,
+        action: r.action,
+        details: r.details,
+        previousHash: prevHash,
+      });
+      if (r.hash !== expectedHash) {
+        return { valid: false, brokenIndex: index, checked: index };
+      }
+      expectedPrevious = r.hash;
+      index++;
+    }
+
+    if (data.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return { valid: true, brokenIndex: null, checked: index };
+}
+
 // ─── Notifications ─────────────────────────────────────────────────────
 
 export async function listNotifications(recipient?: string, user?: AuthUser) {
   let query = supabase.from('watcher_notifications').select('*').order('timestamp', { ascending: false });
   if (recipient) {
-    query = query.ilike('recipient', recipient);
+    query = query.ilike('recipient', escapeLike(recipient));
   }
   const tenantId = user ? tenantScope(user) : null;
   if (tenantId) {
@@ -576,7 +756,7 @@ export async function markNotificationRead(id: string, user: AuthUser) {
 
 // ─── Evidence ──────────────────────────────────────────────────────────
 
-export async function listEvidence(ticketIds?: string[], user?: AuthUser): Promise<Record<string, any>[]> {
+export async function listEvidence(ticketIds?: string[], user?: AuthUser, limit?: number): Promise<Record<string, any>[]> {
   let query = supabase.from('evidence').select('*').order('uploaded_at', { ascending: false });
   if (ticketIds && ticketIds.length > 0) {
     query = query.in('ticket_id', ticketIds);
@@ -585,9 +765,23 @@ export async function listEvidence(ticketIds?: string[], user?: AuthUser): Promi
   if (tenantId) {
     query = query.eq('tenant_id', tenantId);
   }
+  // Bound the result set for bulk consumers (bootstrap).
+  if (limit && limit > 0) query = query.limit(limit);
   const { data, error } = await query;
   if (error || !data) return [];
   return data.map(toCamel);
+}
+
+/** Fetch a single evidence row by id, scoped to the user's tenant. */
+export async function getEvidenceById(id: string, user?: AuthUser): Promise<Record<string, any> | null> {
+  let query = supabase.from('evidence').select('*').eq('id', id);
+  const tenantId = user ? tenantScope(user) : null;
+  if (tenantId) {
+    query = query.eq('tenant_id', tenantId);
+  }
+  const { data, error } = await query.maybeSingle();
+  if (error || !data) return null;
+  return toCamel(data);
 }
 
 export async function insertEvidence(evidence: {
@@ -760,7 +954,9 @@ export async function listCustomers(user: AuthUser) {
     } else if (isPartner(user)) {
       ticketQuery = ticketQuery.eq('business_unit', user.bu);
     }
-    const { data: ticketRows } = await ticketQuery;
+    // Degraded mode (RPC unavailable): bound the scan so a huge ledger cannot
+    // balloon heap. Counts above the cap degrade gracefully to undercounting.
+    const { data: ticketRows } = await ticketQuery.limit(50_000);
     for (const t of ticketRows || []) {
       if (t.customer_id) counts.set(t.customer_id, (counts.get(t.customer_id) || 0) + 1);
     }
@@ -829,8 +1025,8 @@ export async function findOrCreateCustomer(opts: {
   const { data: existing, error: findError } = await supabase
     .from('customers')
     .select('id')
-    .ilike('email', email)
-    .ilike('business_unit', businessUnit)
+    .ilike('email', escapeLike(email))
+    .ilike('business_unit', escapeLike(businessUnit))
     .maybeSingle();
   if (findError) throw new Error(`findOrCreateCustomer lookup failed: ${findError.message}`);
   if (existing) return { id: existing.id };
@@ -862,8 +1058,8 @@ export async function findOrCreateCustomer(opts: {
     const { data: winner, error: retryError } = await supabase
       .from('customers')
       .select('id')
-      .ilike('email', email)
-      .ilike('business_unit', businessUnit)
+      .ilike('email', escapeLike(email))
+      .ilike('business_unit', escapeLike(businessUnit))
       .maybeSingle();
     if (!retryError && winner) return { id: winner.id };
     throw new Error(`findOrCreateCustomer insert failed: ${insertError.message}`);
@@ -947,12 +1143,25 @@ export async function replaceJsonTable(table: string, items: any[]) {
     // legacy non-atomic path so the operation still completes.
   }
 
+  // Legacy non-atomic path (RPC unavailable): snapshot the current rows first
+  // so a failed insert can be rolled back best-effort. Without this, a delete
+  // followed by a failed insert would leave the table empty — e.g. wiping all
+  // SLA rules and stripping every ticket of its deadline.
+  const { data: backup, error: backupError } = await supabase.from(table as any).select('*');
+  if (backupError) throw new Error(`replaceJsonTable snapshot failed (${table}): ${backupError.message}`);
+
   const { error: delError } = await supabase.from(table as any).delete().neq('id', '__none__');
   if (delError) throw new Error(`replaceJsonTable delete failed (${table}): ${delError.message}`);
 
   if (rows.length > 0) {
     const { error: insError } = await supabase.from(table as any).insert(rows);
-    if (insError) throw new Error(`replaceJsonTable insert failed (${table}): ${insError.message}`);
+    if (insError) {
+      // Best-effort restore of the previous contents.
+      if (backup && backup.length > 0) {
+        await supabase.from(table as any).insert(backup);
+      }
+      throw new Error(`replaceJsonTable insert failed (${table}): ${insError.message}`);
+    }
   }
 }
 
@@ -1010,6 +1219,7 @@ export async function upsertUser(user: {
   isActive?: boolean;
   activationToken?: string;
   activatedAt?: string;
+  tokenVersion?: number;
 }) {
   const row: any = { id: user.id };
   if (user.name !== undefined) row.name = user.name;
@@ -1050,6 +1260,9 @@ export async function upsertUser(user: {
   if (user.activatedAt !== undefined) {
     row.activated_at = user.activatedAt;
   }
+  if (user.tokenVersion !== undefined) {
+    row.token_version = user.tokenVersion;
+  }
 
   const isCompleteCreate = Boolean(user.name && user.email && user.role && user.passwordHash && (user.bu || user.partner));
   if (isCompleteCreate) {
@@ -1089,13 +1302,35 @@ export async function openTicketsForSla() {
 
 // ─── App Config ────────────────────────────────────────────────────────
 
+// Read-through cache for app_config values. Config rows are admin-managed and
+// change rarely, but getConfig is hit on virtually every request (roles, BUs,
+// SLA rules…). A short TTL removes the redundant DB round-trips under load.
+// Writes through setConfig invalidate immediately. The cache also self-flushes
+// when the Supabase client identity changes (tests swap in a fresh fake per
+// test), preventing stale cross-test contamination.
+const CONFIG_CACHE_TTL_MS = 60_000;
+const configCache = new Map<string, { value: unknown; expiresAt: number; clientRef: unknown }>();
+
+function flushConfigCacheIfStale(): void {
+  const first = configCache.entries().next();
+  if (!first.done && first.value[1].clientRef !== supabase) configCache.clear();
+}
+
+export function clearConfigCache(): void {
+  configCache.clear();
+}
+
 export async function getConfig<T>(key: string, fallback: T): Promise<T> {
+  flushConfigCacheIfStale();
+  const cached = configCache.get(key);
+  if (cached && cached.expiresAt > Date.now()) return cached.value as T;
   const { data, error } = await supabase
     .from('app_config')
     .select('value')
     .eq('key', key)
     .single();
   if (error || !data) return fallback;
+  configCache.set(key, { value: data.value, expiresAt: Date.now() + CONFIG_CACHE_TTL_MS, clientRef: supabase });
   return data.value as T;
 }
 
@@ -1104,6 +1339,7 @@ export async function setConfig(key: string, value: any) {
     .from('app_config')
     .upsert({ key, value }, { onConflict: 'key' });
   if (error) throw new Error(`setConfig failed (${key}): ${error.message}`);
+  configCache.delete(key);
 }
 
 // ─── Reference data: referential-integrity counters ───────────────────
@@ -1152,8 +1388,8 @@ export async function countActiveTicketsByCategoryAndPriority(category: string, 
   const { count, error } = await supabase
     .from('tickets')
     .select('id', { count: 'exact', head: true })
-    .ilike('category', category.trim())
-    .ilike('priority', priority.trim())
+    .ilike('category', escapeLike(category.trim()))
+    .ilike('priority', escapeLike(priority.trim()))
     .eq('is_deleted', false);
   if (error) return 0;
   return count || 0;
@@ -1290,10 +1526,10 @@ export async function listBusinessHours(tenantId?: string): Promise<any[]> {
 }
 
 export async function upsertBusinessHours(rows: any[]): Promise<void> {
-  for (const row of rows) {
-    const { error } = await supabase.from('business_hours').upsert(row, { onConflict: 'tenant_id,day_of_week' });
-    if (error) throw new Error(`upsertBusinessHours failed: ${error.message}`);
-  }
+  if (!rows.length) return;
+  // Single bulk upsert — one round-trip instead of N sequential writes.
+  const { error } = await supabase.from('business_hours').upsert(rows, { onConflict: 'tenant_id,day_of_week' });
+  if (error) throw new Error(`upsertBusinessHours failed: ${error.message}`);
 }
 
 // Re-export webhook helpers from the dispatcher so callers can import them through

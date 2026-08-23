@@ -41,8 +41,10 @@ export default function DataSettings() {
         const data = JSON.parse(ev.target?.result as string);
         let count = 0;
         for (const [key, value] of Object.entries(data)) {
-          localStorage.setItem(key, JSON.stringify(value));
-          count++;
+          if (typeof key === 'string' && key.startsWith(STORAGE_PREFIX)) {
+            localStorage.setItem(key, JSON.stringify(value));
+            count++;
+          }
         }
         showToast(`Restored ${count} data entries. Reloading page...`, 'success');
         setTimeout(() => window.location.reload(), 1500);

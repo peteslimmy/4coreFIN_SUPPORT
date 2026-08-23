@@ -1,4 +1,6 @@
 import { supabase } from '../supabase';
+import { checkWebhookUrl } from '../lib/webhookUrlGuard';
+import { logger } from '../logger';
 
 export type WebhookEvent =
   | 'ticket.created'
@@ -17,7 +19,9 @@ async function postWithTimeout(url: string, body: string, headers: Record<string
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal });
+    // `redirect: 'manual'` prevents a remote endpoint from bouncing the POST
+    // onto an internal address after URL validation has already passed.
+    const res = await fetch(url, { method: 'POST', headers, body, signal: controller.signal, redirect: 'manual' });
     return { ok: res.ok, status: res.status };
   } catch {
     return { ok: false, status: 0 };
@@ -67,6 +71,20 @@ export async function dispatchWebhook(eventType: WebhookEvent, payload: unknown)
   const baseHeaders: Record<string, string> = { 'Content-Type': 'application/json', 'X-Webhook-Event': eventType };
 
   for (const webhook of active) {
+    // Dispatch-time SSRF guard: the DB row may predate validation at the
+    // registration route (or be inserted out-of-band), so re-check every URL.
+    const urlCheck = await checkWebhookUrl(webhook.url);
+    if (!urlCheck.ok) {
+      logger.warn({ webhookId: webhook.id, reason: urlCheck.reason }, 'Blocked unsafe webhook target');
+      await registerDeliveryAttempt({
+        webhookId: webhook.id,
+        eventType,
+        payload: {},
+        error: `Blocked by SSRF guard: ${urlCheck.reason}`,
+      }).catch(() => {});
+      continue;
+    }
+
     const headers: Record<string, string> = { ...baseHeaders };
     const secret = webhook.secret || '';
     if (secret) {

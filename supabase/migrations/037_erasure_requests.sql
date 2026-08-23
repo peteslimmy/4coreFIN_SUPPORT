@@ -32,7 +32,7 @@ BEGIN
     submitted_by_phone = NULL
   WHERE id = ticket_id;
 
-  GET DIAGNOSTIC rows_affected = ROW_COUNT;
+  GET DIAGNOSTICS rows_affected = ROW_COUNT;
 
   -- Log the erasure action in the audit trail
   -- (appendAuditLog is called from the admin route; we just record the count)
@@ -44,4 +44,4 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 COMMENT ON TABLE erasure_requests IS 'GDPR erasure requests; pending -> in_progress -> completed';
 COMMENT ON COLUMN erasure_requests.reason IS 'User-provided reason for the erasure request';
 COMMENT ON COLUMN erasure_requests.status IS 'pending=admin submitted, in_progress=PII being cleared, completed=done, rejected=denied';
-COMMENT ON FUNCTION anonymize_ticket_pii(ticket_id) IS 'Null out PII fields for a ticket; audit logs are preserved separately.';
+COMMENT ON FUNCTION anonymize_ticket_pii(TEXT) IS 'Null out PII fields for a ticket; audit logs are preserved separately.';

@@ -1,0 +1,206 @@
+-- 4CoreFinSupport — Organization domain
+-- Migration 054: Create formal organizational hierarchy (organizations, business_units,
+-- payment_partners, junction table) to replace implicit TEXT-based BU/partner model.
+-- All operations are idempotent and forward-only.
+
+-- Schema
+CREATE SCHEMA IF NOT EXISTS organization;
+
+-- Organizations
+CREATE TABLE IF NOT EXISTS organization.organizations (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  code        TEXT NOT NULL UNIQUE,
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_organizations_code ON organization.organizations (code);
+
+-- Business Units
+CREATE TABLE IF NOT EXISTS organization.business_units (
+  id              UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  organization_id UUID NOT NULL REFERENCES organization.organizations(id) ON DELETE CASCADE,
+  buid            TEXT NOT NULL UNIQUE,
+  name            TEXT NOT NULL,
+  status          TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  tenant_id       TEXT NOT NULL REFERENCES tenants(id),
+  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (buid ~ '^[A-Z0-9-]{2,20}$')
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_bu_org ON organization.business_units (organization_id);
+CREATE INDEX IF NOT EXISTS idx_org_bu_tenant ON organization.business_units (tenant_id);
+
+-- Widen + relax the buid check on pre-existing installs created with the
+-- CHAR(3) letters-only design: real business-unit codes are longer and may
+-- contain digits/hyphens (e.g. HEALTH-IN-BOX, POS SAP, C4H).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_constraint
+    WHERE conname = 'business_units_buid_check'
+      AND conrelid = 'organization.business_units'::regclass
+  ) THEN
+    ALTER TABLE organization.business_units DROP CONSTRAINT business_units_buid_check;
+  END IF;
+END $$;
+ALTER TABLE organization.business_units ALTER COLUMN buid TYPE TEXT USING btrim(buid);
+ALTER TABLE organization.business_units ADD CONSTRAINT business_units_buid_check CHECK (buid ~ '^[A-Z0-9-]{2,20}$');
+
+-- Payment Partners
+CREATE TABLE IF NOT EXISTS organization.payment_partners (
+  id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  name        TEXT NOT NULL,
+  code        TEXT NOT NULL UNIQUE,
+  status      TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_partner_code ON organization.payment_partners (code);
+
+-- Payment Partner <-> Business Unit junction
+CREATE TABLE IF NOT EXISTS organization.payment_partner_business_units (
+  payment_partner_id UUID NOT NULL REFERENCES organization.payment_partners(id) ON DELETE CASCADE,
+  business_unit_id   UUID NOT NULL REFERENCES organization.business_units(id) ON DELETE CASCADE,
+  status             TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive')),
+  effective_from     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  effective_to       TIMESTAMPTZ,
+  created_at         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (payment_partner_id, business_unit_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_org_ppbu_bu ON organization.payment_partner_business_units (business_unit_id);
+
+-- RLS
+ALTER TABLE organization.organizations ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization.business_units ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization.payment_partners ENABLE ROW LEVEL SECURITY;
+ALTER TABLE organization.payment_partner_business_units ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_organizations_service_all' AND tablename = 'organizations' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_organizations_service_all" ON organization.organizations FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_bu_service_all' AND tablename = 'business_units' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_bu_service_all" ON organization.business_units FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_partner_service_all' AND tablename = 'payment_partners' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_partner_service_all" ON organization.payment_partners FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_ppbu_service_all' AND tablename = 'payment_partner_business_units' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_ppbu_service_all" ON organization.payment_partner_business_units FOR ALL USING (auth.role() = 'service_role');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_organizations_auth_read' AND tablename = 'organizations' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_organizations_auth_read" ON organization.organizations FOR SELECT USING (auth.role() = 'authenticated');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_bu_auth_read' AND tablename = 'business_units' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_bu_auth_read" ON organization.business_units FOR SELECT USING (auth.role() = 'authenticated');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_partner_auth_read' AND tablename = 'payment_partners' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_partner_auth_read" ON organization.payment_partners FOR SELECT USING (auth.role() = 'authenticated');
+  END IF;
+END $$;
+
+DO $$ BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE policyname = 'org_ppbu_auth_read' AND tablename = 'payment_partner_business_units' AND schemaname = 'organization') THEN
+    CREATE POLICY "org_ppbu_auth_read" ON organization.payment_partner_business_units FOR SELECT USING (auth.role() = 'authenticated');
+  END IF;
+END $$;
+
+-- Seed 4CORE organization
+INSERT INTO organization.organizations (name, code)
+VALUES ('4CORE', '4CORE')
+ON CONFLICT (code) DO NOTHING;
+
+-- Seed business_units from existing tenants.business_units[]
+DO $$
+DECLARE
+  org_uuid UUID;
+  bu TEXT;
+BEGIN
+  SELECT id INTO org_uuid FROM organization.organizations WHERE code = '4CORE' LIMIT 1;
+  IF org_uuid IS NULL THEN RETURN; END IF;
+
+  FOR bu IN
+    SELECT DISTINCT unnest(business_units)
+    FROM tenants
+    WHERE business_units IS NOT NULL AND array_length(business_units, 1) > 0
+  LOOP
+    INSERT INTO organization.business_units (organization_id, buid, name, tenant_id)
+    SELECT org_uuid, UPPER(bu), UPPER(bu), id
+    FROM tenants
+    WHERE id = 'tnt-' || UPPER(bu)
+      AND NOT EXISTS (
+        SELECT 1 FROM organization.business_units WHERE buid = UPPER(bu)
+      )
+    ON CONFLICT (buid) DO NOTHING;
+  END LOOP;
+END $$;
+
+-- Seed payment_partners from existing partner_organizations
+INSERT INTO organization.payment_partners (name, code)
+SELECT name, UPPER(REPLACE(name, ' ', '_'))
+FROM partner_organizations
+WHERE NOT EXISTS (
+  SELECT 1 FROM organization.payment_partners pp
+  WHERE pp.code = UPPER(REPLACE(partner_organizations.name, ' ', '_'))
+)
+ON CONFLICT (code) DO NOTHING;
+
+-- Link partners to BUs via junction table (backfill from tickets)
+INSERT INTO organization.payment_partner_business_units (payment_partner_id, business_unit_id)
+SELECT DISTINCT pp.id, bu.id
+FROM tickets t
+JOIN organization.payment_partners pp ON UPPER(pp.name) = UPPER(t.partner)
+JOIN organization.business_units bu ON UPPER(bu.buid) = UPPER(t.business_unit)
+WHERE t.partner IS NOT NULL AND t.partner != ''
+  AND NOT EXISTS (
+    SELECT 1 FROM organization.payment_partner_business_units junction
+    WHERE junction.payment_partner_id = pp.id AND junction.business_unit_id = bu.id
+  )
+ON CONFLICT DO NOTHING;
+
+-- updated_at trigger function
+CREATE OR REPLACE FUNCTION organization.update_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_org_organizations_updated ON organization.organizations;
+CREATE TRIGGER trg_org_organizations_updated
+  BEFORE UPDATE ON organization.organizations
+  FOR EACH ROW EXECUTE FUNCTION organization.update_updated_at();
+
+DROP TRIGGER IF EXISTS trg_org_bu_updated ON organization.business_units;
+CREATE TRIGGER trg_org_bu_updated
+  BEFORE UPDATE ON organization.business_units
+  FOR EACH ROW EXECUTE FUNCTION organization.update_updated_at();
+
+DROP TRIGGER IF EXISTS trg_org_partner_updated ON organization.payment_partners;
+CREATE TRIGGER trg_org_partner_updated
+  BEFORE UPDATE ON organization.payment_partners
+  FOR EACH ROW EXECUTE FUNCTION organization.update_updated_at();

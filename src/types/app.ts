@@ -182,6 +182,7 @@ export interface CommentRecord {
   role: string;
   message: string;
   timestamp: string;
+  authorEmail?: string;
   isInternal: boolean;
   seen: boolean;
   parentCommentId?: string;

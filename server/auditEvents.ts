@@ -12,9 +12,17 @@
  * `ticketId` is also optional in this shape — pass it when the audit event
  * is tied to a specific ticket, omit it for system-wide events (user
  * management, settings, incident lifecycle).
+ *
+ * PERFORMANCE CONTRACT: audit() is fire-and-forget. The write is queued onto
+ * the strictly-serialized FIFO chain inside appendAuditLog (which preserves
+ * hash-chain integrity under concurrency); the returned promise resolves
+ * immediately so route handlers never block their HTTP response on an audit
+ * round-trip (~45 call sites were awaiting 10–50ms each). Write failures are
+ * logged and never propagate to callers.
  */
 
 import { appendAuditLog } from './repository';
+import { logger } from './logger';
 import { AuditAction, type AuditEventType } from './auditCatalog';
 
 export { AuditAction, type AuditEventType } from './auditCatalog';
@@ -28,14 +36,15 @@ export interface AuditOptions {
   details: string;
 }
 
-export async function audit(options: AuditOptions): Promise<any> {
+export function audit(options: AuditOptions): Promise<void> {
   const { ticketId, event, actor, role, action, details } = options;
-  return appendAuditLog({
+  appendAuditLog({
     ticketId: ticketId ?? null,
     event: event ?? action,
     actor,
     role,
     action,
     details,
-  });
+  }).catch((err) => logger.warn({ err, action }, 'audit write failed'));
+  return Promise.resolve();
 }

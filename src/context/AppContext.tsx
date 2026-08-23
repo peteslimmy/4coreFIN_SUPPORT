@@ -233,7 +233,7 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Role change handler — DEV ONLY
+  // Role change handler — DEV ONLY (server-side impersonation recommended for production)
   const handleRoleChange = useCallback((role: UserRole) => {
     if (!import.meta.env.DEV) { showToast('Role switching is disabled in production.', 'error'); return; }
     shell.setCurrentRole(role);

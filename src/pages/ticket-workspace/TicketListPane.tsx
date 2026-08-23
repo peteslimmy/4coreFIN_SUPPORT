@@ -7,8 +7,8 @@ import { TicketPriority, TicketStatus } from '../../types/app';
 import { useApp } from '../../context/AppContext';
 import { useUi } from '../../context/UiContext';
 import { TICKET_STATUS_ORDER, TICKET_STATUS_LABELS, formatSlaCountdown } from '../../lib/utils';
+import { SLA_AT_RISK_PCT, SLA_LIST_REFRESH_MS, FALLBACK_SLA_DURATION_MS } from '../../lib/constants';
 import { syncTicketUpdate } from '../../lib/sync';
-
 interface TicketListPaneProps {
   activeTicketId: string;
   showMobileTicketList: boolean;
@@ -22,29 +22,34 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
     transitionTicket, getAvailableTicketTransitions, getScopedTickets,
     currentUser,
   } = useApp();
-  const { setActiveTicketId } = useUi();
+  const {
+    setActiveTicketId,
+    searchQuery, setSearchQuery,
+    priorityFilter, setPriorityFilter,
+    statusFilter, setStatusFilter,
+  } = useUi();
 
-  const { searchQuery, setSearchQuery, statusFilter, setStatusFilter, priorityFilter } = useUi();
+  
 
   const [selectedTicketIds, setSelectedTicketIds] = useState<Set<string>>(new Set());
   const [myWatchlistFilter, setMyWatchlistFilter] = useState(false);
   const [slaTagFilter, setSlaTagFilter] = useState<'ALL' | 'Breached' | 'At Risk' | 'On Track'>('ALL');
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 30000);
+    const id = setInterval(() => setNow(Date.now()), SLA_LIST_REFRESH_MS);
     return () => clearInterval(id);
   }, []);
 
   const filteredTickets = useMemo(() => {
     const slaTagOf = (deadline: string, createdAt?: string): 'Breached' | 'At Risk' | 'On Track' => {
       const deadlineMs = new Date(deadline).getTime();
-      const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : 24 * 3600000;
+      const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : FALLBACK_SLA_DURATION_MS;
       const start = deadlineMs - total;
       const elapsed = now - start;
       const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
       const remaining = deadlineMs - now;
       if (remaining <= 0) return 'Breached';
-      if (pct > 75) return 'At Risk';
+      if (pct > SLA_AT_RISK_PCT) return 'At Risk';
       return 'On Track';
     };
     return getScopedTickets(tickets).filter(t => {
@@ -79,6 +84,9 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
           <div className="relative">
             <Search className="w-4 h-4 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input type="text" placeholder="Search tickets, IDs, customers..." value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} aria-label="Search tickets" className="text-xs bg-surface border border-border rounded-lg outline-none transition-all duration-200 w-full pl-8 pr-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent transition-all focus:bg-surface-elevated" />
+          </div>
+          <div className="flex gap-1.5 flex-wrap">
+            <PriorityChips />
           </div>
           <div className="flex gap-1.5 flex-wrap">
             <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)} aria-label="Filter by status" className="flex-1 min-w-0 bg-surface border border-border rounded-lg px-2 py-1.5 text-[10px] text-text-primary focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring">
@@ -150,12 +158,12 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
           <AnimatePresence mode="popLayout">
             {filteredTickets.map(t => {
               const deadlineMs = new Date(t.slaDeadline).getTime();
-              const total = t.createdAt ? Math.max(1, deadlineMs - new Date(t.createdAt).getTime()) : 24 * 3600000;
+              const total = t.createdAt ? Math.max(1, deadlineMs - new Date(t.createdAt).getTime()) : FALLBACK_SLA_DURATION_MS;
               const start = deadlineMs - total;
               const elapsed = now - start;
               const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
               const slaBreached = deadlineMs - now <= 0;
-              const slaAtRisk = !slaBreached && pct > 75;
+              const slaAtRisk = !slaBreached && pct > SLA_AT_RISK_PCT;
               return (
                 <motion.div
                   key={t.id}
@@ -201,6 +209,36 @@ export default function TicketListPane({ activeTicketId, showMobileTicketList, s
           </AnimatePresence>
         </div>
       </div>
+    </div>
+  );
+}
+
+const PRIORITY_STYLES: Record<string, string> = {
+  ALL:       'bg-text-muted/15 text-text-muted border-border',
+  CRITICAL:  'bg-error/10 text-error-dark border-error/20',
+  HIGH:      'bg-warning/10 text-warning-dark border-warning/20',
+  MEDIUM:    'bg-info/10 text-info-dark border-info/20',
+  LOW:       'bg-success/10 text-success-dark border-success/20',
+};
+
+function PriorityChips() {
+  const { priorityFilter, setPriorityFilter } = useUi();
+  const priorities = ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] as const;
+  return (
+    <div className="flex gap-1 flex-wrap">
+      {priorities.map(p => (
+        <button
+          key={p}
+          type="button"
+          onClick={() => setPriorityFilter(p)}
+          className={`px-2 py-1 rounded-md text-[10px] font-semibold border transition-all duration-150 focus-ring ${
+            priorityFilter === p ? PRIORITY_STYLES[p] : 'bg-transparent text-text-muted border-transparent hover:text-text-primary'
+          }`}
+          aria-pressed={priorityFilter === p}
+        >
+          {p}
+        </button>
+      ))}
     </div>
   );
 }

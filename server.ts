@@ -4,7 +4,6 @@ import helmet from "helmet";
 import rateLimit from "express-rate-limit";
 import compression from "compression";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
 // Load env BEFORE anything else, since server/ modules throw at import time
 // if SUPABASE_* are absent. `import 'dotenv/config'` runs during ESM
 // import evaluation (hoisted first), ahead of downstream server/ imports.
@@ -12,10 +11,12 @@ import "dotenv/config";
 import { createApiRouter } from "./server/routes";
 import { createAdminSettingsRouter } from "./server/routes/adminSettings";
 import { createReferenceRouter } from "./server/routes/reference";
-import { startSlaJob } from "./server/slaJob";
+import { startSlaJob, stopSlaJob } from "./server/slaJob";
+import { startEscalationJob, stopEscalationJob } from "./server/escalationEngine";
 import { requireAuth, requireCsrf, type AuthedRequest } from "./server/auth";
 import { logger, requestIdMiddleware } from "./server/logger";
 import { idempotencyMiddleware } from "./server/middleware/idempotency";
+import { createUploadGate, rejectOversize } from "./server/middleware/uploadGate";
 import { cspNonceMiddleware, createCspMiddleware } from "./server/middleware/csp";
 import { removeSseClient, getSseClients, closeAllSseConnections } from "./server/broadcast";
 import swaggerUi from "swagger-ui-express";
@@ -33,9 +34,17 @@ function validateEnv() {
     throw new Error(`Missing required environment variables: ${missing.join(', ')}. Check your .env file.`);
   }
   
-  // Validate JWT_SECRET strength (must be at least 32 characters)
+  // Validate JWT_SECRET strength (must be at least 32 characters, not a known weak value)
   if (process.env.JWT_SECRET && process.env.JWT_SECRET.length < 32) {
     throw new Error('JWT_SECRET must be at least 32 characters for security');
+  }
+  if (process.env.JWT_SECRET && /^(.)\1{31,}$/.test(process.env.JWT_SECRET)) {
+    throw new Error('JWT_SECRET must not be a repeated character');
+  }
+  
+  // Validate ENCRYPTION_KEY (must be 64 hex chars = 32 bytes)
+  if (process.env.ENCRYPTION_KEY && !/^[0-9a-fA-F]{64}$/.test(process.env.ENCRYPTION_KEY)) {
+    throw new Error('ENCRYPTION_KEY must be exactly 64 hex characters (32 bytes)');
   }
   
   // Validate optional but recommended environment variables
@@ -63,7 +72,16 @@ async function startServer() {
   const app = express();
   const PORT = Number(process.env.PORT) || 3001;
 
-  app.use(express.json({ limit: "5mb", strict: false }));
+  // Trust exactly one proxy hop when deployed behind a reverse proxy / load
+  // balancer. Without this, req.ip is the proxy's address and every client
+  // shares a single rate-limit bucket (the whole API effectively capped at
+  // `max` requests/minute for ALL users combined). Opt-in via TRUST_PROXY so
+  // direct deployments cannot have X-Forwarded-For spoofed.
+  if (process.env.TRUST_PROXY === '1') {
+    app.set('trust proxy', 1);
+  }
+
+  app.use(express.json({ limit: "5mb" }));
 
   // Compression middleware - compress responses > 1KB
 app.use(compression({ threshold: 1024, level: 6 }));
@@ -84,7 +102,7 @@ app.use(compression({ threshold: 1024, level: 6 }));
     referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
     originAgentCluster: true,
     hsts: isDev ? false : {
-      maxAge: 15552000,
+      maxAge: 31536000,
       includeSubDomains: true,
       preload: true,
     },
@@ -95,7 +113,7 @@ app.use(compression({ threshold: 1024, level: 6 }));
   app.use((_req, res, next) => {
     res.setHeader(
       'Permissions-Policy',
-      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), battery=(), gamepad=()'
+      'camera=(), microphone=(), geolocation=(), payment=(), usb=(), gamepad=()'
     );
     next();
   });
@@ -105,7 +123,6 @@ app.use(compression({ threshold: 1024, level: 6 }));
   app.get("/api/health", async (_req, res) => {
     const health = {
       ok: true,
-      uptime: process.uptime(),
       ts: new Date().toISOString(),
       dependencies: {
         supabase: 'unknown',
@@ -144,10 +161,11 @@ app.use(compression({ threshold: 1024, level: 6 }));
   }
 
 
-  // Rate limiting — general API
+  // Rate limiting — general API. Max is env-tunable so high-concurrency
+  // deployments can raise the ceiling without a code change.
   const apiLimiter = rateLimit({
     windowMs: 60 * 1000, // 1 minute
-    max: 300,
+    max: Number(process.env.API_RATE_LIMIT_MAX) || 600,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: 'Too many requests, please try again later.' },
@@ -171,9 +189,30 @@ app.use(compression({ threshold: 1024, level: 6 }));
     message: { error: 'Too many uploads, please try again later.' },
   });
 
+  // Upload memory-pressure control: upload handlers buffer the full body
+  // (5–10MB each), so unbounded concurrency can OOM the process. The gate
+  // processes at most N uploads at once and sheds overflow with 429.
+  const MB = 1024 * 1024;
+  const uploadGate = createUploadGate({ maxConcurrent: 8, maxQueued: 40 });
+
   app.use('/api/auth/login', authLimiter);
   app.use('/api/auth/forgot-password', authLimiter);
+  app.use('/api/auth/reset-password', authLimiter);
+  // Oversize requests are rejected before buffering; the gate bounds how
+  // many in-flight uploads hold buffers simultaneously.
+  app.use('/api/evidence/upload', rejectOversize(5 * MB));
+  app.use('/api/storage/upload', rejectOversize(10 * MB));
+  app.use('/api/profile/avatar', rejectOversize(5 * MB));
+  app.use('/api/admin/branding/upload', rejectOversize(10 * MB));
+  app.use('/api/landing-page/images', rejectOversize(10 * MB));
   app.use('/api/evidence/upload', uploadLimiter);
+  app.use([
+    '/api/evidence/upload',
+    '/api/storage/upload',
+    '/api/profile/avatar',
+    '/api/admin/branding/upload',
+    '/api/landing-page/images',
+  ], uploadGate);
   app.use('/api', apiLimiter);
 
   // Express 4 does not forward rejections from async route handlers, which would
@@ -207,16 +246,6 @@ app.use(compression({ threshold: 1024, level: 6 }));
     logger.error({ err: reason }, 'Unhandled Rejection');
   });
 
-  // Initialize Gemini client on server-side
-  const ai = new GoogleGenAI({
-    apiKey: process.env.GEMINI_API_KEY,
-    httpOptions: {
-      headers: {
-        "User-Agent": "aistudio-build",
-      },
-    },
-  });
-
   // CSRF defense for state-changing requests (cookies + double-submit token)
   app.use('/api', (req, res, next) => requireCsrf(req as AuthedRequest, res, next));
 
@@ -228,194 +257,6 @@ app.use(compression({ threshold: 1024, level: 6 }));
   app.use("/api", wrapAsyncHandlers(createApiRouter()));
   app.use("/api", wrapAsyncHandlers(createAdminSettingsRouter()));
   app.use("/api/reference", wrapAsyncHandlers(createReferenceRouter()));
-
-  // ── Gemini routes (authenticated) ─────────────────────────────
-  // AI calls are a paid external dependency and easy to abuse: rate-limit per
-  // IP and enforce a rolling per-user request budget so no single session can
-  // drain provider quota.
-  const AI_BUDGET_WINDOW_MS = 15 * 60 * 1000;
-  const AI_MAX_PER_USER = 30;
-  const aiUserUsage = new Map<string, { windowStart: number; count: number }>();
-  function takeAiBudget(userId: string): boolean {
-    const now = Date.now();
-    const entry = aiUserUsage.get(userId);
-    if (!entry || now - entry.windowStart >= AI_BUDGET_WINDOW_MS) {
-      aiUserUsage.set(userId, { windowStart: now, count: 1 });
-      return true;
-    }
-    if (entry.count >= AI_MAX_PER_USER) return false;
-    entry.count += 1;
-    return true;
-  }
-  const aiIpLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000,
-    max: 120,
-    standardHeaders: true,
-    legacyHeaders: false,
-    message: { error: 'Too many AI requests, please try again later.' },
-  });
-
-  const ALLOWED_GEMINI_MODELS = new Set([
-    'gemini-3.5-flash',
-    'gemini-3.1-pro-preview',
-  ]);
-  const validModel = (m: unknown): string | null =>
-    typeof m === 'string' && ALLOWED_GEMINI_MODELS.has(m) ? m : null;
-
-  // CAPTCHA-free AI budget middleware (authenticated routes only).
-  const aiBudgetGuard = (req: AuthedRequest, res: any, next: any) => {
-    if (!req.user?.id) return res.status(401).json({ error: 'Authentication required' });
-    if (!takeAiBudget(req.user.id)) {
-      return res.status(429).json({ error: `AI usage limit reached (${AI_MAX_PER_USER}/15 min). Please try again later.` });
-    }
-    next();
-  };
-
-  app.post("/api/gemini/analyze", requireAuth, aiIpLimiter, aiBudgetGuard, async (req, res) => {
-    try {
-      const { prompt, systemInstruction, modelName } = req.body;
-      // Pinned model allow-list — clients may not request an arbitrary model.
-      const model = validModel(modelName) || "gemini-3.5-flash";
-
-      const response = await ai.models.generateContent({
-        model: model,
-        contents: prompt,
-        config: systemInstruction ? { systemInstruction } : undefined,
-      });
-
-      res.json({ success: true, text: response.text });
-    } catch (error: any) {
-      logger.error({ err: error }, "Gemini API Error");
-      res.status(500).json({ success: false, error: error.message || "Failed to query Gemini AI" });
-    }
-  });
-
-  app.post("/api/gemini/classify", requireAuth, aiIpLimiter, aiBudgetGuard, async (req, res) => {
-    try {
-      const { description, categories } = req.body;
-      const categoriesJsonStr = JSON.stringify(categories, null, 2);
-
-      const prompt = `You are an AI payment dispatch bot. Your job is to classify the payment incident complaint description, map it to a category and sub-issue type, and recommend the best provider based on historical resolution efficiency.
-
-INCIDENT DESCRIPTION:
-"${description}"
-
-AVAILABLE CATEGORIES AND SUB-TYPES MAP:
-${categoriesJsonStr}
-
-HISTORICAL PROVIDER EFFICIENCY RULES (Based on historical resolution speed and success rate):
-1. **Parkway**: Highest efficiency (98% success, MTTR: 1.5 hours) for "Duplicate Debit" and "Reversal Error". Slow for terminal issues.
-2. **Adyen**: Best for high-value "Settlement Delay" and cross-border settlement (92% success, MTTR: 4.0 hours).
-3. **PayPal**: Premium support for hardware terminal issues ("Merchant Issue", "POS Terminal Timeout") (94% success, MTTR: 1.8 hours).
-4. **Braintree**: Versatile support for general payment gateways, custom APIs, and callback notifications (89% success, MTTR: 3.0 hours).
-
-Analyze the incident. Map it to one of the available Categories and one of its corresponding Sub-Issue Types. Pick the highest matching priority (CRITICAL, HIGH, MEDIUM, LOW) based on the financial severity or customer friction. Pick the best provider based on historical provider efficiency rules. Provide a 1-2 sentence professional reasoning explanation of why you classified it this way and recommended that provider.`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: prompt,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              category: { type: Type.STRING },
-              issueType: { type: Type.STRING },
-              priority: { type: Type.STRING },
-              provider: { type: Type.STRING },
-              reasoning: { type: Type.STRING },
-            },
-            required: ["category", "issueType", "priority", "provider", "reasoning"],
-          },
-        },
-      });
-
-      res.json({ success: true, data: JSON.parse(response.text || "{}") });
-    } catch (error: any) {
-      logger.error({ err: error }, "Gemini Classify Error");
-      res.status(500).json({ success: false, error: error.message || "Failed to classify ticket" });
-    }
-  });
-
-  app.post("/api/gemini/rca", requireAuth, aiIpLimiter, aiBudgetGuard, async (req, res) => {
-    try {
-      const { ticketDetails } = req.body;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.1-pro-preview",
-        contents: `Analyze this payment dispute complaint and generate structural Root Cause Analysis fields.
-Ticket ID: ${ticketDetails.id}
-Category: ${ticketDetails.category}
-Sub-type: ${ticketDetails.issueType}
-Payment Partner: ${ticketDetails.partner || ticketDetails.provider}
-Business Unit: ${ticketDetails.bu}
-Description: ${ticketDetails.description}
-
-Generate realistic and professional values for:
-1. Root Cause Summary (detailed investigation of the failure vector)
-2. Contributing Factors (such as network congestion, API timeout, etc.)
-3. Corrective Actions (immediate mitigation steps performed)
-4. Preventive Actions (long-term engineering/process safeguards)
-5. Owner of Preventive Actions (appropriate department or role)
-6. Due Date (YYYY-MM-DD format, roughly 14 days from today)`,
-        config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              rootCauseSummary: { type: Type.STRING },
-              contributingFactors: { type: Type.STRING },
-              correctiveActions: { type: Type.STRING },
-              preventiveActions: { type: Type.STRING },
-              preventiveOwner: { type: Type.STRING },
-              preventiveDueDate: { type: Type.STRING },
-            },
-            required: [
-              "rootCauseSummary",
-              "contributingFactors",
-              "correctiveActions",
-              "preventiveActions",
-              "preventiveOwner",
-              "preventiveDueDate",
-            ],
-          },
-        },
-      });
-
-      res.json({ success: true, data: JSON.parse(response.text || "{}") });
-    } catch (error: any) {
-      logger.error({ err: error }, "Gemini RCA Error");
-      res.status(500).json({ success: false, error: error.message || "Failed to generate structured RCA" });
-    }
-  });
-
-  app.post("/api/gemini/chat", requireAuth, aiIpLimiter, aiBudgetGuard, async (req: AuthedRequest, res) => {
-    try {
-      const { message, history } = req.body;
-
-      let chatPrompt = "";
-      if (history && history.length > 0) {
-        history.forEach((h: any) => {
-          chatPrompt += `${h.role === "user" ? "User" : "Assistant"}: ${h.text}\n`;
-        });
-      }
-      chatPrompt += `User: ${message}`;
-
-      const response = await ai.models.generateContent({
-        model: "gemini-3.5-flash",
-        contents: chatPrompt,
-        config: {
-          systemInstruction:
-            "You are an elite, ISO 10002-compliant Lead Financial Support and Payment Operations Engineer at 4CoreFinSupport. You specialize in investigating payment incidents, transaction settlement latency, API timeouts, clearing network chargebacks, and gateway reconciliations across providers (Parkway, PayPal, Adyen, Braintree). Help internal teams and payment providers collaborate to resolve incidents quickly. Keep responses professional, highly precise, concise, and focused on payment operations.",
-        },
-      });
-
-      res.json({ success: true, text: response.text });
-    } catch (error: any) {
-      logger.error({ err: error }, "Gemini Chat Error");
-      res.status(500).json({ success: false, error: error.message || "Failed to get chatbot response" });
-    }
-  });
 
   // Unknown API paths return JSON 404 (registered before the Vite/SPA fallback
   // so the SPA index.html never serves unknown /api/* requests in dev).
@@ -466,25 +307,28 @@ Generate realistic and professional values for:
       return;
     }
     const status = Number.isInteger(err.status) ? err.status : 500;
-    const message =
-      process.env.NODE_ENV === "production" && status === 500
-        ? "Internal server error"
-        : err.message || "Internal server error";
+    const message = status >= 500 ? 'Internal server error' : (err.userMessage || 'An error occurred');
     res.status(status).json({ error: message });
   });
 
   startSlaJob(Number(process.env.SLA_CHECK_INTERVAL_MS) || 60_000);
+  startEscalationJob(Number(process.env.ESCALATION_CHECK_INTERVAL_MS) || 120_000);
 
   // Graceful shutdown handler
   let isShuttingDown = false;
   const server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on http://localhost:${PORT}`);
+    logger.info('Server started');
   });
 
   async function gracefulShutdown(signal: string) {
     if (isShuttingDown) return;
     isShuttingDown = true;
     logger.info({ signal }, 'Shutdown signal received, starting graceful shutdown...');
+
+    // Halt background jobs first so a scan cannot start mid-drain and write
+    // after the process has begun exiting.
+    stopSlaJob();
+    stopEscalationJob();
 
     // Stop accepting new connections
     server.close(() => {
@@ -512,11 +356,6 @@ Generate realistic and professional values for:
 
   process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
   process.on('SIGINT', () => gracefulShutdown('SIGINT'));
-
-  // Handle unhandled promise rejections
-  process.on('unhandledRejection', (reason) => {
-    logger.error({ err: reason }, "Unhandled Rejection");
-  });
 }
 
 startServer();

@@ -31,17 +31,8 @@ export function createAuthSessionsRouter(): Router {
       await audit({ event: 'USER_LOGIN', actor: userRow.name, role: userRow.role, action: AuditAction.USER_LOGIN, details: `User ${userRow.email} logged in` });
       res.json({ user: authUser, mustChangePassword: Boolean(authUser.mustChangePassword) || pendingActivation, pendingActivation });
     } catch (e: any) {
-      const msg = e.message || 'Login failed';
-      if (msg === 'Invalid credentials') {
-        const failedUser = await findUserByEmail(req.body.email || '');
-      await audit({ event: 'LOGIN_FAILED', actor: failedUser?.name ?? req.body.email, role: failedUser?.role ?? 'UNKNOWN', action: AuditAction.LOGIN_FAILED, details: `Failed login attempt for ${req.body.email}: invalid credentials` });
-        return res.status(401).json({ error: msg });
-      }
-      if (msg.startsWith('Email not confirmed')) return res.status(403).json({ error: msg });
-      if (e.code === 'ACCOUNT_LOCKED') {
-        return res.status(423).json({ error: msg, lockedUntil: e.lockedUntil });
-      }
-      res.status(500).json({ error: msg });
+      // Return uniform error message to prevent email enumeration
+      return res.status(401).json({ error: 'Invalid email or password' });
     }
   });
 

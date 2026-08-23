@@ -59,12 +59,49 @@ function sendCached(res: Response, statusCode: number, raw: unknown): void {
 }
 
 /**
+ * Atomically claim a key by inserting a pending row. Returns 'claimed' when
+ * this request owns the key, 'exists' when a row is already present (unique
+ * violation), or 'unavailable' when the store cannot enforce uniqueness
+ * (e.g. in-memory test doubles) — callers then proceed best-effort.
+ */
+async function claimKey(key: string, requestHash: string): Promise<'claimed' | 'exists' | 'unavailable'> {
+  try {
+    const { error } = await supabase.from('idempotency_keys')
+      .insert({ key, request_hash: requestHash, response_body: null, response_status: 0 });
+    if (!error) return 'claimed';
+    if ((error as any).code === '23505' || /duplicate key|unique/i.test(String(error.message))) return 'exists';
+    return 'unavailable';
+  } catch (e) {
+    logger.info({ err: e, key }, 'idempotency claim error');
+    return 'unavailable';
+  }
+}
+
+const PENDING_CLAIM_STALE_MS = 60_000;
+
+/**
+ * Release a pending claim (non-2xx outcomes must allow a corrected retry,
+ * mirroring the "only 2xx responses are cached" rule). Best-effort.
+ */
+async function releaseClaim(key: string): Promise<void> {
+  try {
+    await supabase.from('idempotency_keys').delete().eq('key', key).eq('response_status', 0);
+  } catch {
+    // A leaked pending claim ages out via PENDING_CLAIM_STALE_MS.
+  }
+}
+
+/**
  * Replay logic for POST/PUT requests that carry an Idempotency-Key header.
  *
  * Existing w/ matching request hash  → replay the cached response unchanged.
  * Existing w/ different request hash → 409 conflict (key reused incorrectly).
- * Existing but expired              → discarded, treated as a fresh request.
- * Missing                           → proceed and auto-cache the final response.
+ * Existing but expired               → discarded, treated as a fresh request.
+ * Missing                            → atomically claim the key, then run.
+ *
+ * The claim step closes the TOCTOU race where two concurrent requests with
+ * the same key both observed "no record" and executed the handler twice,
+ * creating duplicate resources despite idempotent intent.
  */
 export async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction) {
   if (req.method !== 'POST' && req.method !== 'PUT') {
@@ -103,13 +140,53 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     if (record.request_hash !== requestHash) {
       return res.status(409).json({ error: 'Idempotency-Key was already used with a different request body' });
     }
-    sendCached(res, record.response_status, record.response_body);
-    return;
+    if (record.response_status > 0) {
+      sendCached(res, record.response_status, record.response_body);
+      return;
+    }
+    // Pending claim from a concurrent request. Wait briefly for it to settle;
+    // give up waiting after ~5s and proceed (protection is advisory at that point).
+    const createdAtMs = record.created_at ? new Date(record.created_at).getTime() : 0;
+    if (Date.now() - createdAtMs > PENDING_CLAIM_STALE_MS) {
+      // Stale claim (handler crashed before caching) — clear it and re-claim below.
+      await supabase.from('idempotency_keys').delete().eq('key', key).eq('response_status', 0);
+      record = null;
+    } else {
+      for (let i = 0; i < 10; i++) {
+        await new Promise((r) => setTimeout(r, 250));
+        try {
+          const { data: refreshed } = await supabase.from('idempotency_keys')
+            .select('response_body, response_status, request_hash, created_at, expires_at')
+            .eq('key', key)
+            .maybeSingle();
+          const rec = refreshed as IdempotencyRecord | null;
+          if (rec && rec.response_status > 0) {
+            if (rec.request_hash !== requestHash) {
+              return res.status(409).json({ error: 'Idempotency-Key was already used with a different request body' });
+            }
+            return sendCached(res, rec.response_status, rec.response_body);
+          }
+          if (!rec) break; // stale-claim cleanup won the race — fall through to claim
+        } catch {
+          break;
+        }
+      }
+      return res.status(409).json({ error: 'Request with this Idempotency-Key is still in progress. Retry shortly.' });
+    }
   }
 
-  // Fresh key (or expired): run the handler and cache whatever it sends.
+  // Fresh key: attempt an atomic claim before running the handler. When the
+  // store enforces uniqueness, exactly one concurrent caller wins the claim;
+  // losers are told to retry rather than double-executing the mutation.
+  const claim = await claimKey(key, requestHash);
+  if (claim === 'exists') {
+    return res.status(409).json({ error: 'Request with this Idempotency-Key is already being processed. Retry shortly.' });
+  }
+
+  // Run the handler and cache whatever it sends.
   // Only 2xx responses are cached — replaying a failed request under the same
   // key after fixing the payload must be allowed, not pinned to the old error.
+  // A failed handler leaves the pending claim to age out via PENDING_CLAIM_STALE_MS.
   const originalJson = res.json;
   const originalSend = res.send;
   const originalStatus = res.status.bind(res);
@@ -129,6 +206,10 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
         await cacheResponse(key, { body, statusCode: code, requestHash });
       };
       fn();
+    } else {
+      // Non-2xx: free the claim so a corrected retry with the same key is
+      // not blocked by the pending-claim guard.
+      void releaseClaim(key);
     }
     return (originalSend as any).call(res, body);
   };

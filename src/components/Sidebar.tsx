@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Ticket, Activity, BarChart2, Lock, Bell, BookOpen, Plus, ChevronLeft, ChevronRight, ClipboardList, Users, Palette, User, X, LucideIcon, Database } from 'lucide-react';
+import { Ticket, Activity, BarChart2, Lock, Bell, BookOpen, Plus, ChevronLeft, ChevronRight, ClipboardList, Users, Palette, User, X, LucideIcon, Database, Mail, FolderOpen, Star, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { UserRole, TicketStatus, TicketRecord, MajorIncidentRecord, WatcherNotification } from '../types/app';
 import Avatar from './ui/Avatar';
@@ -55,6 +55,11 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
   const allNavItems: NavItem[] = [
     { id: 'tickets', label: 'Ticket Workspace', icon: Ticket, badge: activeTicketsCount, section: 'Operations' },
     { id: 'major_incidents', label: 'Major Incidents', icon: Activity, badge: majorIncidents.length, section: 'Operations' },
+    { id: 'email_inbox', label: 'Email Inbox', icon: Mail, section: 'Operations' },
+    { id: 'documents', label: 'Document Management', icon: FolderOpen, section: 'Knowledge' },
+    { id: 'ai_copilot', label: 'AI Copilot', icon: Sparkles, section: 'Knowledge' },
+    { id: 'surveys', label: 'Surveys & CSAT', icon: Star, section: 'Analytics & Executive' },
+    { id: 'notifications', label: 'Notification Settings', icon: Bell, section: 'Account' },
     { id: 'dashboard', label: 'Performance Desk', icon: BarChart2, section: 'Analytics & Executive', executive: true },
     { id: 'audit_logs', label: 'Audit Logs', icon: Lock, section: 'Compliance' },
     { id: 'watcher_notifications', label: 'Watcher Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Compliance' },

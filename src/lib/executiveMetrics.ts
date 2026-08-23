@@ -384,14 +384,23 @@ export function generateExecutiveInsights(input: {
   deltas: PeriodDeltas;
 }): ExecutiveInsight[] {
   const { tickets, partners, deltas } = input;
-  const insights: ExecutiveInsight[] = [];
   const active = tickets.filter(t => t.status !== TicketStatus.CLOSED);
   const breached = tickets.filter(t => t.isEscalated && t.status !== TicketStatus.CLOSED);
   const critical = active.filter(t => t.priority === TicketPriority.CRITICAL);
   const highValue = active.filter(t => t.amount >= 500000);
 
+  const seen = new Set<string>();
+  const add = (insight: ExecutiveInsight) => {
+    if (!seen.has(insight.title)) {
+      seen.add(insight.title);
+      insights.push(insight);
+    }
+  };
+
+  const insights: ExecutiveInsight[] = [];
+
   if (breached.length > 0) {
-    insights.push({
+    add({
       type: 'error',
       title: 'Active SLA breaches',
       message: `${breached.length} ticket(s) breached SLA across ${[...new Set(breached.map(t => t.partner))].join(', ')}.`,
@@ -399,7 +408,7 @@ export function generateExecutiveInsights(input: {
     });
   }
   if (critical.length > 0) {
-    insights.push({
+    add({
       type: 'error',
       title: 'Critical priority backlog',
       message: `${critical.length} CRITICAL ticket(s) open. Expedited handling required.`,
@@ -407,10 +416,10 @@ export function generateExecutiveInsights(input: {
     });
   }
   const weakPartners = partners
-    .map(p => ({ partner: p, sla: computeSlaPercent(tickets, tickets.filter(t => t.partner === p)) }))
+    .map(p => ({ partner: p, sla: computeSlaPercent(tickets.filter(t => t.partner === p)) }))
     .filter(x => x.sla < 95);
   if (weakPartners.length > 0) {
-    insights.push({
+    add({
       type: 'warning',
       title: 'Payment Partner SLA below target',
       message: `${weakPartners.map(x => `${x.partner} (${x.sla.toFixed(1)}%)`).join(', ')} below the 95% SLA target.`,
@@ -418,35 +427,35 @@ export function generateExecutiveInsights(input: {
     });
   }
   if (highValue.length > 0) {
-    insights.push({
+    add({
       type: 'warning',
       title: 'High-value exposure',
       message: `${highValue.length} dispute(s) over ₦500k totaling ₦${highValue.reduce((s, t) => s + t.amount, 0).toLocaleString()} pending resolution.`,
     });
   }
   if (deltas.breachDelta > 0) {
-    insights.push({
+    add({
       type: 'warning',
       title: 'Breach momentum',
       message: `SLA breaches are up ${Math.abs(deltas.breachDelta)}% vs the prior period.`,
     });
   }
   if (deltas.exposureDelta > 0) {
-    insights.push({
+    add({
       type: 'info',
       title: 'Exposure trending up',
       message: `Financial dispute exposure is up ${Math.abs(deltas.exposureDelta)}% vs the prior period.`,
     });
   }
   if (deltas.createdDelta !== 0 || deltas.closedDelta !== 0) {
-    insights.push({
+    add({
       type: 'info',
       title: 'Throughput signal',
       message: `Volume ${deltas.createdDelta >= 0 ? 'up' : 'down'} ${Math.abs(deltas.createdDelta)}% and closures ${deltas.closedDelta >= 0 ? 'up' : 'down'} ${Math.abs(deltas.closedDelta)}% this period.`,
     });
   }
   if (insights.length === 0) {
-    insights.push({
+    add({
       type: 'info',
       title: 'Operations nominal',
       message: 'All metrics within acceptable thresholds this period.',

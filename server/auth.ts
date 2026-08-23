@@ -8,6 +8,8 @@ import type { AuthUser } from './compliance';
 import { isBuSupportRole, isGlobalRole } from './rbac';
 import { tenantIdForBu } from './tenant';
 import { isAccountLocked, recordFailedLogin, clearFailedAttempts } from './services/lockoutService';
+import { getCachedUserRow, setUserRowCache } from './lib/userCache';
+import { escapeLike } from './lib/escapeLike';
 
 const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
@@ -88,15 +90,44 @@ export function requireCsrf(req: AuthedRequest, res: Response, next: NextFunctio
   if (
     path.startsWith('/auth/login') ||
     path.startsWith('/auth/forgot-password') ||
-    path.startsWith('/auth/reset-password')
+    path.startsWith('/auth/reset-password') ||
+    // Machine-to-machine endpoint: authenticates via the X-Webhook-Secret
+    // shared secret, not browser sessions, and external mail providers send
+    // neither cookies nor Referer.
+    path.startsWith('/email/webhook')
   ) {
     return next();
   }
   const cookies = parseCookies(req.headers.cookie);
-  if (!cookies[SESSION_COOKIE]) return next();
+  if (!cookies[SESSION_COOKIE]) {
+    // No session cookie — verify same-origin via Referer to prevent CSRF.
+    // A request with neither cookie nor Referer has no verifiable origin:
+    // fail closed rather than wave it through to Bearer-token handlers.
+    // Report 401 (not 403) — without a session there are no ambient
+    // credentials to forge, so this is an authentication failure.
+    const referer = (req.headers.referer || req.headers.referrer) as string | undefined;
+    if (!referer || typeof referer !== 'string') {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    try {
+      const { host } = new URL(referer);
+      if (host !== (req.get('host') || '')) {
+        return res.status(403).json({ error: 'Cross-origin request rejected' });
+      }
+    } catch {
+      return res.status(403).json({ error: 'Cross-origin request rejected' });
+    }
+    return next();
+  }
   const csrf = cookies[CSRF_COOKIE];
   const header = req.headers['x-csrf-token'];
-  if (!csrf || !header || csrf !== String(header)) {
+  const headerStr = header ? String(header) : '';
+  if (
+    !csrf ||
+    !header ||
+    csrf.length !== headerStr.length ||
+    !crypto.timingSafeEqual(Buffer.from(csrf), Buffer.from(headerStr))
+  ) {
     return res.status(403).json({ error: 'Invalid CSRF token' });
   }
   const origin = req.headers.origin;
@@ -120,14 +151,26 @@ export interface JwtPayload {
   bu: string;
   name: string;
   tenantId: string;
+  tokenVersion: number;
 }
 
 export function hashPassword(password: string): string {
   return bcrypt.hashSync(password, 10);
 }
 
+/** Async variant for request-path writes — keeps the event loop free during
+ *  the ~100ms bcrypt cost. Sync version retained for seeds/tests. */
+export async function hashPasswordAsync(password: string): Promise<string> {
+  return bcrypt.hash(password, 10);
+}
+
 export function verifyPassword(password: string, hash: string): boolean {
   return bcrypt.compareSync(password, hash);
+}
+
+/** Async verify for request-path checks (login / local password verification). */
+export async function verifyPasswordAsync(password: string, hash: string): Promise<boolean> {
+  return bcrypt.compare(password, hash);
 }
 
 /**
@@ -155,7 +198,7 @@ export async function verifyLocalPassword(
     throw err;
   }
 
-  const valid = bcrypt.compareSync(password, hash);
+  const valid = await bcrypt.compare(password, hash);
   if (!valid) {
     await recordFailedLogin(email, ip, userAgent);
     return false;
@@ -178,6 +221,7 @@ export function signToken(user: AuthUser): string {
     bu: user.bu,
     name: user.name,
     tenantId: user.tenantId || tenantIdForBu(user.bu),
+    tokenVersion: user.tokenVersion ?? 0,
   };
   return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_TTL } as jwt.SignOptions);
 }
@@ -200,13 +244,14 @@ export type AppUserRow = {
   activation_token?: string | null;
   activated_at?: string | null;
   must_change_password?: boolean | null;
+  token_version?: number | null;
 };
 
 export async function findUserByEmail(email: string) {
   const { data, error } = await supabase
     .from('users')
     .select('*')
-    .ilike('email', email)
+    .ilike('email', escapeLike(email))
     .single();
   if (error || !data) return undefined;
   return data as AppUserRow;
@@ -370,6 +415,7 @@ export function toAuthUser(row: {
   tenantId?: string;
   tenant_id?: string;
   must_change_password?: boolean | null;
+  token_version?: number | null;
 }): AuthUser {
   return {
     id: row.id,
@@ -384,6 +430,7 @@ export function toAuthUser(row: {
     phone: row.phone || '',
     tenantId: row.tenantId || row.tenant_id || tenantIdForBu(row.bu),
     mustChangePassword: Boolean(row.must_change_password),
+    tokenVersion: row.token_version ?? 0,
   };
 }
 
@@ -416,15 +463,29 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   // with "invalid input syntax for type uuid" and every request 401'd (which
   // silently logged the user out). `users.id` accepts the app id directly.
   try {
-    const { data: row, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', decoded.sub)
-      .single();
-    if (error || !row) {
-      return res.status(401).json({ error: 'User no longer exists' });
+    // Short-TTL cache: repeated requests from the same session skip the
+    // per-request users-table round-trip. Token-version mismatch below still
+    // enforces password-change invalidation against the cached row.
+    let row: AppUserRow | null = getCachedUserRow(supabase, decoded.sub);
+    if (!row) {
+      const { data, error } = await supabase
+        .from('users')
+        .select('*')
+        .eq('id', decoded.sub)
+        .single();
+      if (error || !data) {
+        return res.status(401).json({ error: 'User no longer exists' });
+      }
+      row = data as AppUserRow;
+      setUserRowCache(supabase, decoded.sub, row);
     }
     req.user = toAuthUser(row);
+    // Reject tokens whose embedded tokenVersion doesn't match the DB row.
+    // This invalidates all sessions when a password is changed.
+    if (decoded.tokenVersion !== undefined && row.token_version != null && decoded.tokenVersion !== row.token_version) {
+      clearSession(res);
+      return res.status(401).json({ error: 'Session invalidated by password change' });
+    }
     if (row.is_active === false) {
       // Pending-activation accounts (still carrying an activation token) may
       // reach the password-change endpoints so the user can set their own
@@ -440,12 +501,16 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
     // Only the password-change endpoint, /auth/me and logout remain reachable.
     if (row.must_change_password || row.is_active === false) {
       const p = (req.originalUrl || req.path || '').toLowerCase();
+      // Strip the query string before matching: originalUrl can carry
+      // "?next=/auth/change-password" style params that would defeat
+      // suffix checks otherwise.
+      const cleanPath = p.split('?')[0];
       const allowed =
-        p.includes('/auth/change-password') ||
-        p.includes('/auth/verify-password') ||
-        p.endsWith('/auth/me') ||
-        p.endsWith('/auth/logout') ||
-        p.includes('/auth/reset-password');
+        cleanPath.endsWith('/auth/change-password') ||
+        cleanPath.endsWith('/auth/verify-password') ||
+        cleanPath.endsWith('/auth/me') ||
+        cleanPath.endsWith('/auth/logout') ||
+        cleanPath.endsWith('/auth/reset-password');
       if (!allowed) {
         return res.status(403).json({ error: 'Password change required before accessing the app', code: 'PASSWORD_CHANGE_REQUIRED' });
       }

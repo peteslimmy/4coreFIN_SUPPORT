@@ -5,9 +5,10 @@ import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
 import { runSlaCheck } from '../slaJob';
 import { addSseClient, removeSseClient } from '../broadcast';
-import { listNotifications, insertNotification, markNotificationRead, listMajorIncidents, upsertMajorIncident, getScopedMajorIncident, getScopedTicket, listTickets, listComments, listEvidence, listAuditLogs, listUsersPublic, listCustomers, listJsonTable, getConfig, linkTicketToMajorIncident } from '../repository';
+import { listNotifications, insertNotification, markNotificationRead, listMajorIncidents, upsertMajorIncident, getScopedMajorIncident, getScopedTicket, listTickets, listComments, listEvidence, listAuditLogs, listUsersPublic, listCustomers, listJsonTable, getConfig, linkTicketToMajorIncident, ticketFacetCounts } from '../repository';
 import { audit, AuditAction } from '../auditEvents';
 import { getRoles, hasPermissionForRoleId, type Permission, type RoleDefinition } from '../rbac';
+import { validateSvgBuffer } from '../lib/svgSanitize';
 import { getCachedRoles } from '../middleware/requirePermission';
 import { buildId, buildToken } from '../lib/ids';
 import { uploadFile } from '../services/storageService';
@@ -34,10 +35,12 @@ export function createOperationsRouter(): Router {
     const add = (key: string, fn: () => Promise<unknown>) => jobs.push(fn().then((v) => [key, v] as [string, unknown]));
 
     if (wants('tickets')) add('tickets', () => listTickets(req.user!, { includeDeleted: false }));
-    if (wants('comments')) add('comments', () => listComments(undefined, req.user!));
+    // Bulk collections are capped so the bootstrap payload stays bounded as
+    // the dataset grows; per-ticket views use their own dedicated endpoints.
+    if (wants('comments')) add('comments', () => listComments(undefined, req.user!, 500));
     if (wants('watcherNotifications')) add('watcherNotifications', () => listNotifications(req.user!.email, req.user!));
     if (wants('majorIncidents')) add('majorIncidents', () => listMajorIncidents(req.user!));
-    if (wants('evidence')) add('evidence', () => listEvidence(undefined, req.user!));
+    if (wants('evidence')) add('evidence', () => listEvidence(undefined, req.user!, 300));
     if (wants('auditLogs') && can('audit:view')) add('auditLogs', () => listAuditLogs(500, req.user!));
     if (wants('users') && can('users:view')) add('users', () => listUsersPublic());
     if (wants('customers') && can('customers:manage')) add('customers', () => listCustomers(req.user!));
@@ -389,6 +392,10 @@ export function createOperationsRouter(): Router {
         const fileBuffer = Buffer.concat(chunks);
         if (fileBuffer.length === 0) return res.status(400).json({ error: 'Empty file' });
         if (fileBuffer.length > STORAGE_MAX_BYTES) return res.status(413).json({ error: 'File exceeds 10MB limit' });
+        if (contentType === 'image/svg+xml') {
+          const svgError = validateSvgBuffer(fileBuffer);
+          if (svgError) return res.status(415).json({ error: svgError });
+        }
         const fileName = (req.headers['x-file-name'] as string) || 'upload.png';
         const url = await uploadFile(fileBuffer, fileName, contentType);
         if (!url) return res.status(500).json({ error: 'Upload failed' });
@@ -401,20 +408,14 @@ export function createOperationsRouter(): Router {
 
   // ── Reports / executives ──
   router.get('/executive/metrics', requireAuth, requirePermission('executive:dashboard'), async (req: AuthedRequest, res: Response) => {
-    const tickets = await listTickets(req.user!, { includeDeleted: false, unmask: req.user!.role === 'SUPER_ADMIN' });
-    const ticketsByBu: Record<string, number> = {};
-    const ticketsByStatus: Record<string, number> = {};
-    const ticketsByPriority: Record<string, number> = {};
-    for (const t of tickets) {
-      ticketsByBu[t.businessUnit || 'UNKNOWN'] = (ticketsByBu[t.businessUnit || 'UNKNOWN'] || 0) + 1;
-      ticketsByStatus[t.status || 'UNKNOWN'] = (ticketsByStatus[t.status || 'UNKNOWN'] || 0) + 1;
-      ticketsByPriority[t.priority || 'UNKNOWN'] = (ticketsByPriority[t.priority || 'UNKNOWN'] || 0) + 1;
-    }
+    // Light 3-column projection instead of hydrating every ticket row.
+    const { byBu, byStatus, byPriority } = await ticketFacetCounts();
+    const total = Object.values(byStatus).reduce((a, b) => a + b, 0);
     res.json({
-      total: tickets.length,
-      byBu: ticketsByBu,
-      byStatus: ticketsByStatus,
-      byPriority: ticketsByPriority,
+      total,
+      byBu,
+      byStatus,
+      byPriority,
       timestamp: new Date().toISOString(),
     });
   });

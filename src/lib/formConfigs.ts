@@ -87,8 +87,14 @@ export function validateFieldValue(fieldDef: FormFieldDefinition, value: FormFie
   }
 
   if (fieldDef.validation?.pattern && typeof raw === 'string') {
-    const re = new RegExp(fieldDef.validation.pattern);
-    if (!re.test(raw)) return fieldDef.validation.message || `${fieldDef.label} format is invalid`;
+    if (fieldDef.validation.pattern.length > 200) return `${fieldDef.label} validation pattern is too complex`;
+    if (/\([^)]*[+*][^)]*\)[+*]/.test(fieldDef.validation.pattern)) return `${fieldDef.label} validation pattern is invalid`;
+    try {
+      const re = new RegExp(fieldDef.validation.pattern);
+      if (!re.test(raw)) return fieldDef.validation.message || `${fieldDef.label} format is invalid`;
+    } catch {
+      return `${fieldDef.label} has an invalid validation pattern`;
+    }
   }
 
   return '';

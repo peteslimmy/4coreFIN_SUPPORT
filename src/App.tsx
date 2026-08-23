@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, Suspense, lazy, type SetStateAction } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, Shield, ChevronDown, Menu } from 'lucide-react';
+import { motion, AnimatePresence, MotionConfig } from 'framer-motion';
+import { Bell, Shield, ChevronDown, Menu, Search } from 'lucide-react';
 
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import PageErrorBoundary from './components/ui/PageErrorBoundary';
@@ -42,6 +42,12 @@ const ChangePasswordRequiredPage = lazy(() => import('./pages/ChangePasswordRequ
 const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
 const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+// New pages for additional modules
+const EmailInboxPage = lazy(() => import('./pages/EmailInboxPage'));
+const DocumentManagementPage = lazy(() => import('./pages/DocumentManagementPage'));
+const NotificationPreferencesPage = lazy(() => import('./pages/NotificationPreferencesPage'));
+const SurveyManagementPage = lazy(() => import('./pages/SurveyManagementPage'));
+const AICopilotPage = lazy(() => import('./pages/AICopilotPage'));
 
 export default function App() {
   const app = useApp();
@@ -153,28 +159,33 @@ export default function App() {
 
   const effectiveTab = currentRole === UserRole.CUSTOMER ? 'customer_portal' : activeTab;
 
-  // Role-based tab access guard
+// Role-based tab access guard
   const ROLE_TABS: Partial<Record<UserRole, string[]>> = {
-[UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings'],
-[UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-[UserRole.BU_SUPPORT_L1]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-[UserRole.BU_SUPPORT_L2]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-[UserRole.BU_SUPPORT_L3]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings'],
-[UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'major_incidents', 'kb', 'profile_settings'],
-[UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
-[UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'payment_partner_portal', 'profile_settings'],
-
+    [UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
+    [UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
+    [UserRole.BU_SUPPORT_L1]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
+    [UserRole.BU_SUPPORT_L2]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
+    [UserRole.BU_SUPPORT_L3]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
+    [UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'major_incidents', 'kb', 'profile_settings', 'documents', 'ai_copilot'],
+    [UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
+    [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'payment_partner_portal', 'profile_settings', 'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot'],
   };
-const permissionTabs: string[] = [];
-if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
-if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
-if (can('customers:manage')) permissionTabs.push('customers');
-if (can('executive:dashboard')) permissionTabs.push('dashboard');
-if (can('audit:view')) permissionTabs.push('audit_logs');
-if (can('notifications:view')) permissionTabs.push('watcher_notifications');
-if (can('admin:config') || can('admin:access') || can('admin:users')) permissionTabs.push('admin_settings', 'reference_data');
-if (can('partner:rca') || can('tickets:view')) permissionTabs.push('payment_partner_portal');
-permissionTabs.push('ai_chat', 'kb', 'profile_settings');
+
+  const permissionTabs: string[] = [];
+  if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
+  if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
+  if (can('customers:manage')) permissionTabs.push('customers');
+  if (can('executive:dashboard')) permissionTabs.push('dashboard');
+  if (can('audit:view')) permissionTabs.push('audit_logs');
+  if (can('notifications:view')) permissionTabs.push('watcher_notifications', 'notifications');
+  if (can('admin:config') || can('admin:access') || can('admin:users')) permissionTabs.push('admin_settings', 'reference_data');
+  if (can('partner:rca') || can('tickets:view')) permissionTabs.push('payment_partner_portal');
+  if (can('email:view')) permissionTabs.push('email_inbox');
+  if (can('documents:view')) permissionTabs.push('documents');
+  if (can('notifications:manage')) permissionTabs.push('notifications');
+  if (can('surveys:view')) permissionTabs.push('surveys');
+  if (can('ai:use')) permissionTabs.push('ai_copilot');
+  permissionTabs.push('kb', 'profile_settings');
   const allowedTabs = ROLE_TABS[currentRole] || permissionTabs || ['profile_settings'];
   const safeTab = allowedTabs.includes(effectiveTab) ? effectiveTab : allowedTabs[0];
   const unreadNotificationCount = watcherNotifications.filter(
@@ -335,6 +346,11 @@ permissionTabs.push('ai_chat', 'kb', 'profile_settings');
 
 {safeTab === 'reference_data' && <ReferenceDataPage />}
 {safeTab === 'profile_settings' && <ProfileSettingsPage />}
+          {safeTab === 'email_inbox' && <EmailInboxPage />}
+          {safeTab === 'documents' && <DocumentManagementPage />}
+          {safeTab === 'notifications' && <NotificationPreferencesPage />}
+          {safeTab === 'surveys' && <SurveyManagementPage />}
+          {safeTab === 'ai_copilot' && <AICopilotPage />}
 
             </Suspense>
           </motion.div>

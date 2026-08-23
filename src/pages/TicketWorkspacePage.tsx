@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Ticket } from 'lucide-react';
 
 import PageTransition from '../components/layout/PageTransition';
@@ -11,12 +11,11 @@ import { useUi } from '../context/UiContext';
 import { syncComment, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
 import { isBuSupportRole } from '../lib/rbac';
 import { isAddressed, applyMention, fullNameOf, mentionCandidates, resolveMention } from '../lib/mention';
-import { formatSlaCountdown } from '../lib/utils';
 import TicketListPane from './ticket-workspace/TicketListPane';
-import TicketDetailPane from './ticket-workspace/TicketDetailPane';
-import ActivityPanel from './ticket-workspace/ActivityPanel';
+import TicketDetailView from './ticket-workspace/TicketDetailView';
 import EscalationModals from './ticket-workspace/EscalationModals';
 import NewTicketModal, { type NewTicketFormState } from './ticket-workspace/NewTicketModal';
+import MergeTicketModal from './ticket-workspace/MergeTicketModal';
 
 interface TicketWorkspacePageProps {
   handleDeclareMajorIncident: (formData?: { name: string; description: string; partner: string; category: string; severity: string; initialNotification: string }) => void;
@@ -42,6 +41,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
 
   const [archiveConfirmId, setArchiveConfirmId] = useState<string | null>(null);
   const [removeWatcherConfirm, setRemoveWatcherConfirm] = useState<string | null>(null);
+  const [showMergeModal, setShowMergeModal] = useState(false);
   const [newWatcherEmail, setNewWatcherEmail] = useState('');
   const [notifyWatcherModal, setNotifyWatcherModal] = useState<{ isOpen: boolean; watcherEmail: string | null }>({ isOpen: false, watcherEmail: null });
   const [selectedWatcherIds, setSelectedWatcherIds] = useState<Set<string>>(new Set());
@@ -58,25 +58,11 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const [showDeclareResolution, setShowDeclareResolution] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [showMobileTicketList, setShowMobileTicketList] = useState(false);
-  const [, setShowMobileActivity] = useState(false);
   const [directMessageText, setDirectMessageText] = useState('');
   const [showNewTicketPanel, setShowNewTicketPanel] = useState(false);
   const [newTicketForm, setNewTicketForm] = useState<NewTicketFormState>({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
   const [newTicketErrors, setNewTicketErrors] = useState<Record<string, string>>({});
-  const [now, setNow] = useState(() => Date.now());
-
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
-
   const activeTicket = tickets.find(t => t.id === activeTicketId) || null;
-  const slaCountdown = activeTicket ? (() => {
-    const deadlineMs = new Date(activeTicket.slaDeadline).getTime();
-    const diff = deadlineMs - now;
-    if (diff <= 0) return `Breached -${formatSlaCountdown(deadlineMs, now)}`;
-    return `${formatSlaCountdown(now, deadlineMs)} Left`;
-  })() : '';
 
   const clearError = (field: string) => setFormErrors(prev => { const n = { ...prev }; delete n[field]; return n; });
   const clearFormErrors = () => setFormErrors({});
@@ -218,44 +204,36 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
 
   const confirmEscalation = () => { setShowEscalationModal(false); setEscalationReason(''); };
 
-  const handleMergeTicket = async () => {
+  const handleMergeTicket = () => {
     if (!activeTicket) return;
-    const target = prompt('Enter target ticket ID to merge into:');
-    if (!target || target === activeTicket.id) return;
-    const targetTicket = tickets.find(t => t.id === target);
-    if (!targetTicket) { showToast('Target ticket not found.', 'error'); return; }
-    if (targetTicket.isDeleted) { showToast('Target ticket is archived and cannot receive a merge.', 'error'); return; }
-    if ((targetTicket.partner || '').toLowerCase() !== (activeTicket.partner || '').toLowerCase()) {
-      const ok = window.confirm(`"${activeTicket.partner}" differs from target partner "${targetTicket.partner}". Merging across payment partners could misroute the case. Continue?`);
-      if (!ok) return;
-    }
-    if (targetTicket.status === TicketStatus.CLOSED && (targetTicket.duplicateOf || '').trim()) {
-      showToast(`Target ticket is already a duplicate of ${targetTicket.duplicateOf}. Rejected to avoid merge chaining.`, 'error');
+    setShowMergeModal(true);
+  };
+
+  const confirmMerge = (targetId: string) => {
+    if (!activeTicket) return;
+    const target = tickets.find(t => t.id === targetId);
+    if (!target) { showToast('Target ticket not found.', 'error'); return; }
+    if (target.isDeleted) { showToast('Target ticket is archived and cannot receive a merge.', 'error'); return; }
+    if (target.status === TicketStatus.CLOSED && (target.duplicateOf || '').trim()) {
+      showToast(`Target ticket is already a duplicate of ${target.duplicateOf}. Rejected to avoid merge chaining.`, 'error');
       return;
     }
     const mergedComments = [...comments, { id: 'cm-' + Date.now(), ticketId: target, message: `Migrated from ${activeTicket.id}`, timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole, seen: false, isInternal: false } as CommentRecord];
     const mergeLog = { id: 'al-' + Date.now(), ticketId: target, action: 'TICKET_MERGED', details: `Merged ${activeTicket.id}`, timestamp: new Date().toISOString(), actor: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole } as AuditLog;
     const mergedAudits = [...auditLogs, mergeLog];
-    
-    // Delete the source ticket on the server
-    try {
-      await syncTicketDelete(activeTicket.id);
-    } catch {
+
+    syncTicketDelete(activeTicket.id).catch(() => {
       showToast('Failed to delete source ticket from server.', 'error');
       return;
-    }
-    
-    // Update the target ticket with merged comments and audit log
-    try {
-      await syncTicketUpdate(target, { 
-        comments: mergedComments,
-        auditLogs: mergedAudits
-      });
-    } catch {
+    });
+    syncTicketUpdate(target, {
+      comments: mergedComments,
+      auditLogs: mergedAudits
+    }).catch(() => {
       showToast('Failed to update target ticket on server.', 'error');
       return;
-    }
-    
+    });
+
     const updatedTickets = tickets.filter(t => t.id !== activeTicket.id && t.id !== target);
     setTickets(updatedTickets);
     setComments(mergedComments);
@@ -440,59 +418,20 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
         />
 
         {activeTicket ? (
-          <>
-            <TicketDetailPane
-              activeTicket={activeTicket}
-              now={now}
-              slaCountdown={slaCountdown}
-              setShowMobileTicketList={setShowMobileTicketList}
-              setShowMobileActivity={setShowMobileActivity}
-              showDeclareResolution={showDeclareResolution}
-              setShowDeclareResolution={setShowDeclareResolution}
-              rcaForm={rcaForm}
-              setRcaForm={setRcaForm}
-              formErrors={formErrors}
-              clearError={clearError}
-              feedbackInput={feedbackInput}
-              setFeedbackInput={setFeedbackInput}
-              isRcaGenerating={isRcaGenerating}
-              onBeginInvestigation={handleBeginInvestigation}
-              onResolve={handleResolveTicket}
-              onResolutionResponse={handleResolutionResponse}
-              onAiGenerateRca={handleAiGenerateRca}
-              onManualEscalate={handleManualEscalate}
-              onMerge={handleMergeTicket}
-              onDeclareMajorIncident={handleDeclareMajorIncidentWrapper}
-              onArchive={handleSoftDeleteTicket}
-              commentText={commentText}
-              setCommentText={setCommentText}
-              isSendingComment={isSendingComment}
-              replyingTo={replyingTo}
-              setReplyingTo={setReplyingTo}
-              showMentions={showMentions}
-              setShowMentions={setShowMentions}
-              mentionSearch={mentionSearch}
-              setMentionSearch={setMentionSearch}
-              mentionIndex={mentionIndex}
-              setMentionIndex={setMentionIndex}
-              onSendComment={handleSendComment}
-              onInjectSavedReply={injectSavedReply}
-              onKeyDown={handleCommentKeyDown}
-              onSendToEveryone={handleSendToEveryone}
-            />
-
-            <ActivityPanel
-              activeTicket={activeTicket}
-              now={now}
-              activeTicketEvidence={evidence || []}
-              selectedWatcherIds={selectedWatcherIds}
-              setSelectedWatcherIds={setSelectedWatcherIds}
-              newWatcherEmail={newWatcherEmail}
-              setNewWatcherEmail={setNewWatcherEmail}
-              setNotifyWatcherModal={setNotifyWatcherModal}
-              setRemoveWatcherConfirm={setRemoveWatcherConfirm}
-            />
-          </>
+          <TicketDetailView
+            activeTicket={activeTicket}
+            showDeclareResolution={showDeclareResolution}
+            setShowDeclareResolution={setShowDeclareResolution}
+            onArchive={handleSoftDeleteTicket}
+            onMerge={handleMergeTicket}
+            onEscalate={handleManualEscalate}
+            onDeclareMajorIncident={handleDeclareMajorIncidentWrapper}
+            onBeginInvestigation={handleBeginInvestigation}
+            onResolve={handleResolveTicket}
+            onResolutionResponse={handleResolutionResponse}
+            onSaveTemplate={() => {}}
+            onAiGenerateRca={handleAiGenerateRca}
+          />
         ) : (
           <div className="flex-1 flex items-center justify-center p-6">
             <EmptyState
@@ -524,6 +463,15 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
         setDirectMessageText={setDirectMessageText}
         selectedWatcherIds={selectedWatcherIds}
         setSelectedWatcherIds={setSelectedWatcherIds}
+      />
+
+      <MergeTicketModal
+        isOpen={showMergeModal}
+        onClose={() => setShowMergeModal(false)}
+        onConfirm={confirmMerge}
+        tickets={tickets}
+        activeTicketId={activeTicketId}
+        activePartner={activeTicket?.partner || ''}
       />
 
       {canCreateTicket && (

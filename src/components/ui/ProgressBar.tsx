@@ -32,7 +32,7 @@ export default function ProgressBar({ value, max = 100, size = 'sm', color = 'pr
   const styles = colorMap[color];
 
   return (
-    <div className={`flex items-center gap-2 ${className}`}>
+    <div className={`flex items-center gap-2 ${className}`} role="progressbar" aria-valuenow={Math.round(pct)} aria-valuemin={0} aria-valuemax={100} aria-label={label || `Progress: ${Math.round(pct)}%`}>
       <div className={`flex-1 rounded-full overflow-hidden ${styles.track} ${sizeMap[size]}`}>
         <motion.div
           initial={animated ? { width: 0 } : undefined}

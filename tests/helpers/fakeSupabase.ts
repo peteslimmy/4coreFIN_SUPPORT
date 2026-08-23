@@ -33,6 +33,9 @@ class QueryBuilder {
   private singleMode: 'single' | 'maybeSingle' | null = null;
   private mutation: { type: 'update' | 'delete'; row?: any } | null = null;
   private headMode: boolean = false;
+  private rangeSlice: { from: number; to: number } | null = null;
+  private countMode: string | null = null;
+  private pendingInsert: any[] | null = null;
 
   constructor(
     private table: string,
@@ -41,6 +44,7 @@ class QueryBuilder {
 
   select(_cols?: string, opts?: { count?: string; head?: boolean }) {
     if (opts?.head) this.headMode = true;
+    if (opts?.count) this.countMode = opts.count;
     return this;
   }
 
@@ -88,14 +92,50 @@ class QueryBuilder {
     return this;
   }
 
+  gte(col: string, val: any) {
+    this.filters.push((r) => (r[col] ?? '') >= val);
+    return this;
+  }
+
+  gt(col: string, val: any) {
+    this.filters.push((r) => (r[col] ?? '') > val);
+    return this;
+  }
+
+  lte(col: string, val: any) {
+    this.filters.push((r) => (r[col] ?? '') <= val);
+    return this;
+  }
+
+  lt(col: string, val: any) {
+    this.filters.push((r) => (r[col] ?? '') < val);
+    return this;
+  }
+
   not(col: string, _op: string, val: string) {
     const set = parseInSet(val);
     this.filters.push((r) => !set.includes(r[col]));
     return this;
   }
 
+  contains(col: string, val: string) {
+    let target: any[];
+    try { target = JSON.parse(val); } catch { target = [val]; }
+    this.filters.push((r) => {
+      const arr = Array.isArray(r[col]) ? r[col] : [];
+      return target.some((v: any) => arr.includes(v));
+    });
+    return this;
+  }
+
   limit(n: number) {
     this.limitN = n;
+    return this;
+  }
+
+  range(from: number, to: number) {
+    const rows = this.computeRows();
+    this.rangeSlice = { from, to };
     return this;
   }
 
@@ -110,7 +150,8 @@ class QueryBuilder {
   }
 
   insert(rows: any) {
-    return this.applyInsert(Array.isArray(rows) ? rows : [rows]);
+    this.pendingInsert = Array.isArray(rows) ? rows.map((r) => ({ ...r })) : [{ ...rows }];
+    return this;
   }
 
   upsert(rows: any, opts?: { onConflict?: string }) {
@@ -149,6 +190,7 @@ class QueryBuilder {
       });
     }
     if (this.limitN != null) rows = rows.slice(0, this.limitN);
+    if (this.rangeSlice) rows = rows.slice(this.rangeSlice.from, this.rangeSlice.to + 1);
     return rows;
   }
 
@@ -159,6 +201,17 @@ class QueryBuilder {
   }
 
   private execute(): Promise<{ data: any; error: any }> {
+    if (this.pendingInsert) {
+      const tableRows = this.store[this.table] || (this.store[this.table] = []);
+      tableRows.push(...this.pendingInsert);
+      const inserted = [...this.pendingInsert];
+      this.pendingInsert = null;
+      if (this.singleMode) {
+        return Promise.resolve({ data: inserted[0], error: null });
+      }
+      return Promise.resolve({ data: inserted, error: null });
+    }
+
     if (this.mutation?.type === 'delete') {
       const tableRows = this.store[this.table] || [];
       const remove = new Set(this.computeRows().map((r) => tableRows.indexOf(r)));
@@ -167,14 +220,22 @@ class QueryBuilder {
     }
     if (this.mutation?.type === 'update') {
       const tableRows = this.store[this.table] || [];
+      const updated: any[] = [];
       for (const row of this.computeRows()) {
         const idx = tableRows.indexOf(row);
-        if (idx >= 0) tableRows[idx] = { ...row, ...this.mutation!.row };
+        if (idx >= 0) {
+          tableRows[idx] = { ...row, ...this.mutation!.row };
+          updated.push(tableRows[idx]);
+        }
       }
-      return Promise.resolve({ data: null, error: null });
+      if (this.singleMode) {
+        return Promise.resolve(updated.length > 0 ? { data: updated[0], error: null } : { data: null, error: { message: 'No rows returned', code: 'PGRST116' } });
+      }
+      return Promise.resolve({ data: updated, error: null });
     }
 
     const rows = this.computeRows();
+    const totalCount = this.countMode ? (this.store[this.table] || []).filter((r) => this.filters.every((f) => f(r))).length : undefined;
     if (this.headMode) {
       return Promise.resolve({ data: null, count: rows.length, error: null });
     }
@@ -188,7 +249,7 @@ class QueryBuilder {
       }
       return Promise.resolve({ data: rows[0], error: null });
     }
-    return Promise.resolve({ data: rows, error: null });
+    return Promise.resolve({ data: rows, count: totalCount, error: null });
   }
 
   then(onFulfilled?: (value: any) => any, onRejected?: (reason: any) => any) {

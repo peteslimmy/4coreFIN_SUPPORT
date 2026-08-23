@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react';
 
 import type { TicketRecord } from '../../types/app';
 import { useApp } from '../../context/AppContext';
+import { isValidEmail } from '../../lib/constants';
 import { syncNotification, syncNotificationRead, syncTicketUpdate } from '../../lib/sync';
 
 interface WatcherPanelProps {
@@ -63,9 +64,9 @@ export default function WatcherPanel({ activeTicket, selectedWatcherIds, setSele
         <button id="add-watcher-btn" onClick={() => {
           const emailInput = newWatcherEmail.trim(); if (!emailInput) { showToast('Please enter a valid email.', 'error'); return; }
           const emails = emailInput.split(',').map(e => e.trim()).filter(e => e.length > 0);
-          const validEmails: string[] = []; const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          const validEmails: string[] = [];
           for (const email of emails) {
-            if (!emailRegex.test(email)) { showToast(`Invalid: ${email}`, 'error'); continue; }
+            if (!isValidEmail(email)) { showToast(`Invalid: ${email}`, 'error'); continue; }
             if ((activeTicket.watchers || []).map(w => w.toLowerCase()).includes(email.toLowerCase())) { showToast(`${email} already watching.`, 'info'); continue; }
             validEmails.push(email);
           }

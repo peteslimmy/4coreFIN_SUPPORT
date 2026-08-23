@@ -21,7 +21,9 @@ class ErrorBoundaryClass extends React.Component<ErrorBoundaryProps, ErrorBounda
   }
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
-    console.error('ErrorBoundary caught:', error, errorInfo);
+    if (import.meta.env.DEV) {
+      console.error('ErrorBoundary caught:', error, errorInfo);
+    }
   }
 
   handleReset = () => {
@@ -44,7 +46,7 @@ class ErrorBoundaryClass extends React.Component<ErrorBoundaryProps, ErrorBounda
             <p className="text-sm text-text-muted mb-6">
               An unexpected error occurred. Please try refreshing the page.
             </p>
-            {s.error && (
+            {import.meta.env.DEV && s.error && (
               <div className="bg-error-light border border-error/20 rounded-lg p-3 mb-4 text-left">
                 <p className="text-xs text-error-dark font-mono break-all">{s.error.message}</p>
               </div>

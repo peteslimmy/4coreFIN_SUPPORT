@@ -20,8 +20,12 @@ CREATE TABLE IF NOT EXISTS pii_encryption_keys (
   rotated_at TIMESTAMPTZ
 );
 
--- Insert initial key slot (key_hash must match ENCRYPTION_KEY value in runtime)
-INSERT INTO pii_encryption_keys (id, key_hash) VALUES (1, md5(current_setting('ENCRYPTION_KEY')::text));
+-- Insert initial key slot (key_hash must match ENCRYPTION_KEY value in runtime).
+-- Uses missing_ok=true so the migration never fails when the GUC is absent
+-- (e.g. applied via the Management API, where session GUCs are not set).
+INSERT INTO pii_encryption_keys (id, key_hash)
+VALUES (1, md5(coalesce(current_setting('ENCRYPTION_KEY', true), '')))
+ON CONFLICT (id) DO NOTHING;
 
 -- Helper: encrypt a single PII field value (returns ciphertext:iv:tag format)
 CREATE OR REPLACE FUNCTION encrypt_pii_field(plain TEXT) RETURNS TEXT AS $$
@@ -33,7 +37,7 @@ BEGIN
   -- In production the app-layer encryptionService encrypts before insert;
   -- this function exists for audit/backfill scripts that run inside Postgres.
   EXECUTE format(
-    'SELECT encode(pgp_sym_encrypt(%L, current_setting(''ENCRYPTION_KEY'')::bytea), ''hex'')',
+    'SELECT encode(pgp_sym_encrypt(%L, coalesce(current_setting(''ENCRYPTION_KEY'', true), '''')), ''hex'')',
     plain
   ) INTO result;
   RETURN result;
@@ -44,7 +48,7 @@ $$ LANGUAGE plpgsql SECURITY DEFINER;
 CREATE OR REPLACE FUNCTION decrypt_pii_field(cipher TEXT) RETURNS TEXT AS $$
 BEGIN
   -- Decrypt via pgp_sym_decrypt; app-layer will use its own crypto
-  RETURN pgp_sym_decrypt(cipher::bytea, current_setting('ENCRYPTION_KEY')::bytea)::text;
+  RETURN pgp_sym_decrypt(cipher::bytea, coalesce(current_setting('ENCRYPTION_KEY', true), ''))::text;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -74,7 +78,17 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- Run the backfill once (will return count of rows encrypted; idempotent on re-run)
-SELECT encrypt_all_pending_pii();
+-- Run the backfill once — but ONLY when ENCRYPTION_KEY is set in the session.
+-- Encrypting live PII with an empty/unset key would corrupt it, and runtime
+-- encryption is owned by the app-layer encryptionService (AES-256-GCM), so
+-- skipping here is always safe. Idempotent on re-run via pii_encrypted=false.
+DO $$
+BEGIN
+  IF coalesce(current_setting('ENCRYPTION_KEY', true), '') <> '' THEN
+    PERFORM encrypt_all_pending_pii();
+  ELSE
+    RAISE NOTICE 'ENCRYPTION_KEY not set in this session; skipping DB-level PII backfill (app-layer encryptionService owns runtime encryption).';
+  END IF;
+END $$;
 
 COMMENT ON COLUMN tickets.pii_encrypted IS 'Set to true when PII fields have been envelope-encrypted via app-layer encryptionService. Do not rely on DB-level encrypt flag alone for security; this is an aid for backfill tracking.';

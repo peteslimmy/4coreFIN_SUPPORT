@@ -12,8 +12,6 @@ const FALLBACK_RISK_FRACTION = 0.25;
 const MIN_RISK_HOURS = 0.5;
 const NOTIFICATION_TTL_MS = 6 * 3600000; // 6 hours
 
-let timer: NodeJS.Timeout | null = null;
-
 // ─── Alert dedupe ──────────────────────────────────────────────────────
 // The sla_notification_log table (migration 047) makes suppression durable:
 // a server restart no longer re-fires every alert. The UNIQUE(kind, ticket_id,
@@ -61,7 +59,22 @@ async function pruneClaims(): Promise<void> {
   }
 }
 
+// Overlap guard: if a scan takes longer than the interval, the next timer
+// tick must not start a second concurrent scan (duplicate DB reads, doubled
+// notification fan-out, event-loop contention under load).
+let slaRunInProgress = false;
+
 export async function runSlaCheck() {
+  if (slaRunInProgress) return;
+  slaRunInProgress = true;
+  try {
+    await runSlaCheckInner();
+  } finally {
+    slaRunInProgress = false;
+  }
+}
+
+async function runSlaCheckInner() {
   await pruneClaims();
   const tickets = await openTicketsForSla();
   const configs = await getConfig<Array<{ id: string; stage: string; email: string }>>('notificationConfigs', []);
@@ -93,8 +106,10 @@ export async function runSlaCheck() {
       const riskThreshold = Math.max(slaDuration * FALLBACK_RISK_FRACTION, MIN_RISK_HOURS);
 
       if (hoursLeft < 0 && !t.isEscalated) {
-        for (const recipient of recipients) {
-          if (!(await claimAlert('SLA_BREACH', t.id, recipient))) continue;
+        // Recipients are independent (per-recipient dedup claims) — fan out
+        // concurrently instead of N sequential round-trips.
+        await Promise.all(Array.from(recipients).map(async (recipient) => {
+          if (!(await claimAlert('SLA_BREACH', t.id, recipient))) return;
           await insertNotification({
             id: buildId('wn-sla'),
             timestamp: new Date().toISOString(),
@@ -108,10 +123,10 @@ export async function runSlaCheck() {
             `[4C] SLA Breach — Ticket ${t.id}`,
             `<h3>[SLA_BREACH] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> breached its SLA deadline (<strong>${t.priority}</strong> / ${t.category || '—'}). Immediate action is required.</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
           );
-        }
+        }));
         // Audit the breach once per ticket, not on every monitor tick.
         if (await claimAlert('SLA_BREACH', t.id, '__audit__')) {
-          await audit({
+          audit({
             event: 'SLA_BREACH_DETECTED',
             ticketId: t.id,
             actor: 'SYSTEM',
@@ -124,8 +139,8 @@ export async function runSlaCheck() {
         broadcast('sla_breach', { ticketId: t.id, slaDeadline: t.slaDeadline }, t.tenantId);
         dispatchWebhook('sla.breach', { ticketId: t.id, priority: t.priority, category: t.category, slaDeadline: t.slaDeadline }).catch(() => {});
       } else if (hoursLeft >= 0 && hoursLeft < riskThreshold) {
-        for (const recipient of recipients) {
-          if (!(await claimAlert('SLA_AT_RISK', t.id, recipient))) continue;
+        await Promise.all(Array.from(recipients).map(async (recipient) => {
+          if (!(await claimAlert('SLA_AT_RISK', t.id, recipient))) return;
           await insertNotification({
             id: buildId('wn-risk'),
             timestamp: new Date().toISOString(),
@@ -139,7 +154,7 @@ export async function runSlaCheck() {
             `[4C] SLA At Risk — Ticket ${t.id}`,
             `<h3>[SLA_AT_RISK] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> is at risk — <strong>${hoursLeft.toFixed(1)}h</strong> remaining before SLA breach (<strong>${t.priority}</strong> / ${t.category || '—'}).</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
           );
-        }
+        }));
         riskCount++;
         broadcast('sla_at_risk', { ticketId: t.id, hoursLeft }, t.tenantId);
       }
@@ -155,9 +170,15 @@ export async function runSlaCheck() {
   return { breachCount, riskCount, scanned };
 }
 
+let timer: NodeJS.Timeout | null = null;
+let startupTimer: NodeJS.Timeout | null = null;
+
 export function startSlaJob(intervalMs = 60_000) {
-  if (timer) return;
-  setTimeout(async () => {
+  if (timer || startupTimer) return;
+  // Track the initial-run timeout so stopSlaJob can cancel it too —
+  // otherwise a start/stop cycle within 5s still triggers one scan.
+  startupTimer = setTimeout(async () => {
+    startupTimer = null;
     try {
       await runSlaCheck();
     } catch (e) {
@@ -177,8 +198,17 @@ export function startSlaJob(intervalMs = 60_000) {
 }
 
 export function stopSlaJob() {
+  if (startupTimer) {
+    clearTimeout(startupTimer);
+    startupTimer = null;
+  }
   if (timer) {
     clearInterval(timer);
     timer = null;
   }
+}
+
+/** Test hook: exposes whether any scheduled timer survives a stop(). */
+export function slaJobTimersForTest(): { interval: NodeJS.Timeout | null; startup: NodeJS.Timeout | null } {
+  return { interval: timer, startup: startupTimer };
 }

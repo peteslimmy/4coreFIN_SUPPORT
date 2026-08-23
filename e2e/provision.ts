@@ -13,7 +13,7 @@ import bcrypt from 'bcryptjs';
 import { supabase } from '../server/supabase';
 import { tenantIdForBu, GLOBAL_TENANT_ID } from '../server/tenant';
 import { ensureTenantForBu } from '../server/repository';
-import { E2E_USERS, E2E_PASSWORD, type E2eUser } from './identity';
+import { E2E_USERS, E2E_PASSWORD, RUN_ID, MARKER, type E2eUser } from './identity';
 
 const PROJECT_REF = process.env.SUPABASE_PROJECT_REF || '';
 const ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN || '';
@@ -108,6 +108,14 @@ async function purgeAllE2EGoTrue(): Promise<void> {
     if (String(u.email || '').match(/^e2e\.[^@]+@.+\.e2e$/i)) {
       try { await gotrueRequest('DELETE', `/auth/v1/admin/users/${u.id}`); } catch { /* best-effort */ }
     }
+  }
+}
+
+async function deleteGoTrueIdentity(email: string): Promise<void> {
+  const { data: list } = await gotrueRequest('GET', '/auth/v1/admin/users');
+  const user = (list?.users ?? []).find(u => u.email === email);
+  if (user) {
+    await gotrueRequest('DELETE', `/auth/v1/admin/users/${user.id}`);
   }
 }
 
