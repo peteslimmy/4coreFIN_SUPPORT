@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth, type AuthedRequest, hashPasswordAsync, supabaseSignIn, supabaseUpdateUser, findUserByEmail, findUserById } from '../auth';
 import { invalidateUserRow } from '../lib/userCache';
 import { uploadFile } from '../services/storageService';
@@ -176,7 +176,8 @@ export function createProfileRouter(): Router {
     legacyHeaders: false,
     keyGenerator: (req) => {
       const email = (req.body?.email || '').toLowerCase().trim();
-      return email ? `${req.ip}:${email}` : req.ip;
+      const ip = ipKeyGenerator(req);
+      return email ? `${ip}:${email}` : ip;
     },
     message: { error: 'Too many reset attempts. Please try again later.' },
   });
