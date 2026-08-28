@@ -1,7 +1,7 @@
 import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { GoogleGenAI, Type } from '@google/genai';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { audit, AuditAction } from '../auditEvents';
 import { sanitizePromptInput } from '../lib/promptSanitizer';
@@ -52,6 +52,7 @@ const aiIpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many AI requests, please try again later.' },
+  keyGenerator: ipKeyGenerator,
 });
 
 /**
