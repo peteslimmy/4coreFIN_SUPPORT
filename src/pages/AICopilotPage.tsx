@@ -1,9 +1,7 @@
-import { useState, useEffect, useCallback, useRef, type KeyboardEvent } from 'react';
+import { useState, type KeyboardEvent } from 'react';
 import {
   Button,
-  Input,
   Label,
-  Separator,
   useToast,
   Tabs,
   TabsList,
@@ -13,17 +11,39 @@ import {
   Badge,
 } from '../components/ui';
 import { api } from '../lib/api';
-import { MessageCircle, Search, Settings, ClipboardList, RefreshCw, Copy, X, CheckCircle2 } from 'lucide-react';
+import { MessageCircle, ClipboardList, RefreshCw, Copy, CheckCircle2 } from 'lucide-react';
 import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 
+interface ClassifyResult {
+  category?: string;
+  issueType?: string;
+  priority?: string;
+  provider?: string;
+  reasoning?: string;
+}
+
+interface RcaResult {
+  rootCauseSummary?: string;
+  contributingFactors?: string;
+  correctiveActions?: string;
+  preventiveActions?: string;
+  preventiveOwner?: string;
+  preventiveDueDate?: string;
+}
+
 export default function AICopilotPage() {
   const { toast } = useToast();
   const [analyzeResult, setAnalyzeResult] = useState<string | null>(null);
-  const [classifyResult, setClassifyResult] = useState<any | null>(null);
-  const [rcaResult, setRcaResult] = useState<any | null>(null);
-  const [chatHistory, setChatHistory] = useState<Array<{ role: string; text: string }>>([]);
+  const [classifyResult, setClassifyResult] = useState<ClassifyResult | null>(null);
+  const [rcaResult, setRcaResult] = useState<RcaResult | null>(null);
+  const [chatHistory, setChatHistory] = useState<Array<{ role: string; text: string }>>(() => [
+    {
+      role: 'assistant',
+      text: 'Hello! I am your AI Copilot for payment operations. I can help you analyze payment issues, classify tickets, perform root cause analysis, and answer questions about payment operations. How can I assist you today?',
+    },
+  ]);
   const [chatInput, setChatInput] = useState('');
   const [analyzing, setAnalyzing] = useState(false);
   const [classifying, setClassifying] = useState(false);
@@ -31,9 +51,9 @@ export default function AICopilotPage() {
   const [chatSending, setChatSending] = useState(false);
   const [analyzeInput, setAnalyzeInput] = useState('');
   const [classifyDescription, setClassifyDescription] = useState('');
-  const [classifyCategories, setClassifyCategories] = useState<any>(null);
-  const [rcaTicketDetails, setRcaTicketDetails] = useState<any>(null);
-  const [activeTab, setActiveTab] = useState<'analyze' | 'classify' | 'rca' | 'chat'>('chat');
+  const [classifyCategories, setClassifyCategories] = useState<string | null>(null);
+  const [rcaTicketDetails, setRcaTicketDetails] = useState<string | null>(null);
+  const [activeTab] = useState<'analyze' | 'classify' | 'rca' | 'chat'>('chat');
   const [isCopypasting, setIsCopypasting] = useState(false);
   const [copyStatus, setCopyStatus] = useState<'none' | 'copying' | 'copied'>('none');
 
@@ -47,18 +67,6 @@ export default function AICopilotPage() {
     bu: 'Payments',
     description: 'Customer reported being charged twice for the same transaction on 2026-08-20. The duplicate charge caused an overdraft fee.',
   };
-
-  useEffect(() => {
-    // Initialize with a welcome message
-    if (chatHistory.length === 0) {
-      setChatHistory([
-        {
-          role: 'assistant',
-          text: 'Hello! I am your AI Copilot for payment operations. I can help you analyze payment issues, classify tickets, perform root cause analysis, and answer questions about payment operations. How can I assist you today?',
-        },
-      ]);
-    }
-  }, []);
 
   const handleAnalyze = async () => {
     if (!analyzeInput.trim()) {
@@ -74,8 +82,9 @@ export default function AICopilotPage() {
       }) as { text?: string };
       setAnalyzeResult(result.text || '');
       toast.success('Analysis complete');
-    } catch (error: any) {
-      toast.error(`Analysis failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Analysis failed: ${message}`);
     } finally {
       setAnalyzing(false);
     }
@@ -91,12 +100,13 @@ export default function AICopilotPage() {
     setClassifyResult(null);
     try {
       // Prepare categories if provided, otherwise use empty object
-      const categories = classifyCategories ? JSON.parse(classifyCategories) : {};
-      const result = await api.geminiClassify(classifyDescription, categories) as { data?: any };
-      setClassifyResult(result.data);
+      const categories = classifyCategories ? JSON.parse(classifyCategories) as Record<string, unknown> : {};
+      const result = await api.geminiClassify(classifyDescription, categories) as { data?: Record<string, unknown> };
+      setClassifyResult(result.data as ClassifyResult);
       toast.success('Classification complete');
-    } catch (error: any) {
-      toast.error(`Classification failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Classification failed: ${message}`);
     } finally {
       setClassifying(false);
     }
@@ -106,12 +116,13 @@ export default function AICopilotPage() {
     setGeneratingRCA(true);
     setRcaResult(null);
     try {
-      const ticketData = rcaTicketDetails ? JSON.parse(rcaTicketDetails) : sampleTicketDetails;
-      const result = await api.geminiRca({ ticketDetails: ticketData }) as { data?: any };
-      setRcaResult(result.data);
+      const ticketData = rcaTicketDetails ? JSON.parse(rcaTicketDetails) as Record<string, unknown> : sampleTicketDetails;
+      const result = await api.geminiRca({ ticketDetails: ticketData }) as { data?: Record<string, unknown> };
+      setRcaResult(result.data as RcaResult);
       toast.success('RCA generated');
-    } catch (error: any) {
-      toast.error(`RCA generation failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`RCA generation failed: ${message}`);
     } finally {
       setGeneratingRCA(false);
     }
@@ -139,8 +150,9 @@ export default function AICopilotPage() {
       if (chatContainer) {
         chatContainer.scrollTop = chatContainer.scrollHeight;
       }
-    } catch (error: any) {
-      toast.error(`Chat failed: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      toast.error(`Chat failed: ${message}`);
       // Remove the user message on error
       setChatHistory(chatHistory.slice(0, -1));
     } finally {
@@ -162,7 +174,7 @@ export default function AICopilotPage() {
       await navigator.clipboard.writeText(text);
       setCopyStatus('copied');
       toast.success('Copied to clipboard');
-    } catch (err) {
+    } catch {
       setCopyStatus('none');
       toast.error('Failed to copy to clipboard');
     } finally {
@@ -365,12 +377,12 @@ export default function AICopilotPage() {
                   <Label htmlFor="classifyCategories">Classification Categories (JSON - Optional)</Label>
                   <Textarea
                     id="classifyCategories"
-                    value={classifyCategories ? JSON.stringify(classifyCategories, null, 2) : ''}
+                    value={classifyCategories ?? ''}
                     onChange={(e) => {
                       try {
                         JSON.parse(e.target.value);
-                        setClassifyCategories(e.target.value);
-                      } catch (err) {
+                        setClassifyCategories(e.target.value || null);
+                      } catch {
                         // Invalid JSON, keep previous state
                       }
                     }}

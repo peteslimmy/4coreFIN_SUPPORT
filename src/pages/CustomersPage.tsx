@@ -133,7 +133,7 @@ export default function CustomersPage() {
               <button onClick={() => setShowMobileList(false)} className="lg:hidden p-1 rounded text-text-muted hover:text-text-primary hover:bg-surface-hover transition-colors focus-ring" aria-label="Close customer list">&times;</button>
               <button
                 onClick={() => { resetForm(); setShowForm(true); }}
-                className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-dark transition cursor-pointer"
+                className="flex items-center gap-1 px-3 py-1.5 bg-primary text-[#fff] rounded-lg text-xs font-semibold hover:bg-primary-dark transition cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" /> Add
               </button>
@@ -225,7 +225,7 @@ export default function CustomersPage() {
                  <textarea value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} rows={3} className="w-full border border-border rounded-lg px-3 py-2 text-xs outline-none transition-all duration-200 focus-ring focus:ring-1 focus:ring-primary" />
                </div>
                <div className="flex gap-2 pt-2">
-                 <button onClick={handleSave} className="flex-1 bg-primary text-white text-xs font-semibold py-2 rounded-lg hover:bg-primary-dark transition cursor-pointer">
+                  <button onClick={handleSave} className="flex-1 bg-primary text-[#fff] text-xs font-semibold py-2 rounded-lg hover:bg-primary-dark transition cursor-pointer">
                    {editingId ? 'Update Customer' : 'Add Customer'}
                  </button>
                  <button onClick={resetForm} className="px-4 bg-surface text-text-muted text-xs font-bold py-2 rounded-lg hover:bg-surface-elevated transition cursor-pointer">Cancel</button>
@@ -313,7 +313,7 @@ export default function CustomersPage() {
               <p className="text-xs text-text-muted mt-1">Or click "Add" to create a new customer record</p>
               <div className="flex flex-col sm:flex-row items-center justify-center gap-2 mt-5">
                 <button onClick={() => setShowMobileList(true)} className="lg:hidden flex items-center gap-1.5 px-4 py-2 bg-surface-elevated border border-border rounded-lg text-xs font-semibold text-text-primary hover:bg-surface-hover transition cursor-pointer"><Users className="w-3.5 h-3.5" /> Browse Customers</button>
-                <button onClick={() => { resetForm(); setShowForm(true); }} className="lg:hidden flex items-center gap-1.5 px-4 py-2 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary-dark transition cursor-pointer"><Plus className="w-3.5 h-3.5" /> Add Customer</button>
+                <button onClick={() => { resetForm(); setShowForm(true); }} className="lg:hidden flex items-center gap-1.5 px-4 py-2 bg-primary text-[#fff] rounded-lg text-xs font-semibold hover:bg-primary-dark transition cursor-pointer"><Plus className="w-3.5 h-3.5" /> Add Customer</button>
               </div>
             </div>
           </div>

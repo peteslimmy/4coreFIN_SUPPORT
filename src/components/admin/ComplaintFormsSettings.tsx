@@ -29,11 +29,11 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
 
 const FIELD_TYPE_META: Record<FormFieldType, { icon: typeof Type; chip: string; accent: string }> = {
   text: { icon: Type, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
-  number: { icon: Hash, chip: 'bg-emerald-500/10 text-emerald-600', accent: 'text-emerald-600' },
-  currency: { icon: Banknote, chip: 'bg-amber-500/10 text-amber-600', accent: 'text-amber-600' },
-  select: { icon: ListFilter, chip: 'bg-violet-500/10 text-violet-600', accent: 'text-violet-600' },
-  date: { icon: CalendarDays, chip: 'bg-rose-500/10 text-rose-600', accent: 'text-rose-600' },
-  textarea: { icon: AlignLeft, chip: 'bg-cyan-500/10 text-cyan-600', accent: 'text-cyan-600' },
+  number: { icon: Hash, chip: 'bg-success/10 text-success', accent: 'text-success' },
+  currency: { icon: Banknote, chip: 'bg-warning/10 text-warning', accent: 'text-warning' },
+  select: { icon: ListFilter, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
+  date: { icon: CalendarDays, chip: 'bg-error/10 text-error', accent: 'text-error' },
+  textarea: { icon: AlignLeft, chip: 'bg-info/10 text-info', accent: 'text-info' },
   file: { icon: Type, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
 };
 
@@ -244,7 +244,7 @@ function ImportConfigModal({ open, onClose, targetBu, onTargetBuChange, onConfir
               accept=".csv,.xlsx,.xls"
               onChange={handleFileChange}
               disabled={parsing}
-              className="block w-full text-sm text-text-primary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-accent-dark disabled:opacity-50"
+              className="block w-full text-sm text-text-primary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-[#fff] file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-accent-dark disabled:opacity-50"
             />
             <p className="text-[11px] text-text-muted mt-1">.csv or .xlsx, max 5 MB</p>
           </div>
@@ -401,7 +401,7 @@ function AddFieldModal({ open, onClose, draftFields, onAdd }: { open: boolean; o
       <div className="space-y-4">
         <div className="inline-flex rounded-lg bg-surface-card border border-border p-1 gap-1">
           {(['library', 'custom'] as const).map(t => (
-            <button key={t} type="button" onClick={() => setTab(t)} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === t ? 'bg-accent text-white shadow-2' : 'text-text-secondary hover:text-text-primary'}`}>
+            <button key={t} type="button" onClick={() => setTab(t)} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === t ? 'bg-accent text-[#fff] shadow-2' : 'text-text-secondary hover:text-text-primary'}`}>
               {t === 'library' ? 'Field Library' : 'Create Custom'}
             </button>
           ))}
@@ -820,10 +820,10 @@ export default function ComplaintFormsSettings() {
             <h4 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-4"><Eye className="w-4 h-4 text-text-muted" /> Customer Preview</h4>
             <div className="rounded-xl overflow-hidden border border-border shadow-2">
               <div className="bg-gradient-to-r from-primary to-primary-dark px-4 py-2.5 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-white/70" />
-                <span className="w-2 h-2 rounded-full bg-white/40" />
-                <span className="w-2 h-2 rounded-full bg-white/40" />
-                <span className="ml-2 text-[11px] font-medium text-white/90">{selectedBu} — Transaction Details</span>
+                <span className="w-2 h-2 rounded-full bg-surface-card/70" />
+                <span className="w-2 h-2 rounded-full bg-surface-card/40" />
+                <span className="w-2 h-2 rounded-full bg-surface-card/40" />
+                <span className="ml-2 text-[11px] font-medium text-[#fff]/90">{selectedBu} — Transaction Details</span>
               </div>
               <div className="bg-surface-elevated p-4 space-y-3">
                 {activeFields.length === 0 ? (

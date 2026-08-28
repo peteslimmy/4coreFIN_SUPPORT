@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import rateLimit from 'express-rate-limit';
 import { requireAuth, type AuthedRequest, hashPasswordAsync, supabaseSignIn, supabaseUpdateUser, findUserByEmail, findUserById } from '../auth';
+import { invalidateUserRow } from '../lib/userCache';
 import { uploadFile } from '../services/storageService';
 import { upsertUser } from '../repository';
 import { audit, AuditAction } from '../auditEvents';
@@ -127,11 +128,17 @@ export function createProfileRouter(): Router {
   // Authenticated users change their password: verify the current one against
   // Supabase Auth, then update the Supabase identity and clear the forced-change
   // flag on the app user row.
-  router.post('/auth/change-password', requireAuth, async (req: AuthedRequest, res) => {
+  const changePasswordSchema = z.object({
+    currentPassword: z.string().min(1, 'Current password is required'),
+    newPassword: z.string().min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Z]/, 'Password must contain at least one uppercase letter')
+      .regex(/[a-z]/, 'Password must contain at least one lowercase letter')
+      .regex(/[0-9]/, 'Password must contain at least one number')
+      .regex(/[^A-Za-z0-9]/, 'Password must contain at least one special character'),
+  });
+
+  router.post('/auth/change-password', requireAuth, validateBody(changePasswordSchema), async (req: AuthedRequest, res) => {
     const { currentPassword, newPassword } = req.body;
-    if (!currentPassword || !newPassword) {
-      return res.status(400).json({ error: 'Current and new passwords required' });
-    }
 
     try {
       await supabaseSignIn(req.user!.email, currentPassword);
@@ -156,6 +163,7 @@ export function createProfileRouter(): Router {
       await supabaseUpdateUser(current.auth_user_id, { password: newPassword });
     }
     await upsertUser({ id: req.user!.id, ...update });
+    invalidateUserRow(req.user!.id);
     await audit({ event: 'USER_PASSWORD_CHANGED', actor: req.user!.name, role: req.user!.role, action: AuditAction.USER_PASSWORD_CHANGED, details: `Password changed by ${req.user!.name}` });
     res.json({ ok: true });
   });
@@ -166,6 +174,10 @@ export function createProfileRouter(): Router {
     max: 5,
     standardHeaders: true,
     legacyHeaders: false,
+    keyGenerator: (req) => {
+      const email = (req.body?.email || '').toLowerCase().trim();
+      return email ? `${req.ip}:${email}` : req.ip;
+    },
     message: { error: 'Too many reset attempts. Please try again later.' },
   });
 

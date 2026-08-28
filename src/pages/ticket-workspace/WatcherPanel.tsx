@@ -28,7 +28,7 @@ export default function WatcherPanel({ activeTicket, selectedWatcherIds, setSele
       <div className="flex justify-between items-center mb-4">
         <h3 className="text-xs font-semibold text-text-muted uppercase tracking-wide flex items-center gap-2"><Bell className="w-4 h-4 text-primary" /> Watchers & Notifications</h3>
         <div className="flex items-center gap-2">
-          {selectedWatcherIds.size > 0 && <button onClick={() => setNotifyWatcherModal({ isOpen: true, watcherEmail: 'BULK' })} className="text-xs px-3 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg font-semibold transition focus-ring">Notify ({selectedWatcherIds.size})</button>}
+          {selectedWatcherIds.size > 0 && <button onClick={() => setNotifyWatcherModal({ isOpen: true, watcherEmail: 'BULK' })} className="text-xs px-3 py-2 bg-primary hover:bg-primary-dark text-[#fff] rounded-lg font-semibold transition focus-ring">Notify ({selectedWatcherIds.size})</button>}
         </div>
       </div>
       <p className="text-xs text-text-muted mb-4 leading-relaxed">Add team members to receive real-time updates on state changes, escalations, and responses.</p>
@@ -81,7 +81,7 @@ export default function WatcherPanel({ activeTicket, selectedWatcherIds, setSele
           newNotifications.forEach(n => syncNotification(n));
           showToast(`Added ${validEmails.length} watcher(s).`, 'success');
           logAuditAction(activeTicket.id, 'TICKET_WATCHER_ADDED', `Added ${validEmails.join(', ')} to watchers.`);
-        }} className="px-4 py-2.5 bg-primary hover:bg-primary-dark text-white text-xs font-semibold rounded-lg transition focus-ring shrink-0">Add</button>
+        }} className="px-4 py-2.5 bg-primary hover:bg-primary-dark text-[#fff] text-xs font-semibold rounded-lg transition focus-ring shrink-0">Add</button>
       </div>
     </div>
   );

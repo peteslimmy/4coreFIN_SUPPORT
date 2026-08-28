@@ -2,13 +2,71 @@ import type { BuFormConfig, FormFieldDefinition, FormFieldType, FormFieldValue }
 
 const DEFAULT_BU_LIST = ['POSSAP', 'RETAIL-B', 'CORPORATE', 'SME', 'DIGITAL'];
 
+/** Sentinel values for users without a bank, or whose bank is not listed. */
+export const N_A_BANK = 'N/A';
+export const BANK_NOT_LISTED = 'BANK NOT LISTED';
+
+export interface NigerianBank {
+  value: string;
+  label: string;
+  /** Flag badge shown next to the bank name (🏦 commercial/merchant, 💳 digital/fintech). */
+  flag: string;
+}
+
+/**
+ * CBN-licensed banks and major digital payment providers in Nigeria,
+ * plus the N/A and BANK NOT LISTED escape options.
+ */
+export const NIGERIAN_BANKS: NigerianBank[] = [
+  { value: N_A_BANK, label: 'N/A — Not Applicable', flag: '' },
+  { value: BANK_NOT_LISTED, label: 'BANK NOT LISTED', flag: '' },
+  { value: 'Access Bank', label: 'Access Bank', flag: '🏦' },
+  { value: 'Citibank Nigeria', label: 'Citibank Nigeria', flag: '🏦' },
+  { value: 'Ecobank Nigeria', label: 'Ecobank Nigeria', flag: '🏦' },
+  { value: 'Fidelity Bank', label: 'Fidelity Bank', flag: '🏦' },
+  { value: 'First Bank of Nigeria', label: 'First Bank of Nigeria', flag: '🏦' },
+  { value: 'First City Monument Bank', label: 'First City Monument Bank (FCMB)', flag: '🏦' },
+  { value: 'Globus Bank', label: 'Globus Bank', flag: '🏦' },
+  { value: 'Guaranty Trust Bank', label: 'Guaranty Trust Bank (GTBank)', flag: '🏦' },
+  { value: 'Heritage Bank', label: 'Heritage Bank', flag: '🏦' },
+  { value: 'Keystone Bank', label: 'Keystone Bank', flag: '🏦' },
+  { value: 'Polaris Bank', label: 'Polaris Bank', flag: '🏦' },
+  { value: 'Providus Bank', label: 'Providus Bank', flag: '🏦' },
+  { value: 'Stanbic IBTC Bank', label: 'Stanbic IBTC Bank', flag: '🏦' },
+  { value: 'Standard Chartered Bank', label: 'Standard Chartered Bank', flag: '🏦' },
+  { value: 'Sterling Bank', label: 'Sterling Bank', flag: '🏦' },
+  { value: 'SunTrust Bank', label: 'SunTrust Bank', flag: '🏦' },
+  { value: 'Titan Trust Bank', label: 'Titan Trust Bank', flag: '🏦' },
+  { value: 'Union Bank of Nigeria', label: 'Union Bank of Nigeria', flag: '🏦' },
+  { value: 'United Bank for Africa', label: 'United Bank for Africa (UBA)', flag: '🏦' },
+  { value: 'Unity Bank', label: 'Unity Bank', flag: '🏦' },
+  { value: 'VFD Microfinance Bank', label: 'VFD Microfinance Bank', flag: '🏦' },
+  { value: 'Wema Bank', label: 'Wema Bank', flag: '🏦' },
+  { value: 'Zenith Bank', label: 'Zenith Bank', flag: '🏦' },
+  { value: 'Kuda Bank', label: 'Kuda Microfinance Bank', flag: '💳' },
+  { value: 'OPay', label: 'OPay', flag: '💳' },
+  { value: 'PalmPay', label: 'PalmPay', flag: '💳' },
+  { value: 'Moniepoint', label: 'Moniepoint', flag: '💳' },
+  { value: 'Chipper Cash', label: 'Chipper Cash', flag: '💳' },
+];
+
+/** Dropdown option list ({value,label}) with flag badges baked into the labels. */
+export const NIGERIAN_BANK_OPTIONS = NIGERIAN_BANKS.map(b => ({
+  value: b.value,
+  label: b.flag ? `${b.flag} ${b.label}` : b.label,
+}));
+
+/** Back-compat: plain values only (no badges). */
+export const NIGERIAN_BANK_VALUES = NIGERIAN_BANKS.map(b => b.value);
+
 export const FIELD_LIBRARY: { id: string; label: string; type: FormFieldType; options?: string[]; placeholder?: string; duplicateKey?: boolean }[] = [
   { id: 'transactionId', label: 'Transaction ID Reference', type: 'text', placeholder: 'TXN_942295...', duplicateKey: true },
   { id: 'referenceId', label: 'Reference ID', type: 'text', placeholder: 'REF_7721...', duplicateKey: true },
   { id: 'amount', label: 'Transaction Amount', type: 'currency', placeholder: '0,000,000.00' },
   { id: 'terminalId', label: 'Terminal ID', type: 'text', placeholder: 'TERM_9042' },
   { id: 'nipSessionId', label: 'NIP Session ID', type: 'text', placeholder: 'NIP_94220' },
-  { id: 'bankName', label: 'Bank Name', type: 'select', options: ['Undefined', 'Access Bank', 'GTBank', 'Zenith Bank', 'First Bank', 'UBA', 'Kuda', 'PalmPay'] },
+  // bankName intentionally NOT in the transaction library — the bank dropdown
+  // lives in the Incident Details phase (see NIGERIAN_BANK_OPTIONS).
   { id: 'merchantId', label: 'Merchant ID', type: 'text', placeholder: 'MCH_1188' },
   { id: 'cardScheme', label: 'Card Scheme', type: 'select', options: ['Visa', 'Mastercard', 'Verve', 'Verve Visa'] },
   { id: 'transactionDate', label: 'Transaction Date', type: 'date' },
@@ -42,7 +100,6 @@ export function buildDefaultBuFormConfig(bu: string): BuFormConfig {
       field('amount', 'Transaction Amount', 'currency', { order: 2, required: false }),
       field('terminalId', 'Terminal ID', 'text', { order: 3, required: false, showIf: { field: 'category', equals: 'Payment Dispute' } }),
       field('nipSessionId', 'NIP Session ID', 'text', { order: 4, required: false }),
-      field('bankName', 'Bank Name', 'select', { order: 5, required: false }),
       field('transactionDate', 'Transaction Date', 'date', { order: 6, required: false }),
       field('channel', 'Channel', 'select', { order: 7, required: false }),
       field('reason', 'Reason for Complaint', 'textarea', { order: 8, required: true }),
@@ -59,7 +116,12 @@ export function getDefaultBuFormConfigs(): BuFormConfig[] {
 
 export function getBuFormConfig(configs: BuFormConfig[] | undefined | null, bu: string): BuFormConfig {
   const found = configs?.find(c => c.bu === bu);
-  return found || buildDefaultBuFormConfig(bu);
+  if (!found) return buildDefaultBuFormConfig(bu);
+  // Legacy saved configs may still carry bankName in stage 2; the bank dropdown
+  // lives in Incident Details now, so strip it from the transaction phase.
+  const fields = found.fields.filter(f => f.id !== 'bankName');
+  if (fields.length === found.fields.length) return found;
+  return { ...found, fields };
 }
 
 export function validateFieldValue(fieldDef: FormFieldDefinition, value: FormFieldValue | undefined | null): string {

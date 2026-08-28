@@ -9,7 +9,7 @@ export default function LandingPage() {
   const year = new Date().getFullYear();
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-app text-white">
+    <div className="relative min-h-screen overflow-hidden bg-app text-[#fff]">
       {/* Full-bleed background image (responsive desktop/mobile variants) */}
       <div className="absolute inset-0">
         {!loading && desktop ? (
@@ -44,56 +44,58 @@ export default function LandingPage() {
       <div className="relative z-10 flex min-h-screen flex-col justify-between p-6 md:p-10">
         <header className="flex items-center justify-between">
           <div className="inline-flex items-center gap-2.5">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-white/25 bg-white/15 backdrop-blur-sm">
-              <Shield className="h-5 w-5 text-white" />
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl border border-[#fff]/25 bg-[#fff]/15 backdrop-blur-sm">
+              <Shield className="h-5 w-5 text-[#fff]" />
             </span>
-            <span className="text-lg font-bold tracking-tight text-white">{orgName}</span>
+            <span className="text-lg font-bold tracking-tight text-[#fff]">{orgName}</span>
           </div>
           <a
             href="/auth/login"
-            className="rounded-full border border-white/25 bg-black/25 px-4 py-2 text-sm font-semibold text-white backdrop-blur-sm transition hover:bg-black/40"
+            className="rounded-full border border-[#fff]/25 bg-[#000]/25 px-4 py-2 text-sm font-semibold text-[#fff] backdrop-blur-sm transition hover:bg-[#000]/40"
           >
             Sign in
           </a>
         </header>
 
         <main className="max-w-3xl">
-          <p className="mb-4 text-caption font-semibold uppercase tracking-widest text-white/80">
+          <p className="mb-4 text-caption font-semibold uppercase tracking-widest text-[#fff]/80">
             Payment Incident &amp; Operation Centre
           </p>
-          <h1 className="text-4xl font-bold leading-tight text-white drop-shadow-lg md:text-6xl">
+          <h1 className="text-3xl font-bold leading-tight text-[#fff] drop-shadow-lg sm:text-4xl md:text-6xl">
             {orgName}
-            <span className="block text-white/90">Incident Control &amp; Compliance Hub</span>
           </h1>
-          <p className="mt-4 max-w-xl text-base text-white/85 md:text-lg">
+          <h2 className="mt-2 text-xl font-semibold text-[#fff]/90 sm:text-2xl md:text-3xl">
+            Incident Control &amp; Compliance Hub
+          </h2>
+          <p className="mt-4 max-w-2xl text-sm leading-relaxed text-[#fff]/85 sm:text-base md:text-lg">
             Declare, track, and resolve payment operations incidents — with full audit trails, major
             incident war rooms, and executive compliance reporting.
           </p>
-          <div className="mt-8 flex flex-wrap items-center gap-3">
+          <div className="mt-8 flex items-center gap-3">
             <a
               href="/auth/login"
-              className="inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 text-sm font-semibold text-slate-900 shadow-lg transition-all duration-150 hover:bg-white/90"
+              className="inline-flex items-center gap-2 rounded-lg bg-[#fff] px-6 py-3 text-sm font-semibold text-text-primary shadow-lg transition-all duration-150 hover:bg-[#fff]/90"
             >
               Sign In <ArrowRight className="h-4 w-4" />
             </a>
             <a
               href="/auth/forgot-password"
-              className="inline-flex items-center gap-2 rounded-lg border border-white/30 bg-white/10 px-6 py-3 text-sm font-semibold text-white backdrop-blur-sm transition-all duration-150 hover:bg-white/20"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#fff]/30 bg-[#fff]/10 px-6 py-3 text-sm font-semibold text-[#fff] backdrop-blur-sm transition-all duration-150 hover:bg-[#fff]/20"
             >
               Forgot password?
             </a>
           </div>
         </main>
 
-        <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-white/70">
+        <footer className="flex flex-wrap items-center justify-between gap-3 text-xs text-[#fff]/70">
           <span>
             © {year} {orgName} Support. All rights reserved.
           </span>
           <div className="flex items-center gap-4">
-            <a href="/privacy-policy" className="transition hover:text-white">
+            <a href="/privacy-policy" className="transition hover:text-[#fff]">
               Privacy Policy
             </a>
-            <span className="text-white/40">·</span>
+            <span className="text-[#fff]/40">·</span>
             <span>Terms of Service</span>
           </div>
         </footer>

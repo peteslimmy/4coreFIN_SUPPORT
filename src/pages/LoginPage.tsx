@@ -93,9 +93,14 @@ export default function LoginPage() {
 
   return (
     <PageTransition>
-      <div className="relative flex min-h-screen overflow-hidden bg-app">
-        {/* Brand panel â€” visible on md+ */}
-        <aside className="relative hidden overflow-hidden p-10 text-white md:flex md:w-1/2 md:flex-col lg:w-[55%] lg:p-14">
+      <main className="relative flex min-h-screen overflow-hidden bg-app">
+        {/* Skip link */}
+        <a href="#login-form" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
+          Skip to login form
+        </a>
+
+        {/* Brand panel — visible on md+ */}
+        <aside className="relative hidden overflow-hidden p-10 text-[#fff] md:flex md:w-1/2 md:flex-col md:justify-end min-w-0 lg:w-[55%] lg:p-14">
           {/* Background: hero image, falling back to the brand gradient while loading/absent */}
           {imageLoading || !desktop ? (
             <div className="absolute inset-0 bg-gradient-to-br from-accent-dark via-accent to-accent-light" />
@@ -105,27 +110,27 @@ export default function LoginPage() {
                 src={desktop}
                 alt=""
                 aria-hidden="true"
-                className="absolute inset-0 h-full w-full object-cover"
+                className="absolute inset-0 h-full w-full object-cover object-top"
                 loading="eager"
                 fetchPriority="high"
                 decoding="async"
               />
-              <div className="absolute inset-0 bg-gradient-to-br from-black/70 via-black/45 to-black/65" />
-              <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent" />
+              <div className="absolute inset-0 bg-gradient-to-br from-black/60 via-black/35 to-black/55" />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/50 via-transparent to-transparent" />
             </>
           )}
-          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-white/10 blur-3xl" aria-hidden="true" />
-<div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-white/5 blur-3xl" aria-hidden="true" />
+          <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-surface-card/10 blur-3xl" aria-hidden="true" />
+          <div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-surface-card/5 blur-3xl" aria-hidden="true" />
 
-          <div className="relative z-10 mx-auto max-w-md text-center mt-auto">
-            <p className="mt-3 text-sm text-white/85 whitespace-nowrap">
+          <div className="relative z-10 mx-auto max-w-md text-center w-full">
+            <p className="mt-3 text-sm text-[#fff]/85 whitespace-nowrap">
               Manage incidents, evidence, and compliance from one command center.
             </p>
             <ul className="mt-6 space-y-3">
               {HIGHLIGHTS.map((item) => (
-                <li key={item} className="flex items-center justify-center gap-2.5 text-sm text-white/90">
-                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-white/15">
-                    <Check className="h-3 w-3 text-white" />
+                <li key={item} className="flex items-center justify-center gap-2.5 text-sm text-[#fff]/90">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-card/15">
+                    <Check className="h-3 w-3 text-[#fff]" />
                   </span>
                   {item}
                 </li>
@@ -133,21 +138,21 @@ export default function LoginPage() {
             </ul>
           </div>
 
-<footer className="relative z-10 pt-10 text-center text-xs text-white/70">
+          <footer className="relative z-10 pt-10 text-center text-xs text-[#fff]/70">
             © {year} {orgName} Support. All rights reserved.
           </footer>
         </aside>
 
         {/* Form panel */}
-        <main className="relative flex flex-1 items-center justify-center p-4 md:p-8">
+        <section className="relative flex flex-1 min-w-0 items-center justify-center p-4 md:p-8" aria-labelledby="login-heading">
           <AuthBackground />
 
           <div className="relative z-10 w-full max-w-sm">
             <AuthLogo />
-            <h1 className="text-center text-display font-bold text-text-primary">Sign in</h1>
+            <h1 id="login-heading" className="text-center text-display font-bold text-text-primary">Sign in</h1>
             <p className="mt-1 text-center text-body-sm text-text-muted">Welcome back! Please sign in to continue</p>
 
-            <form onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
+            <form id="login-form" onSubmit={handleSubmit} className="mt-8 space-y-5" noValidate>
               {error && (
                 <div className="flex items-center gap-2 rounded-xl border border-error/20 bg-error-light px-3 py-2 animate-slide-in" role="alert" aria-live="polite">
                   <AlertCircle className="h-4 w-4 shrink-0 text-error" />
@@ -257,7 +262,7 @@ export default function LoginPage() {
                     disabled={loading}
                     className="peer h-4 w-4 cursor-pointer appearance-none rounded border-2 border-border bg-surface-card transition-all duration-150 checked:border-accent checked:bg-accent focus-ring disabled:cursor-not-allowed disabled:opacity-50"
                   />
-                  <Check className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-white opacity-0 transition-opacity duration-150 peer-checked:opacity-100" />
+                  <Check className="pointer-events-none absolute inset-0 m-auto h-3 w-3 text-[#fff] opacity-0 transition-opacity duration-150 peer-checked:opacity-100" />
                 </span>
                 <span className="text-caption font-medium text-text-secondary">Remember me</span>
               </label>
@@ -265,11 +270,11 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || !email.trim() || !password.trim()}
-                className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-gradient-to-r from-accent to-accent-light text-sm font-semibold text-white shadow-card transition-all duration-150 hover:shadow-card-hover hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-gradient-to-r from-accent to-accent-light text-sm font-semibold text-[#fff] shadow-card transition-all duration-150 hover:shadow-card-hover hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
               >
                 {loading ? (
                   <>
-                    <span className="h-4 w-4 border-2 border-white/30 border-t-white animate-spin" />
+                    <span className="h-4 w-4 border-2 border-[#fff]/30 border-t-[#fff] animate-spin" />
                     Signing in...
                   </>
                 ) : (
@@ -286,8 +291,8 @@ export default function LoginPage() {
               <span>GAID 2025 Compliant</span>
             </div>
           </div>
-        </main>
-      </div>
+        </section>
+      </main>
     </PageTransition>
   );
 }

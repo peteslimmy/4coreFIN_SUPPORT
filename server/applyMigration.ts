@@ -2,14 +2,18 @@ import 'dotenv/config';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
-const SUPABASE_URL = process.env.SUPABASE_URL || 'https://kflxtzlwyxphfoghfvzq.supabase.co';
+const SUPABASE_URL = process.env.SUPABASE_URL;
 const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN || '';
-const PROJECT_REF = process.env.SUPABASE_PROJECT_REF || 'kflxtzlwyxphfoghfvzq';
+const PROJECT_REF = process.env.SUPABASE_PROJECT_REF;
 
 async function applyMigration() {
   try {
     if (!SUPABASE_ACCESS_TOKEN) {
       console.error('Missing SUPABASE_ACCESS_TOKEN. Add it to your .env file.');
+      process.exit(1);
+    }
+    if (!SUPABASE_URL || !PROJECT_REF) {
+      console.error('Missing SUPABASE_URL or SUPABASE_PROJECT_REF. Add them to your .env file.');
       process.exit(1);
     }
     console.log('Reading migration file 023...');

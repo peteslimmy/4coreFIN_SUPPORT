@@ -19,10 +19,8 @@ const updateOrganizationSchema = z.object({
 });
 
 const createBuSchema = z.object({
-  organizationId: z.string().uuid(),
-  // Matches the DB check constraint (migration 054): real BU codes are
-  // uppercase alphanumerics with hyphens, e.g. C4H, NBS, HEALTH-IN-BOX.
-  buid: z.string().regex(/^[A-Z0-9-]{2,20}$/),
+  // Matches the DB check constraint (migration 054): real BU codes are exactly 3 uppercase letters
+  buid: z.string().regex(/^[A-Z]{3}$/),
   name: z.string().min(1).max(200),
   tenantId: z.string().min(1),
   status: z.enum(['active', 'inactive']).optional().default('active'),
@@ -57,7 +55,7 @@ export function createOrganizationsRouter(): Router {
 
   // ── Organizations CRUD ────────────────────────────────────────
 
-  router.get('/organizations', requireAuth, requirePermission('admin:config'),
+  router.get('/organizations', requireAuth, requirePermission('admin:config:read'),
     async (_req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('organizations')).select('*').order('name');
@@ -66,7 +64,7 @@ export function createOrganizationsRouter(): Router {
     }
   );
 
-  router.get('/organizations/:id', requireAuth, requirePermission('admin:config'),
+  router.get('/organizations/:id', requireAuth, requirePermission('admin:config:read'),
     async (req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('organizations')).select('*').eq('id', req.params.id).single();
@@ -100,7 +98,7 @@ export function createOrganizationsRouter(): Router {
 
   // ── Business Units CRUD ───────────────────────────────────────
 
-  router.get('/business-units', requireAuth, requirePermission('admin:config'),
+  router.get('/business-units', requireAuth, requirePermission('admin:config:read'),
     async (_req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('business_units')).select('*').order('buid');
@@ -109,7 +107,7 @@ export function createOrganizationsRouter(): Router {
     }
   );
 
-  router.get('/business-units/:id', requireAuth, requirePermission('admin:config'),
+  router.get('/business-units/:id', requireAuth, requirePermission('admin:config:read'),
     async (req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('business_units')).select('*').eq('id', req.params.id).single();
@@ -143,7 +141,7 @@ export function createOrganizationsRouter(): Router {
 
   // ── Payment Partners CRUD ─────────────────────────────────────
 
-  router.get('/payment-partners', requireAuth, requirePermission('admin:config'),
+  router.get('/payment-partners', requireAuth, requirePermission('admin:config:read'),
     async (_req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('payment_partners')).select('*').order('name');
@@ -152,7 +150,7 @@ export function createOrganizationsRouter(): Router {
     }
   );
 
-  router.get('/payment-partners/:id', requireAuth, requirePermission('admin:config'),
+  router.get('/payment-partners/:id', requireAuth, requirePermission('admin:config:read'),
     async (req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('payment_partners')).select('*').eq('id', req.params.id).single();
@@ -186,7 +184,7 @@ export function createOrganizationsRouter(): Router {
 
   // ── Partner-BU Junction ───────────────────────────────────────
 
-  router.get('/partner-bu-links', requireAuth, requirePermission('admin:config'),
+  router.get('/partner-bu-links', requireAuth, requirePermission('admin:config:read'),
     async (req: AuthedRequest, res: Response) => {
       const { partnerId, buId } = req.query;
       let q = supabase.from(TBL('payment_partner_business_units')).select('*');
@@ -224,7 +222,7 @@ export function createOrganizationsRouter(): Router {
 
   // ── Partner-BU lookup ─────────────────────────────────────────
 
-  router.get('/payment-partners/:id/business-units', requireAuth, requirePermission('admin:config'),
+  router.get('/payment-partners/:id/business-units', requireAuth, requirePermission('admin:config:read'),
     async (req: AuthedRequest, res: Response) => {
       const { data: links, error: linkErr } = await supabase
         .from(TBL('payment_partner_business_units'))

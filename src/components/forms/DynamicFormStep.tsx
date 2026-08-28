@@ -50,14 +50,15 @@ export default function DynamicFormStep({ config, values, errors = {}, onChange,
       case 'file':
         return (
           <div className="col-span-1 sm:col-span-2">
-            <label className="block text-xs font-semibold text-text-secondary mb-1.5">
+            <label htmlFor={`field-${f.id}`} className="block text-xs font-semibold text-text-secondary mb-1.5">
               {f.label}{f.required ? ' *' : ''}
             </label>
             <input
+              id={`field-${f.id}`}
               type="file"
               multiple
               disabled={disabled}
-              className="block w-full text-sm text-text-primary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-white file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-accent-dark disabled:opacity-50"
+              className="block w-full text-sm text-text-primary file:mr-3 file:py-2 file:px-4 file:rounded-lg file:border-0 file:bg-accent file:text-[#fff] file:text-xs file:font-semibold file:cursor-pointer hover:file:bg-accent-dark disabled:opacity-50"
             />
             {f.helpText && <p className="text-[11px] text-text-muted mt-1">{f.helpText}</p>}
           </div>

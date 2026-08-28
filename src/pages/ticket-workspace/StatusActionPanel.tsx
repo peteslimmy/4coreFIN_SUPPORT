@@ -1,5 +1,5 @@
 import React from 'react';
-import { CheckCircle, AlertTriangle, ClipboardList, Sparkles, UserCheck } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ClipboardList, Sparkles, UserCheck, Handshake } from 'lucide-react';
 
 export type TicketActionState =
   | { kind: 'receipt' }
@@ -8,7 +8,8 @@ export type TicketActionState =
   | { kind: 'rca-form' }
   | { kind: 'validate-resolution' }
   | { kind: 'readout' }
-  | { kind: 'terminal' };
+  | { kind: 'terminal' }
+  | { kind: 'partner-review' };
 
 export type ReceiptActionState = { kind: 'receipt' };
 export type BeginInvestigationActionState = { kind: 'begin-investigation' };
@@ -57,6 +58,18 @@ export default function StatusActionPanel({
     );
   }
 
+  if (state.kind === 'partner-review') {
+    return (
+      <div className="bg-primary-light rounded-xl p-6">
+        <div className="flex items-center gap-2">
+          <Handshake className="w-5 h-5 text-primary" />
+          <h4 className="text-body-sm font-semibold text-text-primary">With Payment Partner</h4>
+        </div>
+        <p className="text-xs text-text-muted mt-1 max-w-xl">Investigation is handled by the payment partner's support team. You can still escalate, merge, or close this ticket once the partner resolves it.</p>
+      </div>
+    );
+  }
+
   if (state.kind === 'begin-investigation') {
     return (
       <div className="bg-warning-light rounded-xl p-6">
@@ -65,7 +78,7 @@ export default function StatusActionPanel({
             <h4 className="text-body-sm font-semibold flex items-center gap-2 text-text-primary"><ClipboardList className="w-5 h-5 text-warning" /> Begin Investigation</h4>
             <p className="text-xs text-text-muted mt-1 max-w-xl">Initiate investigation protocol per standard procedures.</p>
           </div>
-          <button onClick={onBeginInvestigation} className="px-5 py-2.5 bg-warning hover:bg-warning-dark text-white font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0">
+          <button onClick={onBeginInvestigation} className="px-5 py-2.5 bg-warning hover:bg-warning-dark text-[#fff] font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0">
             <Sparkles className="w-4 h-4" /> Start Investigation
           </button>
         </div>
@@ -85,7 +98,7 @@ export default function StatusActionPanel({
         </div>
         <p className="text-xs text-text-muted leading-relaxed">Investigation is underway. Mark as resolved when findings are complete to proceed to the resolution declaration.</p>
         <div className="flex justify-end">
-          <button onClick={onMarkResolved} className="px-5 py-2.5 bg-success hover:bg-success-dark text-white font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0 cursor-pointer">
+          <button onClick={onMarkResolved} className="px-5 py-2.5 bg-success hover:bg-success-dark text-[#fff] font-semibold rounded-lg text-xs transition focus-ring flex items-center gap-1.5 shrink-0 cursor-pointer">
             <CheckCircle className="w-4 h-4" /> Resolved
           </button>
         </div>
@@ -100,7 +113,7 @@ export default function StatusActionPanel({
           <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
             <h4 className="text-body-sm font-semibold flex items-center gap-2 text-text-primary"><Sparkles className="w-5 h-5 text-primary" /> Declare Resolution (RCA Required)</h4>
             <div className="flex items-center gap-2">
-              <button type="button" onClick={onAiGenerateRca} disabled={isRcaGenerating} className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 transition focus-ring cursor-pointer disabled:opacity-50">
+              <button type="button" onClick={onAiGenerateRca} disabled={isRcaGenerating} className="px-3 py-1.5 bg-primary hover:bg-primary-dark text-[#fff] rounded-lg text-xs font-semibold flex items-center gap-1.5 transition focus-ring cursor-pointer disabled:opacity-50">
                 {isRcaGenerating ? 'Drafting...' : '✨ AI Draft'}
               </button>
             </div>
@@ -135,7 +148,7 @@ export default function StatusActionPanel({
             </div>
           </div>
           <div className="flex items-center gap-3 mt-4">
-            <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-semibold transition focus-ring flex items-center gap-2">
+            <button type="submit" className="px-5 py-2.5 bg-primary hover:bg-primary-dark text-[#fff] rounded-lg text-xs font-semibold transition focus-ring flex items-center gap-2">
               <CheckCircle className="w-4 h-4" /> Submit
             </button>
             <button type="button" onClick={onSaveTemplate} className="px-3 py-2 bg-surface hover:bg-surface-card text-text-primary rounded-lg text-xs font-semibold transition focus-ring">Save Template</button>
@@ -149,7 +162,7 @@ export default function StatusActionPanel({
     return (
       <div className="bg-accent/5 border border-accent/10 rounded-xl p-5">
         <div className="flex items-start gap-4">
-          <div className="p-3 bg-accent rounded-lg text-white shrink-0"><UserCheck className="w-5 h-5" /></div>
+          <div className="p-3 bg-accent rounded-lg text-[#fff] shrink-0"><UserCheck className="w-5 h-5" /></div>
           <div className="flex-1">
             <h4 className="text-body-sm font-bold text-text-primary">Resolution Validation Required</h4>
             <p className="text-xs text-text-muted mt-1 mb-4 leading-relaxed">Partner declared this resolved. Validate and provide feedback.</p>
@@ -158,13 +171,13 @@ export default function StatusActionPanel({
                 <span className="text-xs font-semibold text-text-primary">Rating:</span>
                 <div className="flex gap-1">
                   {[1, 2, 3, 4, 5].map(star => (
-                    <button key={star} type="button" onClick={() => setFeedbackScore(star)} className={`w-8 h-8 text-xs font-bold rounded-full border transition focus-ring ${feedbackScore === star ? 'bg-primary text-white border-primary' : 'bg-surface-elevated text-text-muted border-border hover:bg-surface-hover'}`}>{star}</button>
+                    <button key={star} type="button" onClick={() => setFeedbackScore(star)} className={`w-8 h-8 text-xs font-bold rounded-full border transition focus-ring ${feedbackScore === star ? 'bg-primary text-[#fff] border-primary' : 'bg-surface-elevated text-text-muted border-border hover:bg-surface-hover'}`}>{star}</button>
                   ))}
                 </div>
               </div>
               <input type="text" placeholder="Feedback (required on rejection)..." value={feedbackComment} onChange={e => setFeedbackComment(e.target.value)} className="w-full text-xs bg-surface-elevated border border-border rounded-lg p-3 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none transition-all duration-200 focus-ring text-text-primary" />
               <div className="flex gap-2">
-                <button type="button" onClick={() => onResolutionResponse(true)} className="px-5 py-2 bg-success hover:bg-success-dark text-white rounded-lg text-xs font-semibold transition focus-ring">Accept & Close</button>
+                <button type="button" onClick={() => onResolutionResponse(true)} className="px-5 py-2 bg-success hover:bg-success-dark text-[#fff] rounded-lg text-xs font-semibold transition focus-ring">Accept & Close</button>
                 <button type="button" onClick={() => onResolutionResponse(false)} className="px-5 py-2 bg-surface-elevated text-error border border-error rounded-lg text-xs font-semibold hover:bg-error-light transition focus-ring">Reject & Reopen</button>
               </div>
             </div>

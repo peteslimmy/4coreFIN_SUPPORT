@@ -11,7 +11,7 @@ vi.mock('../../server/supabase', () => {
 import express from 'express';
 import { supabase } from '../../server/supabase';
 import { createApiRouter } from '../../server/routes';
-import { requireCsrf, hashPassword } from '../../server/auth';
+import { requireCsrf, hashPassword, type AuthedRequest } from '../../server/auth';
 import { createFakeSupabase, type TableStore } from '@/tests/helpers/fakeSupabase';
 
 const ALPHA = 'tnt-ALPHA';
@@ -68,7 +68,7 @@ let server: Server | undefined;
 
 const app = express();
 app.use(express.json({ limit: "5mb" }));
-app.use('/api', (req, res, next) => requireCsrf(req as any, res, next));
+app.use('/api', (req, res, next) => requireCsrf(req as unknown as AuthedRequest, res, next));
 app.use('/api', createApiRouter());
 
 interface Session { session: string; csrf: string; }
@@ -149,9 +149,9 @@ describe('Search domain', () => {
       const data = await res.json();
       expect(Array.isArray(data)).toBe(true);
       expect(data.length).toBe(2);
-      expect(data.every((s: any) => s.active === true)).toBe(true);
-      expect(data.some((s: any) => s.keyword === 'payments')).toBe(true);
-      expect(data.some((s: any) => s.keyword === 'users')).toBe(true);
+      expect(data.every((s: Record<string, unknown>) => s.active === true)).toBe(true);
+      expect(data.some((s: Record<string, unknown>) => s.keyword === 'payments')).toBe(true);
+      expect(data.some((s: Record<string, unknown>) => s.keyword === 'users')).toBe(true);
     });
   });
 
@@ -162,7 +162,7 @@ describe('Search domain', () => {
       const data = await res.json();
       expect(Array.isArray(data)).toBe(true);
       expect(data.length).toBe(3);
-      const queries = data.map((r: any) => r.query);
+      const queries = data.map((r: Record<string, unknown>) => r.query);
       expect(new Set(queries).size).toBe(queries.length);
       expect(queries[0]).toBe('payment');
       expect(queries[1]).toBe('login');

@@ -163,7 +163,6 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
             </p>
             <label
               className="flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border bg-surface-elevated/50 px-6 py-10 cursor-pointer hover:bg-surface-hover/40 transition-colors focus-ring"
-              role="button"
             >
               <input
                 ref={fileInputRef}

@@ -27,8 +27,9 @@ export default function ColorPicker({ value, onChange, label }: ColorPickerProps
         />
       </div>
       <div className="flex-1">
-        {label && <label className="text-xs font-medium text-text-secondary block mb-1">{label}</label>}
+        {label && <label htmlFor={`color-${label}`} className="text-xs font-medium text-text-secondary block mb-1">{label}</label>}
         <input
+          id={`color-${label}`}
           type="text"
           value={hex}
           onChange={(e) => handleChange(e.target.value)}

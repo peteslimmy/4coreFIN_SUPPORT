@@ -35,7 +35,7 @@ const Pagination = ({
   const itemBase =
     'inline-flex items-center justify-center h-8 min-w-8 px-2 text-xs font-medium rounded-md transition-colors focus-ring';
   const itemIdle = 'text-text-secondary hover:bg-surface-hover hover:text-text-primary';
-  const itemActive = 'bg-primary text-white';
+  const itemActive = 'bg-primary text-[#fff]';
 
   return (
     <nav aria-label="Pagination" className="flex flex-wrap items-center justify-between gap-3">

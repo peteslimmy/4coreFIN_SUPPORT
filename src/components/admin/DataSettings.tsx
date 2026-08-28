@@ -4,6 +4,7 @@ import { useApp } from '../../context/AppContext';
 import ConfirmModal from '../ui/ConfirmModal';
 
 const STORAGE_PREFIX = '4c_';
+const PAGE_RELOAD_DELAY = 1500;
 
 export default function DataSettings() {
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -47,7 +48,7 @@ export default function DataSettings() {
           }
         }
         showToast(`Restored ${count} data entries. Reloading page...`, 'success');
-        setTimeout(() => window.location.reload(), 1500);
+        setTimeout(() => window.location.reload(), PAGE_RELOAD_DELAY);
       } catch {
         showToast('Invalid backup file format.', 'error');
       }
@@ -68,7 +69,7 @@ export default function DataSettings() {
       }
     }
     showToast('All data cleared. Reloading...', 'info');
-    setTimeout(() => window.location.reload(), 1500);
+    setTimeout(() => window.location.reload(), PAGE_RELOAD_DELAY);
   };
 
   return (

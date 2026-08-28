@@ -87,6 +87,13 @@ export const BU_AGENT_ROLES: UserRole[] = [
 /** BU-side roles plus the payment-partner role. */
 export const BU_AGENT_AND_PARTNER_ROLES: UserRole[] = [...BU_AGENT_ROLES, UserRole.PARTNER];
 
+/**
+ * Roles allowed to run an investigation. Payment-partner support owns RCA;
+ * BU support submits and routes tickets but never investigates them.
+ * SUPER_ADMIN retains the platform-wide override.
+ */
+export const INVESTIGATOR_ROLES: UserRole[] = [UserRole.SUPER_ADMIN, UserRole.PARTNER];
+
 export const TRANSITIONS: TransitionRule[] = [
   {
     from: TicketStatus.RECEIPT,
@@ -103,20 +110,21 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'BEGIN_INVESTIGATION',
     label: 'Start Investigation',
     customerFacingLabel: 'In Review',
-    roles: BU_AGENT_AND_PARTNER_ROLES,
+    // Only payment-partner support investigates; BU support submits/routes only.
+    roles: INVESTIGATOR_ROLES,
     canTransition: (t) => !!t.assignedAgentId,
   },
-  // Waiting states: entered from INVESTIGATE by BU agents when the case needs
-  // an external or internal input before work can continue. Entering a waiting
-  // state starts the SLA pause clock; resuming accumulates the paused span so
-  // the effective deadline shifts forward without rewriting the original.
+  // Waiting states: entered from INVESTIGATE while the case needs an external
+  // or internal input before work can continue. Entering a waiting state starts
+  // the SLA pause clock; resuming accumulates the paused span so the effective
+  // deadline shifts forward without rewriting the original.
   {
     from: TicketStatus.INVESTIGATE,
     to: TicketStatus.WAITING_CUSTOMER,
     event: 'WAIT_CUSTOMER',
     label: 'Wait for Customer',
     customerFacingLabel: 'Waiting on You',
-    roles: BU_AGENT_ROLES,
+    roles: INVESTIGATOR_ROLES,
     canTransition: () => true,
     mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
   },
@@ -126,7 +134,8 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'WAIT_PARTNER',
     label: 'Wait for Partner',
     customerFacingLabel: 'With Payment Partner',
-    roles: BU_AGENT_ROLES,
+    // BU support routes cases to the partner desk without investigating.
+    roles: BU_AGENT_AND_PARTNER_ROLES,
     canTransition: () => true,
     mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
   },
@@ -136,7 +145,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'WAIT_INTERNAL',
     label: 'Wait Internal',
     customerFacingLabel: 'In Review',
-    roles: BU_AGENT_ROLES,
+    roles: INVESTIGATOR_ROLES,
     canTransition: () => true,
     mutate: () => ({ slaPauseStartedAt: new Date().toISOString() }),
   },
@@ -148,7 +157,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'CUSTOMER_REPLIED',
     label: 'Customer Replied',
     customerFacingLabel: 'In Review',
-    roles: BU_AGENT_ROLES,
+    roles: INVESTIGATOR_ROLES,
     canTransition: () => true,
     mutate: (t) => accumulatePause(t),
   },
@@ -168,7 +177,7 @@ export const TRANSITIONS: TransitionRule[] = [
     event: 'INTERNAL_RESUMED',
     label: 'Resume Investigation',
     customerFacingLabel: 'In Review',
-    roles: BU_AGENT_ROLES,
+    roles: INVESTIGATOR_ROLES,
     canTransition: () => true,
     mutate: (t) => accumulatePause(t),
   },

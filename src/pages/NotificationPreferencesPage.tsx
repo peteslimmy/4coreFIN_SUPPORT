@@ -3,8 +3,6 @@ import {
   Button,
   Input,
   Label,
-  Textarea,
-  Separator,
   useToast,
   Tabs,
   TabsList,
@@ -18,13 +16,14 @@ import { CheckCircle2, RefreshCw } from 'lucide-react';
 import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
+import ConfirmModal from '../components/ui/ConfirmModal';
 
 export default function NotificationPreferencesPage() {
   const { toast } = useToast();
-  const [preferences, setPreferences] = useState<any>(null);
+  const [preferences, setPreferences] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'email' | 'sms' | 'in-app' | 'ticket' | 'system'>('general');
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
 
   // Form state
   const [generalPrefs, setGeneralPrefs] = useState({
@@ -94,89 +93,89 @@ export default function NotificationPreferencesPage() {
     errorNotificationThreshold: 5,
   });
 
-  const loadPreferences = async () => {
-    setLoading(true);
-    try {
-      const data = await api.getNotificationPreferences();
-      setPreferences(data);
-
-      // Initialize form states with loaded data
-      setGeneralPrefs({
-        emailNotifications: data.email_notifications ?? true,
-        smsNotifications: data.sms_notifications ?? false,
-        inAppNotifications: data.in_app_notifications ?? true,
-        notifyOnAssignment: data.notify_on_assignment ?? true,
-        notifyOnStatusChange: data.notify_on_status_change ?? true,
-        notifyOnComment: data.notify_on_comment ?? true,
-        notifyOnMention: data.notify_on_mention ?? true,
-        digestFrequency: data.digest_frequency ?? 'immediate',
-        quietHoursEnabled: data.quiet_hours_enabled ?? false,
-        quietHoursStart: data.quiet_hours_start ?? '22:00',
-        quietHoursEnd: data.quiet_hours_end ?? '06:00',
-      });
-
-      setEmailPrefs({
-        emailEnabled: data.email_enabled ?? true,
-        notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
-        notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
-        notifyOnMajorIncident: data.notify_on_major_incident ?? true,
-        notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
-        emailFrequency: data.email_frequency ?? 'real-time',
-        includeTicketDetails: data.include_ticket_details ?? true,
-        includeAttachments: data.include_attachments ?? false,
-      });
-
-      setSmsPrefs({
-        smsEnabled: data.sms_enabled ?? false,
-        notifyOnCriticalTickets: data.notify_on_critical_tickets ?? true,
-        notifyOnMajorIncidents: data.notify_on_major_incidents ?? true,
-        notifyOnEscalations: data.notify_on_escalations ?? true,
-        phoneNumber: data.phone_number ?? '',
-        carrier: data.carrier ?? '',
-      });
-
-      setInAppPrefs({
-        inAppEnabled: data.in_app_enabled ?? true,
-        notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
-        notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
-        notifyOnMajorIncident: data.notify_on_major_incident ?? true,
-        notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
-        showNotifications: data.show_notifications ?? true,
-        playSound: data.play_sound ?? true,
-        notificationDuration: data.notification_duration ?? 5000,
-      });
-
-      setTicketPrefs({
-        ticketNotifications: data.ticket_notifications ?? true,
-        notifyOnNewTicket: data.notify_on_new_ticket ?? true,
-        notifyOnAssignedTicket: data.notify_on_assigned_ticket ?? true,
-        notifyOnStatusChange: data.notify_on_status_change ?? true,
-        notifyOnPriorityChange: data.notify_on_priority_change ?? true,
-        notifyOnCustomerReply: data.notify_on_customer_reply ?? true,
-        notifyOnInternalComment: data.notify_on_internal_comment ?? false,
-        notifyOnMention: data.notify_on_mention ?? true,
-        autoWatchAssigned: data.auto_watch_assigned ?? true,
-        watchFrequency: data.watch_frequency ?? 'real-time',
-      });
-
-      setSystemPrefs({
-        systemAlertsEnabled: data.system_alerts_enabled ?? true,
-        notifyOnMaintenance: data.notify_on_maintenance ?? true,
-        notifyOnDeployments: data.notify_on_deployments ?? true,
-        notifyOnSystemErrors: data.notify_on_system_errors ?? true,
-        maintenanceWindow: data.maintenance_window ?? '02:00-04:00',
-        errorNotificationThreshold: data.error_notification_threshold ?? 5,
-      });
-    } catch (error: any) {
-      toast.error(`Failed to load preferences: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
+    const loadPreferences = async () => {
+      setLoading(true);
+      try {
+        const data = await api.getNotificationPreferences();
+        setPreferences(data as Record<string, unknown>);
+
+        // Initialize form states with loaded data
+        setGeneralPrefs({
+          emailNotifications: data.email_notifications ?? true,
+          smsNotifications: data.sms_notifications ?? false,
+          inAppNotifications: data.in_app_notifications ?? true,
+          notifyOnAssignment: data.notify_on_assignment ?? true,
+          notifyOnStatusChange: data.notify_on_status_change ?? true,
+          notifyOnComment: data.notify_on_comment ?? true,
+          notifyOnMention: data.notify_on_mention ?? true,
+          digestFrequency: data.digest_frequency ?? 'immediate',
+          quietHoursEnabled: data.quiet_hours_enabled ?? false,
+          quietHoursStart: data.quiet_hours_start ?? '22:00',
+          quietHoursEnd: data.quiet_hours_end ?? '06:00',
+        });
+
+        setEmailPrefs({
+          emailEnabled: data.email_enabled ?? true,
+          notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
+          notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
+          notifyOnMajorIncident: data.notify_on_major_incident ?? true,
+          notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
+          emailFrequency: data.email_frequency ?? 'real-time',
+          includeTicketDetails: data.include_ticket_details ?? true,
+          includeAttachments: data.include_attachments ?? false,
+        });
+
+        setSmsPrefs({
+          smsEnabled: data.sms_enabled ?? false,
+          notifyOnCriticalTickets: data.notify_on_critical_tickets ?? true,
+          notifyOnMajorIncidents: data.notify_on_major_incidents ?? true,
+          notifyOnEscalations: data.notify_on_escalations ?? true,
+          phoneNumber: data.phone_number ?? '',
+          carrier: data.carrier ?? '',
+        });
+
+        setInAppPrefs({
+          inAppEnabled: data.in_app_enabled ?? true,
+          notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
+          notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
+          notifyOnMajorIncident: data.notify_on_major_incident ?? true,
+          notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
+          showNotifications: data.show_notifications ?? true,
+          playSound: data.play_sound ?? true,
+          notificationDuration: data.notification_duration ?? 5000,
+        });
+
+        setTicketPrefs({
+          ticketNotifications: data.ticket_notifications ?? true,
+          notifyOnNewTicket: data.notify_on_new_ticket ?? true,
+          notifyOnAssignedTicket: data.notify_on_assigned_ticket ?? true,
+          notifyOnStatusChange: data.notify_on_status_change ?? true,
+          notifyOnPriorityChange: data.notify_on_priority_change ?? true,
+          notifyOnCustomerReply: data.notify_on_customer_reply ?? true,
+          notifyOnInternalComment: data.notify_on_internal_comment ?? false,
+          notifyOnMention: data.notify_on_mention ?? true,
+          autoWatchAssigned: data.auto_watch_assigned ?? true,
+          watchFrequency: data.watch_frequency ?? 'real-time',
+        });
+
+        setSystemPrefs({
+          systemAlertsEnabled: data.system_alerts_enabled ?? true,
+          notifyOnMaintenance: data.notify_on_maintenance ?? true,
+          notifyOnDeployments: data.notify_on_deployments ?? true,
+          notifyOnSystemErrors: data.notify_on_system_errors ?? true,
+          maintenanceWindow: data.maintenance_window ?? '02:00-04:00',
+          errorNotificationThreshold: data.error_notification_threshold ?? 5,
+        });
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : 'Failed to load preferences.';
+        toast.error(`Failed to load preferences: ${message}`);
+      } finally {
+        setLoading(false);
+      }
+    };
     loadPreferences();
-  }, []);
+  }, [toast]);
 
   const handleSavePreferences = async () => {
     setSaving(true);
@@ -192,16 +191,20 @@ export default function NotificationPreferencesPage() {
 
       await api.updateNotificationPreferences(combinedPrefs);
       toast.success('Notification preferences saved successfully');
-    } catch (error: any) {
-      toast.error(`Failed to save preferences: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to save preferences.';
+      toast.error(`Failed to save preferences: ${message}`);
     } finally {
       setSaving(false);
     }
   };
 
   const handleResetToDefaults = async () => {
-    if (!window.confirm('Reset all notification preferences to default values?')) return;
-    
+    setShowResetConfirm(true);
+  };
+
+  const confirmResetToDefaults = async () => {
+    setShowResetConfirm(false);
     setSaving(true);
     try {
       await api.updateNotificationPreferences({
@@ -250,8 +253,9 @@ export default function NotificationPreferencesPage() {
         errorNotificationThreshold: 5,
       });
       toast.success('Preferences reset to default values');
-    } catch (error: any) {
-      toast.error(`Failed to reset preferences: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Failed to reset preferences.';
+      toast.error(`Failed to reset preferences: ${message}`);
     } finally {
       setSaving(false);
     }
@@ -849,6 +853,15 @@ export default function NotificationPreferencesPage() {
             </div>
           </TabsContent>
         </Tabs>
+        <ConfirmModal
+          isOpen={showResetConfirm}
+          onClose={() => setShowResetConfirm(false)}
+          onConfirm={confirmResetToDefaults}
+          title="Reset to Defaults"
+          message="Reset all notification preferences to default values?"
+          confirmLabel="Reset"
+          variant="danger"
+        />
     </PageContainer>
     </PageTransition>
   );

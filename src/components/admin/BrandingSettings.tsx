@@ -4,9 +4,14 @@ import { authorizedFetch } from '../../lib/api';
 import FileUpload from '../ui/FileUpload';
 import { Save, RefreshCw } from 'lucide-react';
 
+const SUCCESS_RESET_DELAY = 3000;
+const ERROR_RESET_DELAY = 5000;
+const SAVED_RESET_DELAY = 2000;
+const DEFAULT_ORG_NAME = '4CoreFin';
+
 export default function BrandingSettings() {
   const { settings, updateSetting, refresh } = useSettings();
-  const [orgName, setOrgName] = useState(settings['branding.org_name'] || '4CoreFin');
+  const [orgName, setOrgName] = useState(settings['branding.org_name'] || DEFAULT_ORG_NAME);
   const [saved, setSaved] = useState(false);
   const [previewMode, setPreviewMode] = useState<'light' | 'dark'>('light');
   const [uploadStatus, setUploadStatus] = useState<{
@@ -80,7 +85,7 @@ export default function BrandingSettings() {
                     const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
                     return { ...prev, [key]: 'idle' };
                   });
-                }, 3000);
+                }, SUCCESS_RESET_DELAY);
               }
               results.push(`/api/public/branding/${settingKey?.split('.').pop()}`);
             } else {
@@ -90,12 +95,12 @@ export default function BrandingSettings() {
                 return { ...prev, [key]: 'error' };
               });
               // Reset status after 5 seconds
-              setTimeout(() => {
-                setUploadStatus(prev => {
-                  const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
-                  return { ...prev, [key]: 'idle' };
-                });
-              }, 5000);
+setTimeout(() => {
+                  setUploadStatus(prev => {
+                    const key = settingKey?.split('.').pop() as keyof typeof uploadStatus;
+                    return { ...prev, [key]: 'idle' };
+                  });
+                }, ERROR_RESET_DELAY);
               results.push(null);
             }
           } catch {
@@ -123,7 +128,7 @@ export default function BrandingSettings() {
   const handleSave = async () => {
     await updateSetting('branding.org_name', orgName);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), SAVED_RESET_DELAY);
   };
 
   const handleLogoSizeChange = (e: ChangeEvent<HTMLInputElement>) => {
@@ -151,8 +156,9 @@ export default function BrandingSettings() {
     <div className="space-y-6">
       {/* Organization Name */}
       <div>
-        <label className="text-xs font-medium text-text-secondary block mb-1">Organization Name</label>
+        <label htmlFor="org-name" className="text-xs font-medium text-text-secondary block mb-1">Organization Name</label>
         <input
+          id="org-name"
           type="text"
           value={orgName}
           onChange={(e) => setOrgName(e.target.value)}
@@ -212,11 +218,12 @@ export default function BrandingSettings() {
 
       {/* Logo Size Control */}
       <div className="space-y-4">
-        <label className="text-xs font-medium text-text-secondary block mb-1">
+        <label htmlFor="logo-size" className="text-xs font-medium text-text-secondary block mb-1">
           Logo Size
         </label>
         <div className="flex items-center space-x-3">
           <input
+            id="logo-size"
             type="range"
             min={16}
             max={128}
@@ -278,7 +285,7 @@ export default function BrandingSettings() {
             </button>
             <button
               onClick={() => setPreviewMode('dark')}
-              className={`px-3 py-1 text-xs rounded transition ${previewMode === 'dark' ? 'bg-surface-card text-white' : 'text-text-muted hover:text-text-primary'}`}
+              className={`px-3 py-1 text-xs rounded transition ${previewMode === 'dark' ? 'bg-surface-card text-[#fff]' : 'text-text-muted hover:text-text-primary'}`}
             >
               Dark
             </button>
@@ -296,7 +303,7 @@ export default function BrandingSettings() {
                 style={{ height: 'auto', width: 'auto' }}
               />
             ) : (
-              <span className={`text-lg font-bold ${previewMode === 'dark' ? 'text-white' : 'text-text-primary'}`}>
+              <span className={`text-lg font-bold ${previewMode === 'dark' ? 'text-[#fff]' : 'text-text-primary'}`}>
                 {orgName}
               </span>
             )}
@@ -310,7 +317,7 @@ export default function BrandingSettings() {
       {/* Save */}
       <button
         onClick={handleSave}
-        className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-light transition"
+        className="flex items-center gap-2 px-4 py-2 bg-accent text-[#fff] rounded-lg text-xs font-semibold hover:bg-accent-light transition"
       >
         <Save className="w-4 h-4" />
         {saved ? 'Saved!' : 'Save Branding'}

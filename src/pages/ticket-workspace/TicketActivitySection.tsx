@@ -1,7 +1,7 @@
 import React, { useRef, useEffect, useState } from "react";
-import { Check, MessageSquare, Send, Bold as BoldIcon, Paperclip, AtSign, CheckCircle2, AlertCircle } from "lucide-react";
+import { Check, MessageSquare, Send, Bold as BoldIcon, Paperclip, AtSign, CheckCircle2, AlertCircle, FileText } from "lucide-react";
 
-import type { CommentRecord, TicketRecord } from "../../types/app";
+import type { CommentRecord, FileEvidence, TicketRecord } from "../../types/app";
 import { UserRole } from "../../types/app";
 import EmptyState from "../../components/ui/EmptyState";
 import { useApp } from "../../context/AppContext";
@@ -36,7 +36,7 @@ export default function TicketActivitySection({
   onSendComment, onInjectSavedReply, onManualEscalate, onKeyDown, onSendToEveryone,
 }: TicketActivitySectionProps) {
   const {
-    comments, users, currentRole, savedReplies, currentUser, setEvidence, showToast,
+    comments, users, currentRole, savedReplies, currentUser, setEvidence, showToast, evidence,
   } = useApp();
 
   const activityRef = useRef<HTMLDivElement>(null);
@@ -183,6 +183,17 @@ export default function TicketActivitySection({
           const ticketComments = comments.filter(c => c.ticketId === activeTicket.id);
           const topLevel = ticketComments.filter(c => !c.parentCommentId);
           const replies = ticketComments.filter(c => c.parentCommentId);
+          const ticketEvidence = evidence
+            .filter(ev => ev.ticketId === activeTicket.id)
+            .sort((a, b) => new Date(a.uploadedAt).getTime() - new Date(b.uploadedAt).getTime());
+
+          type TimelineItem =
+            | { kind: 'comment'; ts: number; comment: CommentRecord }
+            | { kind: 'evidence'; ts: number; ev: FileEvidence };
+          const timeline: TimelineItem[] = [
+            ...topLevel.map(c => ({ kind: 'comment' as const, ts: new Date(c.timestamp).getTime(), comment: c })),
+            ...ticketEvidence.map(ev => ({ kind: 'evidence' as const, ts: new Date(ev.uploadedAt).getTime(), ev })),
+          ].sort((a, b) => a.ts - b.ts);
 
           const formatDateLabel = (ts: string) => {
             const d = new Date(ts);
@@ -262,7 +273,38 @@ export default function TicketActivitySection({
             );
           };
 
-          if (topLevel.length === 0) {
+          const renderEvidence = (ev: FileEvidence) => (
+            <div className="flex justify-start">
+              {ev.url ? (
+                <a
+                  href={ev.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  title={`${ev.fileName} — uploaded by ${ev.uploadedBy}`}
+                  className="max-w-[85%] min-w-0 flex items-center gap-1.5 rounded-lg border border-accent/25 bg-accent/5 px-2 py-1 hover:border-accent/50 transition"
+                >
+                  {ev.fileType?.startsWith("image/") ? (
+                    <img src={ev.url} alt={ev.fileName} className="w-4 h-4 rounded object-cover shrink-0" />
+                  ) : (
+                    <FileText className="w-3.5 h-3.5 text-accent shrink-0" />
+                  )}
+                  <span className="text-[10px] font-semibold text-text-primary truncate max-w-[160px]">{ev.fileName}</span>
+                  <span className="text-[8px] text-text-muted font-mono shrink-0">{(ev.fileSize / 1024).toFixed(0)} KB · {relativeTime(ev.uploadedAt)}</span>
+                </a>
+              ) : (
+                <div
+                  title={`${ev.fileName} — uploaded by ${ev.uploadedBy}`}
+                  className="max-w-[85%] min-w-0 flex items-center gap-1.5 rounded-lg border border-border bg-surface px-2 py-1 opacity-75"
+                >
+                  <FileText className="w-3.5 h-3.5 text-text-muted shrink-0" />
+                  <span className="text-[10px] font-semibold text-text-primary truncate max-w-[160px]">{ev.fileName}</span>
+                  <span className="text-[8px] text-text-muted font-mono shrink-0">link expired</span>
+                </div>
+              )}
+            </div>
+          );
+
+          if (timeline.length === 0) {
             return (
               <EmptyState
                 icon={<MessageSquare className="w-12 h-12" />}
@@ -273,12 +315,13 @@ export default function TicketActivitySection({
           }
 
           let lastDate = "";
-          return topLevel.map((c) => {
-            const dateLabel = formatDateLabel(c.timestamp);
+          return timeline.map((item) => {
+            const ts = item.kind === 'comment' ? item.comment.timestamp : item.ev.uploadedAt;
+            const dateLabel = formatDateLabel(ts);
             const showDateSep = dateLabel !== lastDate;
             lastDate = dateLabel;
             return (
-              <div key={c.id}>
+              <div key={item.kind === 'comment' ? item.comment.id : `ev-${item.ev.id}`}>
                 {showDateSep && (
                   <div className="flex items-center gap-2 py-1">
                     <div className="h-px flex-1 bg-border" />
@@ -286,7 +329,7 @@ export default function TicketActivitySection({
                     <div className="h-px flex-1 bg-border" />
                   </div>
                 )}
-                {renderComment(c)}
+                {item.kind === 'comment' ? renderComment(item.comment) : renderEvidence(item.ev)}
               </div>
             );
           });
@@ -357,7 +400,7 @@ export default function TicketActivitySection({
             </div>
             <div className="flex items-center gap-2">
               <span className="text-[9px] text-text-muted font-mono">{commentText.length}/{MAX_MESSAGE_LENGTH}</span>
-              <button type="submit" disabled={isSendingComment || !commentText.trim()} className="px-2 py-1 bg-primary hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg text-[11px] font-semibold transition focus-ring flex items-center gap-1"><Send className="w-3 h-3" /> {isSendingComment ? "Sending..." : "Send"}</button>
+              <button type="submit" disabled={isSendingComment || !commentText.trim()} className="px-2 py-1 bg-primary hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed text-[#fff] rounded-lg text-[11px] font-semibold transition focus-ring flex items-center gap-1"><Send className="w-3 h-3" /> {isSendingComment ? "Sending..." : "Send"}</button>
             </div>
           </div>
         </form>

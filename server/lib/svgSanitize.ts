@@ -32,6 +32,18 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 
   // <use> referencing external resources
   { pattern: /<use[^>]*\bxlink:href\s*=\s*["']https?:/i, label: '<use> with external xlink:href' },
+
+  // CSS-based attacks
+  { pattern: /expression\s*\(/i, label: 'CSS expression()' },
+  { pattern: /@import\s+['"]?(?:https?:|javascript:)/i, label: '@import with external URL' },
+  { pattern: /<style[\s>][^<]*?(?:expression|javascript|url\s*\()/i, label: 'CSS with dangerous content' },
+
+  // SVG set/animate with href to javascript
+  { pattern: /<set[^>]*attributeName\s*=\s*["']href["'][^>]*to\s*=\s*["']javascript/i, label: '<set> with javascript href' },
+  { pattern: /<animate[^>]*attributeName\s*=\s*["']href["'][^>]*values?\s*=\s*["'][^"']*javascript/i, label: '<animate> with javascript href' },
+
+  // meta refresh with javascript
+  { pattern: /<meta[^>]*http-equiv\s*=\s*["']refresh["'][^>]*content\s*=\s*["'][^"']*javascript/i, label: 'meta refresh with javascript' },
 ];
 
 /**

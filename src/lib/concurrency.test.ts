@@ -10,13 +10,13 @@ vi.mock('../../server/supabase', () => {
 import express from 'express';
 import { supabase } from '../../server/supabase';
 import { createApiRouter } from '../../server/routes';
-import { requireCsrf, hashPassword } from '../../server/auth';
+import { requireCsrf, hashPassword, type AuthedRequest } from '../../server/auth';
 import { idempotencyMiddleware } from '../../server/middleware/idempotency';
 import { createFakeSupabase, type TableStore } from '@/tests/helpers/fakeSupabase';
 
-async function readTable(table: string): Promise<any[]> {
+async function readTable(table: string): Promise<Record<string, unknown>[]> {
   const { data } = await supabase.from(table).select('*');
-  return (data as any[]) ?? [];
+  return (data as Record<string, unknown>[]) ?? [];
 }
 
 const ALPHA = 'tnt-ALPHA';
@@ -35,7 +35,7 @@ function seedStore(): TableStore {
       { key: 'businessUnits', value: [{ name: 'ALPHA', code: 'ALP' }] },
     ],
     idempotency_keys: [],
-    ticket_id_counters: [] as any,
+    ticket_id_counters: [] as Record<string, unknown>[],
   };
 }
 
@@ -48,12 +48,12 @@ function seedStore(): TableStore {
  */
 function withAtomicCounterRpc(fake: ReturnType<typeof createFakeSupabase>, store: TableStore) {
   return Object.assign(fake, {
-    rpc: (fn: string, params: any) => {
+    rpc: (fn: string, params: Record<string, unknown>) => {
       if (fn === 'next_ticket_id_sequence') {
         const buCode = String(params?.p_bu_code ?? '');
         const dateKey = String(params?.p_date_key ?? '');
         const table = (store['ticket_id_counters'] ||= []);
-        let row = table.find((r: any) => r.bu_code === buCode && r.date_key === dateKey);
+        let row = table.find((r: Record<string, unknown>) => r.bu_code === buCode && r.date_key === dateKey);
         if (!row) {
           row = { bu_code: buCode, date_key: dateKey, seq: 0 };
           table.push(row);
@@ -72,7 +72,7 @@ let store: TableStore;
 
 const app = express();
 app.use(express.json({ limit: '5mb' }));
-app.use('/api', (req, res, next) => requireCsrf(req as any, res, next));
+app.use('/api', (req, res, next) => requireCsrf(req as unknown as AuthedRequest, res, next));
 // Mirrors server.ts middleware order: csrf → idempotency → routes.
 app.use('/api', idempotencyMiddleware);
 app.use('/api', createApiRouter());
@@ -134,9 +134,9 @@ describe('Concurrent load handling (fake Supabase)', () => {
     for (const r of responses) {
       expect(r.status, 'every concurrent submission must succeed').toBe(201);
     }
-    const bodies = await Promise.all((responses as any[]).map((r) => r.json()));
+    const bodies = (await Promise.all(responses.map((r) => r.json()))) as Record<string, unknown>[];
 
-    const ids = new Set<string>(bodies.map((b: any) => b.id));
+    const ids = new Set<string>(bodies.map((b) => String(b.id)));
     expect(ids.size).toBe(N);
 
     // All ids share today's BU prefix and form an unbroken sequence 1..N.

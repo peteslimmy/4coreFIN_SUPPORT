@@ -69,7 +69,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
             </button>
             <button
               onClick={confirmEscalation}
-              className="px-3 py-1.5 bg-warning hover:bg-warning-dark text-white rounded text-xs font-semibold cursor-pointer"
+              className="px-3 py-1.5 bg-warning hover:bg-warning-dark text-[#fff] rounded text-xs font-semibold cursor-pointer"
             >
               Confirm Escalation
             </button>
@@ -115,7 +115,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
                     setSelectedWatcherIds(new Set());
                   }
                 }}
-                className="px-3 py-1.5 bg-brand-900 text-white rounded text-xs font-semibold"
+                className="px-3 py-1.5 bg-brand-900 text-[#fff] rounded text-xs font-semibold"
               >
                 Send Notification
               </button>

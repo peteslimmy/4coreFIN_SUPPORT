@@ -50,11 +50,14 @@ export default function ResetPasswordPage() {
   return (
     <PageTransition>
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <a href="#reset-form" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
+        Skip to form
+      </a>
       <AuthBackground />
       <div className="relative z-10 w-full max-w-sm">
         <div className="mb-6 text-center">
           <AuthLogo />
-          <h1 className="text-display font-bold text-text-primary">Set new password</h1>
+          <h1 id="reset-heading" className="text-display font-bold text-text-primary">Set new password</h1>
           <p className="mt-1 text-body-sm text-text-muted">Choose a strong password for your account</p>
         </div>
 
@@ -71,7 +74,7 @@ export default function ResetPasswordPage() {
               <a href="/auth/login" className="text-sm text-accent hover:text-accent-light font-semibold transition">Sign in with new password</a>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="reset-form" aria-labelledby="reset-heading" onSubmit={handleSubmit} className="space-y-4">
               <div>
                 <label className="block text-caption font-medium text-text-secondary mb-1">New password</label>
                 <div className="relative">
@@ -106,7 +109,7 @@ export default function ResetPasswordPage() {
               <button
                 type="submit"
                 disabled={loading || !isPasswordValid(password) || password !== confirm}
-                className="w-full bg-accent hover:bg-accent-light text-white font-semibold py-2.5 rounded-lg transition-all duration-150 text-sm cursor-pointer disabled:opacity-50"
+                className="w-full bg-accent hover:bg-accent-light text-[#fff] font-semibold py-2.5 rounded-lg transition-all duration-150 text-sm cursor-pointer disabled:opacity-50"
               >
                 {loading ? 'Resetting...' : 'Reset Password'}
               </button>

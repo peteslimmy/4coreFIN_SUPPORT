@@ -12,6 +12,9 @@ import Modal from '../ui/Modal';
 import ConfirmModal from '../ui/ConfirmModal';
 import EmptyState from '../ui/EmptyState';
 
+const CLIPBOARD_RESET_DELAY = 1600;
+const FALLBACK_CLIPBOARD_RESET_DELAY = 1600;
+
 type AccountType = 'BU' | 'PARTNER';
 
 const BU_ROLES = ['SUPER_ADMIN', 'EXECUTIVE', 'BU_SUPPORT_L1', 'BU_SUPPORT_L2', 'BU_SUPPORT_L3'] as const;
@@ -269,7 +272,7 @@ export default function UserAccountsManager() {
     try {
       await navigator.clipboard.writeText(form.password);
       setCopied(true);
-      setTimeout(() => setCopied(false), 1600);
+      setTimeout(() => setCopied(false), CLIPBOARD_RESET_DELAY);
     } catch {
       setFormError('Could not copy to clipboard');
     }
@@ -297,7 +300,7 @@ export default function UserAccountsManager() {
     try {
       await navigator.clipboard.writeText(inviteFallback.password);
       setFallbackCopied(true);
-      setTimeout(() => setFallbackCopied(false), 1600);
+      setTimeout(() => setFallbackCopied(false), FALLBACK_CLIPBOARD_RESET_DELAY);
     } catch {
       showToast('Could not copy to clipboard', 'error');
     }
@@ -370,7 +373,9 @@ export default function UserAccountsManager() {
 
       <div className="relative mb-4">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted" />
+        <label htmlFor="user-search" className="sr-only">Search users</label>
         <input
+          id="user-search"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search users…"
@@ -605,11 +610,12 @@ export default function UserAccountsManager() {
               <Input label="Email" type="email" required value={form.email} onChange={(e) => setField('email', e.target.value)} />
               <Input label="Phone" value={form.phone} onChange={(e) => setField('phone', e.target.value)} />
               <div className="sm:col-span-2">
-                <label className="block text-caption font-medium text-text-secondary mb-1">
+                <label htmlFor="user-password" className="block text-caption font-medium text-text-secondary mb-1">
                   {isEditing ? 'New password (only if resetting)' : 'Initial password'}
                 </label>
                 <div className="relative">
                   <input
+                    id="user-password"
                     type={passwordVisible ? 'text' : 'password'}
                     value={form.password}
                     onChange={(e) => setField('password', e.target.value)}

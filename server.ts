@@ -196,6 +196,7 @@ app.use(compression({ threshold: 1024, level: 6 }));
   const uploadGate = createUploadGate({ maxConcurrent: 8, maxQueued: 40 });
 
   app.use('/api/auth/login', authLimiter);
+  app.use('/api/auth/logout', authLimiter);
   app.use('/api/auth/forgot-password', authLimiter);
   app.use('/api/auth/reset-password', authLimiter);
   // Oversize requests are rejected before buffering; the gate bounds how

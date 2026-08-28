@@ -76,7 +76,7 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
 
   return (
     <div className={className}>
-      {label && <label className="text-xs font-medium text-text-secondary block mb-2">{label}</label>}
+      {label && <label htmlFor="file-upload-input" className="text-xs font-medium text-text-secondary block mb-2">{label}</label>}
       {currentUrls && currentUrls.filter(Boolean).length > 0 && (
         <div className="flex flex-wrap gap-2 mb-2">
           {currentUrls.filter(Boolean).map((url, i) => (
@@ -112,7 +112,8 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
                 <button
                   type="button"
                   onClick={(e) => { e.stopPropagation(); removeFile(f.id); }}
-                  className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-error text-white rounded-full flex items-center justify-center text-[9px] shadow-sm hover:bg-error-dark transition"
+                  aria-label={`Remove ${f.name}`}
+                  className="absolute -top-1.5 -right-1.5 w-4 h-4 bg-error text-[#fff] rounded-full flex items-center justify-center text-[9px] shadow-sm hover:bg-error-dark transition"
                 >
                   <X className="w-2.5 h-2.5" />
                 </button>
@@ -138,6 +139,7 @@ export default function FileUpload({ accept = 'image/*', maxSize = 5 * 1024 * 10
           </div>
         )}
         <input
+          id="file-upload-input"
           ref={inputRef}
           type="file"
           accept={accept}

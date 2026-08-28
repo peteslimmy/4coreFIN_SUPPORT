@@ -15,24 +15,6 @@ const colorStyles: Record<string, string> = {
   slate: 'bg-surface-hover text-text-muted',
 };
 
-const accentEdge: Record<string, string> = {
-  brand: 'from-primary/70',
-  emerald: 'from-success/70',
-  amber: 'from-warning/70',
-  blue: 'from-info/70',
-  red: 'from-error/70',
-  slate: 'from-text-muted/50',
-};
-
-const sparkColor: Record<string, string> = {
-  brand: 'var(--color-primary)',
-  emerald: 'var(--color-success)',
-  amber: 'var(--color-warning)',
-  blue: 'var(--color-info)',
-  red: 'var(--color-error)',
-  slate: 'var(--color-text-muted)',
-};
-
 const trendIconMap = {
   up: TrendingUp,
   down: TrendingDown,

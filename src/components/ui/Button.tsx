@@ -4,11 +4,11 @@ import useRipple from '../../hooks/useRipple';
 import type { ButtonProps, ButtonVariant, ButtonSize } from '../../types/ui';
 
 const variantStyles: Record<ButtonVariant, string> = {
-  primary: 'bg-primary text-white hover:bg-primary-dark active:bg-primary-dark shadow-2',
+  primary: 'bg-primary text-[#fff] hover:bg-primary-dark active:bg-primary-dark shadow-2',
   secondary: 'bg-surface-card text-text-primary border border-border hover:bg-surface-hover active:bg-surface-hover',
   outlined: 'bg-transparent text-text-primary border border-border hover:bg-surface-card active:bg-surface-card',
   ghost: 'text-text-secondary hover:text-text-primary hover:bg-surface-hover active:bg-surface-hover',
-  danger: 'bg-error text-white hover:bg-error/90 active:bg-error/80 shadow-2',
+  danger: 'bg-error text-[#fff] hover:bg-error/90 active:bg-error/80 shadow-2',
 };
 
 const sizeStyles: Record<ButtonSize, string> = {

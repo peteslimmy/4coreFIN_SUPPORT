@@ -255,9 +255,42 @@ describe('waiting-state lifecycle and SLA pause', () => {
     expect(getAvailableTransitions(waiting, UserRole.CUSTOMER as UserRole)).toEqual([]);
   });
 
-  it('only BU agents can put a ticket on hold', () => {
-    expect(getAvailableTransitions(investigating, UserRole.BU_SUPPORT_L1).map(r => r.to)).toContain(TicketStatus.WAITING_CUSTOMER);
-    expect(getAvailableTransitions(investigating, UserRole.PARTNER).map(r => r.to)).not.toContain(TicketStatus.WAITING_CUSTOMER);
+  it('only investigators can enter a customer/internal hold; BU support routes to partner', () => {
+    expect(getAvailableTransitions(investigating, UserRole.PARTNER).map(r => r.to)).toContain(TicketStatus.WAITING_CUSTOMER);
+    expect(getAvailableTransitions(investigating, UserRole.BU_SUPPORT_L1).map(r => r.to)).not.toContain(TicketStatus.WAITING_CUSTOMER);
+    // BU support may still route a case to the partner desk without investigating.
+    expect(getAvailableTransitions(investigating, UserRole.BU_SUPPORT_L1).map(r => r.to)).toContain(TicketStatus.WAITING_PARTNER);
+  });
+
+  it('BU support cannot begin an investigation; partner support can', () => {
+    const assigned = baseTicket({ status: TicketStatus.ASSIGNED, assignedAgentId: 'a-1' });
+    for (const bu of [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3]) {
+      expect(getAvailableTransitions(assigned, bu).map(r => r.to)).not.toContain(TicketStatus.INVESTIGATE);
+      expect(canTransition(assigned, TicketStatus.INVESTIGATE, bu)).toBe(false);
+    }
+    expect(getAvailableTransitions(assigned, UserRole.PARTNER).map(r => r.to)).toContain(TicketStatus.INVESTIGATE);
+    expect(getAvailableTransitions(assigned, UserRole.SUPER_ADMIN).map(r => r.to)).toContain(TicketStatus.INVESTIGATE);
+  });
+
+  it('BU support retains full lifecycle outside investigation', () => {
+    const assigned = baseTicket({ status: TicketStatus.ASSIGNED });
+    // Assign from receipt
+    expect(getAvailableTransitions(baseTicket({ status: TicketStatus.RECEIPT }), UserRole.BU_SUPPORT).some(r => r.to === TicketStatus.ASSIGNED)).toBe(true);
+    // Reject & reopen a resolved ticket
+    const resolved = fullRcaTicket({ status: TicketStatus.RESOLVED, feedbackScore: null });
+    const reopened = applyTransition(resolved, TicketStatus.INVESTIGATE, UserRole.BU_SUPPORT_L2);
+    expect(reopened.status).toBe(TicketStatus.INVESTIGATE);
+    expect(reopened.isEscalated).toBe(true);
+    void assigned;
+  });
+
+  it('partners can resume WAITING_CUSTOMER / WAITING_INTERNAL; BU cannot', () => {
+    const waitCustomer = { ...investigating, status: TicketStatus.WAITING_CUSTOMER } as TicketRecord;
+    const waitInternal = { ...investigating, status: TicketStatus.WAITING_INTERNAL } as TicketRecord;
+    expect(getAvailableTransitions(waitCustomer, UserRole.PARTNER).map(r => r.to)).toContain(TicketStatus.INVESTIGATE);
+    expect(getAvailableTransitions(waitCustomer, UserRole.BU_SUPPORT).map(r => r.to)).not.toContain(TicketStatus.INVESTIGATE);
+    expect(getAvailableTransitions(waitInternal, UserRole.PARTNER).map(r => r.to)).toContain(TicketStatus.INVESTIGATE);
+    expect(getAvailableTransitions(waitInternal, UserRole.BU_SUPPORT).map(r => r.to)).not.toContain(TicketStatus.INVESTIGATE);
   });
 
   it('waiting states share the In Review progress step', () => {

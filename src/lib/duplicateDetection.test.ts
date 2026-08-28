@@ -49,7 +49,7 @@ describe('duplicateDetection', () => {
   });
 
   it('detects an exact transactionId duplicate within the same BU', () => {
-    const existing = makeTicket({ id: 'RET-20260717-001', businessUnit: 'POSSAP', transactionId: 'TXN_777777', status: TicketStatus.ASSIGNED });
+    const existing = makeTicket({ id: 'RET-26JUL17-001', businessUnit: 'POSSAP', transactionId: 'TXN_777777', status: TicketStatus.ASSIGNED });
     const candidates = detectDuplicates(
       { transactionId: 'TXN_777777', referenceId: '' },
       config,
@@ -57,7 +57,7 @@ describe('duplicateDetection', () => {
       'POSSAP'
     );
     expect(candidates.length).toBe(1);
-    expect(candidates[0].ticket.id).toBe('RET-20260717-001');
+    expect(candidates[0].ticket.id).toBe('RET-26JUL17-001');
     expect(candidates[0].confidence).toBeGreaterThanOrEqual(60);
   });
 
@@ -73,7 +73,7 @@ describe('duplicateDetection', () => {
   });
 
   it('detects fuzzy matches with lower confidence', () => {
-    const existing = makeTicket({ id: 'RET-20260717-002', businessUnit: 'POSSAP', transactionId: 'TXN_999999' });
+    const existing = makeTicket({ id: 'RET-26JUL17-002', businessUnit: 'POSSAP', transactionId: 'TXN_999999' });
     const candidates = detectDuplicates(
       { transactionId: 'TXN_999998', referenceId: '' },
       config,
@@ -87,7 +87,7 @@ describe('duplicateDetection', () => {
   });
 
   it('matches on a currency amount exactly when flagged as a key', () => {
-    const existing = makeTicket({ id: 'RET-20260717-003', businessUnit: 'POSSAP', amount: 150000, transactionId: '' });
+    const existing = makeTicket({ id: 'RET-26JUL17-003', businessUnit: 'POSSAP', amount: 150000, transactionId: '' });
     const candidates = detectDuplicates(
       { amount: '150,000.00', transactionId: '' },
       configWithAmountKey,
@@ -99,22 +99,22 @@ describe('duplicateDetection', () => {
   });
 
   it('returns no candidates when no duplicate keys are populated', () => {
-    const existing = makeTicket({ id: 'RET-20260717-004', businessUnit: 'POSSAP' });
+    const existing = makeTicket({ id: 'RET-26JUL17-004', businessUnit: 'POSSAP' });
     const candidates = detectDuplicates({ transactionId: '', referenceId: '', amount: '' }, config, [existing], 'POSSAP');
     expect(candidates.length).toBe(0);
   });
 
   it('builds a merge payload that preserves the existing status', () => {
-    const existing = makeTicket({ id: 'RET-20260717-005', status: TicketStatus.INVESTIGATE, description: 'original' });
+    const existing = makeTicket({ id: 'RET-26JUL17-005', status: TicketStatus.INVESTIGATE, description: 'original' });
     const incoming = makeTicket({
-      id: 'RET-20260717-999',
+      id: 'RET-26JUL17-999',
       status: TicketStatus.RECEIPT,
       description: 'new detail',
       amount: 5000,
       customFields: { terminalId: 'TERM_1' },
     });
     const merged = buildDuplicatePayload(existing, incoming);
-    expect(merged.id).toBe('RET-20260717-005');
+    expect(merged.id).toBe('RET-26JUL17-005');
     expect(merged.status).toBe(TicketStatus.INVESTIGATE);
     expect(merged.description).toContain('new detail');
     expect(merged.amount).toBe(5000);

@@ -51,7 +51,7 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-surface/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -78,10 +78,11 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
           <div className="p-6 space-y-6">
             {/* Alt Text */}
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="seo-alt-text" className="block text-sm font-medium text-text-primary mb-2">
                 Alt Text <span className="text-error">*</span>
               </label>
               <textarea
+                id="seo-alt-text"
                 value={formData.alt_text}
                 onChange={(e) => setFormData(prev => ({ ...prev, alt_text: e.target.value }))}
                 className="input w-full h-24 resize-none"
@@ -95,10 +96,11 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
 
             {/* SEO Title */}
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="seo-title" className="block text-sm font-medium text-text-primary mb-2">
                 SEO Title
               </label>
               <input
+                id="seo-title"
                 type="text"
                 value={formData.seo_title}
                 onChange={(e) => setFormData(prev => ({ ...prev, seo_title: e.target.value }))}
@@ -113,10 +115,11 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
 
             {/* SEO Description */}
             <div>
-              <label className="block text-sm font-medium text-text-primary mb-2">
+              <label htmlFor="seo-description" className="block text-sm font-medium text-text-primary mb-2">
                 SEO Description
               </label>
               <textarea
+                id="seo-description"
                 value={formData.seo_description}
                 onChange={(e) => setFormData(prev => ({ ...prev, seo_description: e.target.value }))}
                 className="input w-full h-24 resize-none"
@@ -145,7 +148,7 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
             >
               {saving ? (
                 <>
-                  <div className="w-4 h-4 border-2 border-white/20 border-t-white rounded-full animate-spin" />
+                  <div className="w-4 h-4 border-2 border-[#fff]/20 border-t-[#fff] rounded-full animate-spin" />
                   Saving...
                 </>
               ) : (

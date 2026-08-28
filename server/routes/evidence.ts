@@ -108,6 +108,11 @@ export function createEvidenceRouter(): Router {
         let verifiedType = sniffMimeType(buffer);
         if (!verifiedType) {
           if (fileType === 'text/plain') {
+            // Reject text/plain files containing HTML/script markers
+            const textContent = buffer.toString('utf-8', 0, Math.min(buffer.length, 4096));
+            if (/<\s*(?:script|html|head|body|iframe|object|embed|form|input|meta|link|style)/i.test(textContent)) {
+              return res.status(415).json({ error: 'text/plain file contains HTML/script content' });
+            }
             verifiedType = 'text/plain';
           } else if (fileType === 'application/msword' || fileType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
             verifiedType = fileType;

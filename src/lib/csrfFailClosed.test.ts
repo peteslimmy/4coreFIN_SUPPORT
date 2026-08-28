@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import express from 'express';
 import type { AddressInfo } from 'net';
 import type { Server } from 'http';
-import { requireCsrf } from '../../server/auth';
+import { requireCsrf, type AuthedRequest } from '../../server/auth';
 
 /**
  * Regression coverage for the requireCsrf middleware (BUG-01):
@@ -25,7 +25,7 @@ const CSRF_COOKIE = '4c_csrf=tok456';
 async function setupApp() {
   const app = express();
   app.use(express.json());
-  app.use('/api', (req, res, next) => requireCsrf(req as any, res, next));
+  app.use('/api', (req, res, next) => requireCsrf(req as unknown as AuthedRequest, res, next));
   let reached = 0;
   app.post('/api/thing', (_req, res) => {
     reached++;
@@ -104,7 +104,7 @@ describe('requireCsrf fail-closed (BUG-01 regression)', () => {
   it('exempts the machine-to-machine email ingest webhook', async () => {
     const app = express();
     app.use(express.json());
-    app.use('/api', (req, res, next) => requireCsrf(req as any, res, next));
+    app.use('/api', (req, res, next) => requireCsrf(req as unknown as AuthedRequest, res, next));
     let reached = false;
     app.post('/api/email/webhook', (_req, res) => {
       reached = true;

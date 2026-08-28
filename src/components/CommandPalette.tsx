@@ -1,6 +1,21 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from 'react';
+import { useState, useMemo, useRef, useEffect, useCallback, useReducer } from 'react';
 import type * as React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const FOCUS_DELAY = 50;
+
+type LoadingAction = { type: 'START_RECENT' } | { type: 'STOP_RECENT' } | { type: 'START_SEARCH' } | { type: 'STOP_SEARCH' };
+
+function loadingReducer(state: { recent: boolean; search: boolean }, action: LoadingAction) {
+  switch (action.type) {
+    case 'START_RECENT': return { ...state, recent: true };
+    case 'STOP_RECENT': return { ...state, recent: false };
+    case 'START_SEARCH': return { ...state, search: true };
+    case 'STOP_SEARCH': return { ...state, search: false };
+    default: return state;
+  }
+}
+
 import {
   Search,
   Ticket,
@@ -10,7 +25,6 @@ import {
   ArrowRight,
   Clock,
   Zap,
-  FileText,
   Loader2,
   type LucideIcon,
 } from 'lucide-react';
@@ -45,13 +59,12 @@ export default function CommandPalette() {
   const [backendResults, setBackendResults] = useState<PaletteItem[]>([]);
   const [recentSearches, setRecentSearches] = useState<PaletteItem[]>([]);
   const [shortcuts, setShortcuts] = useState<PaletteItem[]>([]);
-  const [recentLoading, setRecentLoading] = useState(false);
-  const [searchLoading, setSearchLoading] = useState(false);
+  const [loadingState, dispatch] = useReducer(loadingReducer, { recent: false, search: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const { tickets, kbArticles, customers } = useApp();
   const { setActiveTab, setActiveTicketId } = useUi();
-  const loading = recentLoading || searchLoading;
+  const loading = loadingState.recent || loadingState.search;
 
   useKeyboardShortcuts([
     { key: 'k', ctrl: true, handler: () => setOpen(o => !o) },
@@ -70,7 +83,7 @@ export default function CommandPalette() {
 
   useEffect(() => {
     if (open) {
-      setTimeout(() => inputRef.current?.focus(), 50);
+      setTimeout(() => inputRef.current?.focus(), FOCUS_DELAY);
     }
   }, [open]);
 
@@ -82,7 +95,7 @@ export default function CommandPalette() {
     if (debouncedQuery.length >= 2) return;
 
     let cancelled = false;
-    setRecentLoading(true);
+    dispatch({ type: 'START_RECENT' });
 
     Promise.all([
       api.getRecentSearches().catch(() => []),
@@ -110,7 +123,7 @@ export default function CommandPalette() {
         }))
       );
     }).catch(() => {}).finally(() => {
-      if (!cancelled) setRecentLoading(false);
+      if (!cancelled) dispatch({ type: 'STOP_RECENT' });
     });
 
     return () => { cancelled = true; };
@@ -121,7 +134,7 @@ export default function CommandPalette() {
     if (debouncedQuery.length < 2) return;
 
     let cancelled = false;
-    setSearchLoading(true);
+    dispatch({ type: 'START_SEARCH' });
 
     api.globalSearch(debouncedQuery).then((data) => {
       if (cancelled) return;
@@ -130,8 +143,8 @@ export default function CommandPalette() {
       for (const t of data.tickets || []) {
         items.push({
           id: `bkt:${t.id}`,
-          label: t.title,
-          description: t.subtitle,
+          label: t.customerName,
+          description: t.description,
           icon: Ticket,
           type: 'ticket',
           action: () => { setActiveTicketId(t.id); setActiveTab('tickets'); },
@@ -140,8 +153,8 @@ export default function CommandPalette() {
       for (const c of data.customers || []) {
         items.push({
           id: `bkc:${c.id}`,
-          label: c.title,
-          description: c.subtitle,
+          label: `${c.firstName} ${c.lastName}`,
+          description: c.email,
           icon: Users,
           type: 'customer',
           action: () => setActiveTab('customers'),
@@ -151,20 +164,10 @@ export default function CommandPalette() {
         items.push({
           id: `bkkb:${a.id}`,
           label: a.title,
-          description: a.subtitle,
+          description: a.category,
           icon: BookOpen,
           type: 'kb',
           action: () => setActiveTab('kb'),
-        });
-      }
-      for (const d of data.documents || []) {
-        items.push({
-          id: `bkdoc:${d.id}`,
-          label: d.title,
-          description: d.subtitle,
-          icon: FileText,
-          type: 'document',
-          action: () => setActiveTab('documents'),
         });
       }
 
@@ -172,7 +175,7 @@ export default function CommandPalette() {
     }).catch(() => {
       if (!cancelled) setBackendResults([]);
     }).finally(() => {
-      if (!cancelled) setSearchLoading(false);
+      if (!cancelled) dispatch({ type: 'STOP_SEARCH' });
     });
 
     return () => { cancelled = true; };
@@ -260,13 +263,13 @@ export default function CommandPalette() {
   }, [query, backendResults, clientItems, recentSearches, shortcuts]);
 
   const typeBadge: Record<PaletteItem['type'], { color: string; label: string }> = {
-    ticket: { color: 'bg-blue-100 text-blue-700', label: 'Ticket' },
-    customer: { color: 'bg-green-100 text-green-700', label: 'Customer' },
-    kb: { color: 'bg-purple-100 text-purple-700', label: 'KB' },
-    document: { color: 'bg-amber-100 text-amber-700', label: 'Document' },
-    nav: { color: 'bg-slate-100 text-slate-600', label: 'Navigation' },
-    shortcut: { color: 'bg-cyan-100 text-cyan-700', label: 'Shortcut' },
-    recent: { color: 'bg-slate-100 text-slate-500', label: 'Recent' },
+    ticket: { color: 'bg-info-light text-info-dark', label: 'Ticket' },
+    customer: { color: 'bg-success-light text-success-dark', label: 'Customer' },
+    kb: { color: 'bg-primary-light text-primary-dark', label: 'KB' },
+    document: { color: 'bg-warning-light text-warning-dark', label: 'Document' },
+    nav: { color: 'bg-surface-hover text-text-secondary', label: 'Navigation' },
+    shortcut: { color: 'bg-info-light text-info-dark', label: 'Shortcut' },
+    recent: { color: 'bg-surface-hover text-text-muted', label: 'Recent' },
   };
 
   const executeItem = useCallback((item: PaletteItem) => {
@@ -292,8 +295,6 @@ export default function CommandPalette() {
       }
     }
   }, [allItems, activeIndex, executeItem]);
-
-  const prevDebouncedQueryRef = useRef('');
 
   // Scroll active item into view
   useEffect(() => {
@@ -336,6 +337,7 @@ export default function CommandPalette() {
                 onChange={e => { setQuery(e.target.value); setActiveIndex(0); }}
                 onKeyDown={handleKeyDown}
                 placeholder="Search tickets, customers, knowledge base..."
+                aria-label="Search tickets, customers, knowledge base"
                 className="flex-1 text-sm text-text-primary placeholder:text-text-muted outline-none bg-transparent focus-ring rounded"
               />
               <kbd className="text-[10px] text-text-muted bg-surface px-1.5 py-0.5 rounded font-mono border border-border">ESC</kbd>

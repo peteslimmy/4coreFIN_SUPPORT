@@ -12,6 +12,8 @@ export default defineConfig({
   // e2e/audit contains stale AS-IS capture specs that assert previously-fixed
   // broken behavior (PATCH hangs, empty user list). Excluded from the go-live gate.
   testIgnore: ['**/audit/**'],
+  globalSetup: './e2e/global-setup.ts',
+  globalTeardown: './e2e/global-teardown.ts',
   fullyParallel: false,
   workers: 1,
   timeout: 60_000,

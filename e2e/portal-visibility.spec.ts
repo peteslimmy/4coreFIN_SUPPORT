@@ -12,17 +12,13 @@
 import { test, expect, type Page } from '@playwright/test';
 import { loginAs, api, managerSql } from './helpers';
 import { MARKER, customerEmail } from './identity';
-import { provisionTestUsers, cleanupE2eData } from './provision';
 
 test.describe.configure({ mode: 'serial' });
 
-test.beforeAll(async () => {
-  await provisionTestUsers();
-});
-
-test.afterAll(async () => {
-  await cleanupE2eData();
-});
+// Provisioning here (not just global-setup) keeps this suite runnable
+// standalone. Cleanup is owned exclusively by global-teardown — an afterAll
+// cleanup here deleted the E2E users out from under every spec that runs
+// later alphabetically (e.g. responsive-console).
 
 const state: { ticketA: string; ticketB: string; ticketC: string } = {
   ticketA: '',

@@ -15,6 +15,7 @@ const JWT_SECRET = process.env.JWT_SECRET;
 if (!JWT_SECRET) {
   throw new Error('JWT_SECRET environment variable is required');
 }
+const JWT_SECRET_PREVIOUS = process.env.JWT_SECRET_PREVIOUS || null;
 const TOKEN_TTL = process.env.JWT_TTL || '12h';
 
 /**
@@ -155,13 +156,13 @@ export interface JwtPayload {
 }
 
 export function hashPassword(password: string): string {
-  return bcrypt.hashSync(password, 10);
+  return bcrypt.hashSync(password, 12);
 }
 
 /** Async variant for request-path writes — keeps the event loop free during
  *  the ~100ms bcrypt cost. Sync version retained for seeds/tests. */
 export async function hashPasswordAsync(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  return bcrypt.hash(password, 12);
 }
 
 export function verifyPassword(password: string, hash: string): boolean {
@@ -455,7 +456,17 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
   try {
     decoded = jwt.verify(token, JWT_SECRET) as JwtPayload;
   } catch {
-    return res.status(401).json({ error: 'Invalid or expired token' });
+    // If current secret fails and a previous secret is configured, try it.
+    // This allows a grace period during JWT secret rotation.
+    if (JWT_SECRET_PREVIOUS) {
+      try {
+        decoded = jwt.verify(token, JWT_SECRET_PREVIOUS) as JwtPayload;
+      } catch {
+        return res.status(401).json({ error: 'Invalid or expired token' });
+      }
+    } else {
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
   }
   // The JWT `sub` is the app-level user id (e.g. "usr-..."). Look it up by `id`
   // only. A previous query used `.or(id.eq.sub, auth_user_id.eq.sub)`, but

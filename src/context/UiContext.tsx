@@ -35,7 +35,7 @@ const KNOWN_TABS = new Set([
   'tickets', 'customer_portal', 'dashboard', 'payment_partner_portal',
   'customers', 'audit_logs', 'watcher_notifications', 'kb',
   'major_incidents', 'admin_settings', 'reference_data', 'profile_settings',
-  'email_inbox', 'documents', 'notifications', 'surveys', 'ai_copilot',
+  'notifications', 'ai_copilot',
 ]);
 
 function isAppPath(): boolean {

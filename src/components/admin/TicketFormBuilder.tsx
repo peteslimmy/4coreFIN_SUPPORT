@@ -36,12 +36,12 @@ const FIELD_TYPES: { value: FormFieldType; label: string }[] = [
 
 const FIELD_TYPE_META: Record<FormFieldType, { icon: typeof Type; chip: string; accent: string }> = {
   text: { icon: Type, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
-  number: { icon: Hash, chip: 'bg-emerald-500/10 text-emerald-600', accent: 'text-emerald-600' },
-  currency: { icon: Banknote, chip: 'bg-amber-500/10 text-amber-600', accent: 'text-amber-600' },
-  select: { icon: ListFilter, chip: 'bg-violet-500/10 text-violet-600', accent: 'text-violet-600' },
-  date: { icon: CalendarDays, chip: 'bg-rose-500/10 text-rose-600', accent: 'text-rose-600' },
-  textarea: { icon: AlignLeft, chip: 'bg-cyan-500/10 text-cyan-600', accent: 'text-cyan-600' },
-  file: { icon: Paperclip, chip: 'bg-sky-500/10 text-sky-600', accent: 'text-sky-600' },
+  number: { icon: Hash, chip: 'bg-success/10 text-success', accent: 'text-success' },
+  currency: { icon: Banknote, chip: 'bg-warning/10 text-warning', accent: 'text-warning' },
+  select: { icon: ListFilter, chip: 'bg-primary/10 text-primary', accent: 'text-primary' },
+  date: { icon: CalendarDays, chip: 'bg-error/10 text-error', accent: 'text-error' },
+  textarea: { icon: AlignLeft, chip: 'bg-info/10 text-info', accent: 'text-info' },
+  file: { icon: Paperclip, chip: 'bg-info/10 text-info', accent: 'text-info' },
 };
 
 function TypeIcon({ type, className = 'w-4 h-4' }: { type: FormFieldType; className?: string }) {
@@ -198,7 +198,7 @@ function AddFieldModal({ open, onClose, fields, library, onAdd }: {
       <div className="space-y-4">
         <div className="inline-flex rounded-lg bg-surface-card border border-border p-1 gap-1">
           {(['library', 'custom'] as const).map(t => (
-            <button key={t} type="button" onClick={() => setTab(t)} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === t ? 'bg-accent text-white shadow-2' : 'text-text-secondary hover:text-text-primary'}`}>
+            <button key={t} type="button" onClick={() => setTab(t)} className={`px-4 py-1.5 text-sm font-medium rounded-md transition-colors cursor-pointer ${tab === t ? 'bg-accent text-[#fff] shadow-2' : 'text-text-secondary hover:text-text-primary'}`}>
               {t === 'library' ? 'Field Library' : 'Create Custom'}
             </button>
           ))}
@@ -502,10 +502,10 @@ function StageWorkspace({ title, icon, intro, draftFields, library, onFieldsChan
           <h4 className="text-sm font-semibold text-text-primary flex items-center gap-2 mb-4"><Eye className="w-4 h-4 text-text-muted" /> Customer Preview</h4>
           <div className="rounded-xl overflow-hidden border border-border shadow-2">
             <div className="bg-gradient-to-r from-primary to-primary-dark px-4 py-2.5 flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-white/70" />
-              <span className="w-2 h-2 rounded-full bg-white/40" />
-              <span className="w-2 h-2 rounded-full bg-white/40" />
-              <span className="ml-2 text-[11px] font-medium text-white/90">{title}</span>
+              <span className="w-2 h-2 rounded-full bg-surface-card/70" />
+              <span className="w-2 h-2 rounded-full bg-surface-card/40" />
+              <span className="w-2 h-2 rounded-full bg-surface-card/40" />
+              <span className="ml-2 text-[11px] font-medium text-[#fff]/90">{title}</span>
             </div>
             <div className="bg-surface-elevated p-4 space-y-3">
               {visibleFields.length === 0 ? (
@@ -636,7 +636,7 @@ export default function TicketFormBuilder() {
               key={s.id}
               type="button"
               onClick={() => setStage(s.id)}
-              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${active ? 'bg-accent text-white shadow-2' : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'}`}
+              className={`flex items-center gap-2 px-4 py-2 text-sm font-semibold rounded-lg transition-colors cursor-pointer ${active ? 'bg-accent text-[#fff] shadow-2' : 'text-text-secondary hover:text-text-primary hover:bg-surface-hover'}`}
             >
               <Icon className="w-4 h-4" />
               {s.label}

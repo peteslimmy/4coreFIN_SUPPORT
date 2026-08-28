@@ -99,8 +99,8 @@ export default function CrudTable({ kind }: CrudTableProps) {
           const units = (rows as Array<Record<string, unknown>>).map((u) => String(u.name ?? ''));
           setBusinessUnits(units);
           setBusinessUnitCodes(Object.fromEntries((rows as Array<Record<string, unknown>>).map((u) => [String(u.name ?? ''), String(u.code ?? '')])));
-        } catch (err) {
-          console.error('Failed to load business units for user form:', err);
+        } catch (_err) {
+          // Error loading business units - silently fail as this is non-critical
         }
       };
       loadBusinessUnits();

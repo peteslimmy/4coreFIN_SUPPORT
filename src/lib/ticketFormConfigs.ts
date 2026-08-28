@@ -4,13 +4,15 @@ import { mergeConfigs } from './formConfigs';
 const DEFAULT_BU_LIST = ['POSSAP', 'RETAIL-B', 'CORPORATE', 'SME', 'DIGITAL'];
 
 export const STAGE1_FIELD_LIBRARY: { id: string; label: string; type: FormFieldType; options?: string[]; placeholder?: string; duplicateKey?: boolean }[] = [
-  { id: 'customerName', label: 'Customer Name', type: 'text', placeholder: 'John Doe', duplicateKey: false },
+  { id: 'customerFirstName', label: 'Customer First Name', type: 'text', placeholder: 'John', duplicateKey: false },
+  { id: 'customerLastName', label: 'Customer Last Name', type: 'text', placeholder: 'Doe', duplicateKey: false },
   { id: 'customerEmail', label: 'Customer Email', type: 'text', placeholder: 'customer@example.com', duplicateKey: false },
   { id: 'customerPhone', label: 'Customer Phone', type: 'text', placeholder: '+234...', duplicateKey: false },
   { id: 'customerId', label: 'Customer ID', type: 'text', placeholder: 'CUST_12345', duplicateKey: true },
   { id: 'amount', label: 'Transaction Amount', type: 'currency', placeholder: '0,000,000.00' },
   { id: 'partner', label: 'Payment Partner', type: 'select', options: [] },
   { id: 'category', label: 'Issue Category', type: 'select', options: [] },
+  { id: 'bankName', label: 'Bank', type: 'select', options: [] },
   { id: 'priority', label: 'Priority', type: 'select', options: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'] },
   { id: 'channel', label: 'Payment Channel', type: 'select', options: ['POS', 'Web', 'Mobile App', 'USSD', 'API'] },
 ];
@@ -49,15 +51,17 @@ function buildField(
 function buildDefaultStage1(): TicketFormStageConfig {
   return {
     fields: [
-      buildField(STAGE1_FIELD_LIBRARY, 'customerName', 'Customer Name', 'text', { order: 0, required: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'customerEmail', 'Customer Email', 'text', { order: 1, required: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'customerPhone', 'Customer Phone', 'text', { order: 2, required: false }),
-      buildField(STAGE1_FIELD_LIBRARY, 'customerId', 'Customer ID', 'text', { order: 3, required: false, duplicateKey: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'amount', 'Transaction Amount', 'currency', { order: 4, required: false }),
-      buildField(STAGE1_FIELD_LIBRARY, 'partner', 'Payment Partner', 'select', { order: 5, required: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'category', 'Issue Category', 'select', { order: 6, required: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'priority', 'Priority', 'select', { order: 7, required: true }),
-      buildField(STAGE1_FIELD_LIBRARY, 'channel', 'Payment Channel', 'select', { order: 8, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'customerFirstName', 'Customer First Name', 'text', { order: 0, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'customerLastName', 'Customer Last Name', 'text', { order: 1, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'customerEmail', 'Customer Email', 'text', { order: 2, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'customerPhone', 'Customer Phone', 'text', { order: 3, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'customerId', 'Customer ID', 'text', { order: 4, required: false, duplicateKey: true }),
+      buildField(STAGE1_FIELD_LIBRARY, 'amount', 'Transaction Amount', 'currency', { order: 5, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'partner', 'Payment Partner', 'select', { order: 6, required: true }),
+      buildField(STAGE1_FIELD_LIBRARY, 'category', 'Issue Category', 'select', { order: 7, required: true }),
+      buildField(STAGE1_FIELD_LIBRARY, 'bankName', 'Bank', 'select', { order: 8, required: false }),
+      buildField(STAGE1_FIELD_LIBRARY, 'priority', 'Priority', 'select', { order: 9, required: true }),
+      buildField(STAGE1_FIELD_LIBRARY, 'channel', 'Payment Channel', 'select', { order: 10, required: false }),
     ],
   };
 }

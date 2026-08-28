@@ -33,10 +33,10 @@ CREATE TABLE IF NOT EXISTS organization.business_units (
 
 CREATE INDEX IF NOT EXISTS idx_org_bu_org ON organization.business_units (organization_id);
 CREATE INDEX IF NOT EXISTS idx_org_bu_tenant ON organization.business_units (tenant_id);
+-- Restrict BU codes to exactly 3 uppercase letters only
+-- Consistent with the CHAR(3) letters-only design principle
+-- Examples: ABC, XYZ, POS (derived from POSSAP), RET (derived from Retail-B)
 
--- Widen + relax the buid check on pre-existing installs created with the
--- CHAR(3) letters-only design: real business-unit codes are longer and may
--- contain digits/hyphens (e.g. HEALTH-IN-BOX, POS SAP, C4H).
 DO $$ BEGIN
   IF EXISTS (
     SELECT 1 FROM pg_constraint
@@ -47,7 +47,7 @@ DO $$ BEGIN
   END IF;
 END $$;
 ALTER TABLE organization.business_units ALTER COLUMN buid TYPE TEXT USING btrim(buid);
-ALTER TABLE organization.business_units ADD CONSTRAINT business_units_buid_check CHECK (buid ~ '^[A-Z0-9-]{2,20}$');
+ALTER TABLE organization.business_units ADD CONSTRAINT business_units_buid_check CHECK (buid ~ '^[A-Z]{3}$');
 
 -- Payment Partners
 CREATE TABLE IF NOT EXISTS organization.payment_partners (
@@ -204,3 +204,5 @@ DROP TRIGGER IF EXISTS trg_org_partner_updated ON organization.payment_partners;
 CREATE TRIGGER trg_org_partner_updated
   BEFORE UPDATE ON organization.payment_partners
   FOR EACH ROW EXECUTE FUNCTION organization.update_updated_at();
+
+

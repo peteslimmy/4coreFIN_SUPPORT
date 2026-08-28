@@ -1,44 +1,9 @@
 import { useState } from 'react';
 import { useSettings } from '../../hooks/useSettings';
 import { authorizedFetch } from '../../lib/api';
-import { Save, Eye, EyeOff, Copy, Check, Send } from 'lucide-react';
+import { Save, Eye, EyeOff, Send } from 'lucide-react';
 
-function MaskedInput({ value, label }: { value: string; label: string }) {
-  const [revealed, setRevealed] = useState(false);
-  const [copied, setCopied] = useState(false);
-
-  const displayValue = revealed ? value : (value ? '••••••••••••••••' : '');
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(value);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  };
-
-  return (
-    <div>
-      <label className="text-xs font-medium text-text-secondary block mb-1">{label}</label>
-      <div className="flex items-center gap-1">
-        <input
-          type={revealed ? 'text' : 'password'}
-          value={displayValue}
-          readOnly
-          className="flex-1 text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 font-mono"
-        />
-        {value && (
-          <>
-            <button onClick={() => setRevealed(!revealed)} className="p-2 text-text-muted hover:text-text-secondary transition">
-              {revealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-            </button>
-            <button onClick={handleCopy} className="p-2 text-text-muted hover:text-text-secondary transition">
-              {copied ? <Check className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
-  );
-}
+const SAVED_RESET_DELAY = 2000;
 
 export default function IntegrationSettings() {
   const { settings, updateSettings } = useSettings();
@@ -50,6 +15,7 @@ export default function IntegrationSettings() {
     password: settings['smtp.password'] || '',
     from_email: settings['smtp.from_email'] || '',
     from_name: settings['smtp.from_name'] || '',
+    passwordRevealed: false,
   });
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
@@ -65,7 +31,7 @@ export default function IntegrationSettings() {
     }
     await updateSettings(payload);
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), SAVED_RESET_DELAY);
   };
 
   const handleTestSmtp = async () => {
@@ -91,42 +57,54 @@ export default function IntegrationSettings() {
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-4">SMTP Configuration</h4>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1">Host</label>
-            <input type="text" value={smtp.host} onChange={(e) => setSmtp(p => ({ ...p, host: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" placeholder="smtp.gmail.com" />
+            <label htmlFor="smtp-host" className="text-xs font-medium text-text-secondary block mb-1">Host</label>
+            <input id="smtp-host" type="text" value={smtp.host} onChange={(e) => setSmtp(p => ({ ...p, host: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" placeholder="smtp.gmail.com" />
           </div>
           <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1">Port</label>
-            <input type="text" value={smtp.port} onChange={(e) => setSmtp(p => ({ ...p, port: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" placeholder="587" />
+            <label htmlFor="smtp-port" className="text-xs font-medium text-text-secondary block mb-1">Port</label>
+            <input id="smtp-port" type="text" value={smtp.port} onChange={(e) => setSmtp(p => ({ ...p, port: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" placeholder="587" />
           </div>
           <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1">Security</label>
-            <select value={smtp.security} onChange={(e) => setSmtp(p => ({ ...p, security: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none">
+            <label htmlFor="smtp-security" className="text-xs font-medium text-text-secondary block mb-1">Security</label>
+            <select id="smtp-security" value={smtp.security} onChange={(e) => setSmtp(p => ({ ...p, security: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none">
               <option value="tls">TLS</option>
               <option value="ssl">SSL</option>
               <option value="none">None</option>
             </select>
           </div>
+<div>
+             <label htmlFor="smtp-password" className="text-xs font-medium text-text-secondary block mb-1">Password</label>
+             <div className="flex items-center gap-1">
+               <input
+                 id="smtp-password"
+                 type={smtp.passwordRevealed ? 'text' : 'password'}
+                 value={smtp.password}
+                 onChange={(e) => setSmtp(p => ({ ...p, password: e.target.value }))}
+                 className="flex-1 text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none"
+               />
+               <button onClick={() => setSmtp(p => ({ ...p, passwordRevealed: !p.passwordRevealed }))} className="p-2 text-text-muted hover:text-text-secondary transition">
+                 {smtp.passwordRevealed ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+               </button>
+             </div>
+           </div>
           <div>
-            <MaskedInput value={smtp.password} label="Password" />
+            <label htmlFor="smtp-username" className="text-xs font-medium text-text-secondary block mb-1">Username</label>
+            <input id="smtp-username" type="text" value={smtp.username} onChange={(e) => setSmtp(p => ({ ...p, username: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
           </div>
           <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1">Username</label>
-            <input type="text" value={smtp.username} onChange={(e) => setSmtp(p => ({ ...p, username: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-text-secondary block mb-1">From Email</label>
-            <input type="email" value={smtp.from_email} onChange={(e) => setSmtp(p => ({ ...p, from_email: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
+            <label htmlFor="smtp-from-email" className="text-xs font-medium text-text-secondary block mb-1">From Email</label>
+            <input id="smtp-from-email" type="email" value={smtp.from_email} onChange={(e) => setSmtp(p => ({ ...p, from_email: e.target.value }))} className="w-full text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
           </div>
           <div className="md:col-span-2">
-            <label className="text-xs font-medium text-text-secondary block mb-1">From Name</label>
-            <input type="text" value={smtp.from_name} onChange={(e) => setSmtp(p => ({ ...p, from_name: e.target.value }))} className="w-full max-w-md text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
+            <label htmlFor="smtp-from-name" className="text-xs font-medium text-text-secondary block mb-1">From Name</label>
+            <input id="smtp-from-name" type="text" value={smtp.from_name} onChange={(e) => setSmtp(p => ({ ...p, from_name: e.target.value }))} className="w-full max-w-md text-xs bg-surface border border-border-subtle rounded-lg px-3 py-2 focus:ring-2 focus:ring-accent/20 focus:border-accent outline-none" />
           </div>
         </div>
         <div className="flex items-center gap-3 mt-4">
-          <button onClick={handleSaveSmtp} className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-light transition">
+          <button onClick={handleSaveSmtp} className="flex items-center gap-2 px-4 py-2 bg-accent text-[#fff] rounded-lg text-xs font-semibold hover:bg-accent-light transition">
             <Save className="w-4 h-4" /> {saved ? 'Saved!' : 'Save SMTP'}
           </button>
-          <button onClick={handleTestSmtp} disabled={testing} className="flex items-center gap-2 px-4 py-2 bg-success text-white rounded-lg text-xs font-semibold hover:bg-success-dark transition disabled:opacity-50">
+          <button onClick={handleTestSmtp} disabled={testing} className="flex items-center gap-2 px-4 py-2 bg-success text-[#fff] rounded-lg text-xs font-semibold hover:bg-success-dark transition disabled:opacity-50">
             <Send className="w-4 h-4" /> {testing ? 'Testing...' : 'Send Test Email'}
           </button>
           {testResult && (

@@ -162,7 +162,7 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-surface/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -174,6 +174,7 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
           <h2 className="text-2xl font-bold text-text-primary">Upload Hero Image</h2>
           <button
             onClick={onClose}
+            aria-label="Close upload dialog"
             className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-text-secondary" />
@@ -217,9 +218,10 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
                 />
                 <button
                   onClick={reset}
-                  className="absolute top-3 right-3 p-2 bg-black/50 hover:bg-black/70 rounded-lg backdrop-blur-sm transition-colors"
+                  aria-label="Remove uploaded image"
+                  className="absolute top-3 right-3 p-2 bg-surface/50 hover:bg-surface/70 rounded-lg backdrop-blur-sm transition-colors"
                 >
-                  <X className="w-4 h-4 text-white" />
+                  <X className="w-4 h-4 text-[#fff]" />
                 </button>
               </div>
 
@@ -243,10 +245,11 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
 
               {/* Title */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
+                <label htmlFor="img-title" className="block text-sm font-medium text-text-primary mb-2">
                   Title <span className="text-error">*</span>
                 </label>
                 <input
+                  id="img-title"
                   type="text"
                   value={state.title}
                   onChange={(e) => setState(prev => ({ ...prev, title: e.target.value }))}
@@ -258,10 +261,11 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
 
               {/* Description */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
+                <label htmlFor="img-desc" className="block text-sm font-medium text-text-primary mb-2">
                   Description
                 </label>
                 <textarea
+                  id="img-desc"
                   value={state.description}
                   onChange={(e) => setState(prev => ({ ...prev, description: e.target.value }))}
                   className="input w-full h-24 resize-none"
@@ -271,10 +275,11 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
 
               {/* Alt Text */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
+                <label htmlFor="img-alt" className="block text-sm font-medium text-text-primary mb-2">
                   Alt Text <span className="text-error">*</span>
                 </label>
                 <input
+                  id="img-alt"
                   type="text"
                   value={state.alt_text}
                   onChange={(e) => setState(prev => ({ ...prev, alt_text: e.target.value }))}
@@ -286,10 +291,11 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
 
               {/* SEO Title */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
+                <label htmlFor="img-seo-title" className="block text-sm font-medium text-text-primary mb-2">
                   SEO Title
                 </label>
                 <input
+                  id="img-seo-title"
                   type="text"
                   value={state.seo_title}
                   onChange={(e) => setState(prev => ({ ...prev, seo_title: e.target.value }))}
@@ -300,10 +306,11 @@ export default function ImageUploadWizard({ onClose, onSuccess }: ImageUploadWiz
 
               {/* SEO Description */}
               <div>
-                <label className="block text-sm font-medium text-text-primary mb-2">
+                <label htmlFor="img-seo-desc" className="block text-sm font-medium text-text-primary mb-2">
                   SEO Description
                 </label>
                 <textarea
+                  id="img-seo-desc"
                   value={state.seo_description}
                   onChange={(e) => setState(prev => ({ ...prev, seo_description: e.target.value }))}
                   className="input w-full h-24 resize-none"

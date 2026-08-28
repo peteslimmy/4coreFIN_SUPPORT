@@ -1,4 +1,4 @@
-import { createContext, useContext, useCallback, useEffect, useMemo, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
+import { createContext, useContext, useCallback, useEffect, useMemo, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { UserRole, TicketStatus, type TicketRecord, type CommentRecord, type AuditLog, type WatcherNotification, type MajorIncidentRecord, type CustomerRecord, type FileEvidence } from '../types/app';
 import type { UserRecord, SlaRule, HolidayRecord, TicketTemplate, KbArticle, CategoryRecord } from '../types/admin';
 import type { BuFormConfig, TicketFormConfig } from '../types/forms';
@@ -233,6 +233,25 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Evidence download links are Supabase signed URLs (24h TTL, re-signed by the
+  // server on every list read). Re-fetch periodically so long-lived sessions
+  // always hold fresh links instead of expired ones.
+  useEffect(() => {
+    const EVIDENCE_REFRESH_MS = 20 * 60 * 1000;
+    const id = setInterval(() => {
+      if (!hasSession()) return;
+      api.listEvidence()
+        .then(fresh => {
+          if (!Array.isArray(fresh)) return;
+          ticket.setEvidence(fresh);
+          queryClient.setQueryData(queryKeys.evidence.all(), fresh);
+        })
+        .catch(() => { /* offline or session ended — keep current links */ });
+    }, EVIDENCE_REFRESH_MS);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Role change handler — DEV ONLY (server-side impersonation recommended for production)
   const handleRoleChange = useCallback((role: UserRole) => {
     if (!import.meta.env.DEV) { showToast('Role switching is disabled in production.', 'error'); return; }
@@ -427,7 +446,8 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       }
     });
     return disconnect;
-  }, [shell.isAuthenticated, showToast, shell.currentUser, ticket]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shell.isAuthenticated]);
 
   // Periodic poll as a resilience fallback: SSE delivers live events but a
   // reconnect gap (server restart, network blip) can drop the events that

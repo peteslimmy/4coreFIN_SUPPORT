@@ -79,7 +79,7 @@ export function createConfigRouter(): Router {
   const router = Router();
 
   // ── Config dispatcher (array tables + scalar keys share one route) ──
-  router.get('/config/:name', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.get('/config/:name', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res: Response) => {
     const { name } = req.params;
     if (CONFIG_TABLES.includes(name)) {
       const rows = await listJsonTable(name);
@@ -92,7 +92,7 @@ export function createConfigRouter(): Router {
     return res.status(404).json({ error: 'Unknown config name' });
   });
 
-  router.put('/config/:name', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/config/:name', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const { name } = req.params;
     if (name === 'roles' && req.user!.role !== 'SUPER_ADMIN') {
       return res.status(403).json({ error: 'Requires role: SUPER_ADMIN' });
@@ -190,7 +190,7 @@ export function createConfigRouter(): Router {
     res.json(req.body);
   });
 
-  router.get('/settings', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res: Response) => {
+  router.get('/settings', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const settings = await getConfig('settings', null);
     res.json(settings ?? {});
   });
@@ -228,7 +228,7 @@ export function createConfigRouter(): Router {
     res.json(saved);
   });
 
-  router.put('/saved-replies', requireAuth, requirePermission('admin:config'), validateBody(savedRepliesPutSchema), async (req: AuthedRequest, res: Response) => {
+  router.put('/saved-replies', requireAuth, requirePermission('admin:config:write'), validateBody(savedRepliesPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('savedReplies', req.body);
     res.json(req.body);
   });
@@ -240,12 +240,12 @@ export function createConfigRouter(): Router {
   });
 
   // ── Notification settings ──
-  router.get('/notification-configs', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res: Response) => {
+  router.get('/notification-configs', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const configs: any[] = await getConfig('notificationConfigs', []);
     res.json(configs);
   });
 
-  router.put('/notification-configs', requireAuth, requirePermission('admin:config'), validateBody(notificationConfigsPutSchema), async (req: AuthedRequest, res: Response) => {
+  router.put('/notification-configs', requireAuth, requirePermission('admin:config:write'), validateBody(notificationConfigsPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('notificationConfigs', req.body);
     res.json(req.body);
   });
@@ -256,7 +256,7 @@ export function createConfigRouter(): Router {
     res.json(bus);
   });
 
-  router.put('/business-units', requireAuth, requirePermission('admin:config'), validateBody(businessUnitsPutSchema), async (req: AuthedRequest, res: Response) => {
+  router.put('/business-units', requireAuth, requirePermission('admin:config:write'), validateBody(businessUnitsPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('businessUnits', req.body);
     await audit({ event: 'CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_UPDATED, details: `Updated business units` });
     res.json(req.body);
@@ -267,7 +267,7 @@ export function createConfigRouter(): Router {
     res.json(partners);
   });
 
-  router.put('/partners', requireAuth, requirePermission('admin:config'), validateBody(partnersPutSchema), async (req: AuthedRequest, res: Response) => {
+  router.put('/partners', requireAuth, requirePermission('admin:config:write'), validateBody(partnersPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('partners', req.body);
     res.json(req.body);
   });
@@ -277,7 +277,7 @@ export function createConfigRouter(): Router {
     res.json(categories);
   });
 
-  router.put('/categories', requireAuth, requirePermission('admin:config'), validateBody(categoriesPutSchema), async (req: AuthedRequest, res: Response) => {
+  router.put('/categories', requireAuth, requirePermission('admin:config:write'), validateBody(categoriesPutSchema), async (req: AuthedRequest, res: Response) => {
     await setConfig('categories', req.body);
     res.json(req.body);
   });

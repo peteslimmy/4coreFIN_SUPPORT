@@ -4,6 +4,8 @@ dist/
 coverage/
 .DS_Store
 *.log
+*.err
+*.out
 .env*
 !.env.example
 !.env.test.example
@@ -15,3 +17,5 @@ body.json
 cookies.txt
 test-results/
 playwright-report/
+storybook-static/
+temp.cjs

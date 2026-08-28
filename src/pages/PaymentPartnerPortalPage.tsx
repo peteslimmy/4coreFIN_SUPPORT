@@ -132,7 +132,14 @@ export default function PaymentPartnerPortalPage() {
     );
     logAuditAction(ticket.id, 'PARTNER_SUBMIT_RCA', `Payment Partner ${currentUser.firstName + ' ' + currentUser.lastName} submitted RCA for ticket ${ticket.id}`);
     try {
-      const resolved = await transitionTicket(ticket.id, TicketStatus.RESOLVED);
+      // RCA fields must travel with the transition: the server validates the
+      // required-field gates against the merged record, and the optimistic
+      // local update above never reaches it on its own.
+      const resolved = await transitionTicket(ticket.id, TicketStatus.RESOLVED, {
+        rootCause: rcaForm.rootCause,
+        correctiveAction: rcaForm.correctiveAction,
+        rcaDetails,
+      });
       syncTicketUpdate(ticket.id, { status: resolved.status, rootCause: resolved.rootCause, correctiveAction: resolved.correctiveAction, rcaDetails: resolved.rcaDetails });
       showToast(`RCA submitted for ${ticket.id}. Ticket moved to RESOLVED.`, 'success');
     } catch (e) {
@@ -353,7 +360,7 @@ export default function PaymentPartnerPortalPage() {
                         <div className="flex gap-2">
                           <button
                             onClick={() => handleSubmitRca(ticket)}
-                            className="flex items-center gap-1 px-4 py-2 bg-success text-white text-xs font-bold rounded-lg hover:bg-success-dark transition cursor-pointer"
+                            className="flex items-center gap-1 px-4 py-2 bg-success text-[#fff] text-xs font-bold rounded-lg hover:bg-success-dark transition cursor-pointer"
                           >
                             <Send className="w-3.5 h-3.5" /> Submit & Resolve Ticket
                           </button>

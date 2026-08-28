@@ -8,7 +8,10 @@ export const RUN_ID = 'e2efixed';
 export const E2E_PASSWORD = FIXED_PASSWORD;
 export const MARKER = `[E2E ${RUN_ID}]`;
 
-const DOMAIN = `${RUN_ID}.e2e` as const;
+// .test is the IANA-reserved TLD for testing. The old `.e2e` domain is no
+// longer usable: Zod 4's email validation (login route) rejects TLDs that
+// contain digits, so every login with an @…​.e2e address failed with 400.
+const DOMAIN = `${RUN_ID}.test` as const;
 
 export const customerEmail = (seq: number): string => `customer${seq}@${DOMAIN}`;
 

@@ -1,5 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
-import { Ticket, Activity, BarChart2, Lock, Bell, BookOpen, Plus, ChevronLeft, ChevronRight, ClipboardList, Users, Palette, User, X, LucideIcon, Database, Mail, FolderOpen, Star, Sparkles } from 'lucide-react';
+import { Ticket, Activity, BarChart2, Lock, Bell, BookOpen, Plus, ChevronLeft, ChevronRight, ClipboardList, Users, Palette, User, X, LucideIcon, Database, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { UserRole, TicketStatus, TicketRecord, MajorIncidentRecord, WatcherNotification } from '../types/app';
 import Avatar from './ui/Avatar';
@@ -53,22 +53,19 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
   })();
 
   const allNavItems: NavItem[] = [
-    { id: 'tickets', label: 'Ticket Workspace', icon: Ticket, badge: activeTicketsCount, section: 'Operations' },
-    { id: 'major_incidents', label: 'Major Incidents', icon: Activity, badge: majorIncidents.length, section: 'Operations' },
-    { id: 'email_inbox', label: 'Email Inbox', icon: Mail, section: 'Operations' },
-    { id: 'documents', label: 'Document Management', icon: FolderOpen, section: 'Knowledge' },
+    { id: 'tickets', label: 'Ticket Workspace', icon: Ticket, badge: activeTicketsCount, section: 'Operate' },
+    { id: 'major_incidents', label: 'Major Incidents', icon: Activity, badge: majorIncidents.length, section: 'Operate' },
+    { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operate' },
+    { id: 'customer_portal', label: 'Log Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operate' },
+    { id: 'payment_partner_portal', label: 'Payment Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Operate' },
+    { id: 'dashboard', label: 'Performance Desk', icon: BarChart2, section: 'Analyze', executive: true },
+    { id: 'audit_logs', label: 'Audit Logs', icon: Lock, section: 'Analyze' },
+    { id: 'watcher_notifications', label: 'Watcher Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Analyze' },
+    { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
     { id: 'ai_copilot', label: 'AI Copilot', icon: Sparkles, section: 'Knowledge' },
-    { id: 'surveys', label: 'Surveys & CSAT', icon: Star, section: 'Analytics & Executive' },
-    { id: 'notifications', label: 'Notification Settings', icon: Bell, section: 'Account' },
-    { id: 'dashboard', label: 'Performance Desk', icon: BarChart2, section: 'Analytics & Executive', executive: true },
-    { id: 'audit_logs', label: 'Audit Logs', icon: Lock, section: 'Compliance' },
-    { id: 'watcher_notifications', label: 'Watcher Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Compliance' },
-    { id: 'reference_data', label: 'Reference Data', icon: Database, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
-    { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Administration' },
-  { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
-  { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operations' },
-    { id: 'customer_portal', label: 'Log Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Complaints' },
-    { id: 'payment_partner_portal', label: 'Payment Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Payment Partner Desk' },
+    { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Admin' },
+    { id: 'reference_data', label: 'Reference Data', icon: Database, roles: [UserRole.SUPER_ADMIN], section: 'Admin' },
+    { id: 'notifications', label: 'Notification Settings', icon: Bell, section: 'Admin' },
     { id: 'profile_settings', label: 'Profile & Security', icon: User, section: 'Account' },
   ];
 
@@ -227,7 +224,7 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, currentR
             className="fixed inset-y-0 left-0 w-72 bg-surface-sidebar z-50 lg:hidden flex flex-col shadow-modal"
           >
             <div className="flex items-center justify-end p-4 border-b border-border-subtle">
-              <button onClick={onMobileClose} className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-surface-card transition-colors">
+              <button onClick={onMobileClose} aria-label="Close sidebar" className="p-1.5 rounded-md text-text-muted hover:text-text-secondary hover:bg-surface-card transition-colors">
                 <X className="w-5 h-5" />
               </button>
             </div>

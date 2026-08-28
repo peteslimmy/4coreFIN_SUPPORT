@@ -7,6 +7,7 @@ import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
 import { buildId } from './lib/ids';
 import { escapeLike } from './lib/escapeLike';
+import { refreshSignedUrls } from './services/storageService';
 
 // ─── Tenant scoping helpers ────────────────────────────────────────────
 
@@ -769,7 +770,10 @@ export async function listEvidence(ticketIds?: string[], user?: AuthUser, limit?
   if (limit && limit > 0) query = query.limit(limit);
   const { data, error } = await query;
   if (error || !data) return [];
-  return data.map(toCamel);
+  const rows = data.map(toCamel);
+  // Signed URLs expire; re-sign them so stored links stay downloadable.
+  const refreshed = await refreshSignedUrls(rows.map(r => r.url as string | undefined));
+  return rows.map((r, i) => ({ ...r, url: refreshed[i] || r.url }));
 }
 
 /** Fetch a single evidence row by id, scoped to the user's tenant. */
@@ -781,7 +785,9 @@ export async function getEvidenceById(id: string, user?: AuthUser): Promise<Reco
   }
   const { data, error } = await query.maybeSingle();
   if (error || !data) return null;
-  return toCamel(data);
+  const row = toCamel(data);
+  const [refreshed] = await refreshSignedUrls([row.url as string | undefined]);
+  return { ...row, url: refreshed || row.url };
 }
 
 export async function insertEvidence(evidence: {

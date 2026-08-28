@@ -30,7 +30,7 @@ async function main() {
       body: body !== undefined ? JSON.stringify(body) : undefined,
     });
     setCookies(res.headers);
-    let text = await res.text();
+    const text = await res.text();
     let parsed: any = null;
     try { parsed = JSON.parse(text); } catch { /* non-json */ }
     console.log(`\n[${label}] ${method} ${path} -> ${res.status}`);

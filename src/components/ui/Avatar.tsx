@@ -2,9 +2,12 @@ import { motion } from 'framer-motion';
 import type { AvatarProps } from '../../types/ui';
 import { useMemo } from 'react';
 
+// White initials need ≥4.5:1 against the chip color (WCAG AA at these font
+// sizes), so every entry here is a verified-dark shade of its hue — the 600
+// variants of amber/emerald/cyan/accent measured below 4.5:1 with white text.
 const bgColors = [
-  'bg-accent', 'bg-emerald-600', 'bg-blue-600', 'bg-amber-600',
-  'bg-purple-600', 'bg-rose-600', 'bg-cyan-600', 'bg-slate-600',
+  'bg-info', 'bg-success-dark', 'bg-primary', 'bg-info-dark',
+  'bg-error', 'bg-text-secondary', 'bg-warning-dark',
 ];
 
 function getInitials(name: string): string {
@@ -43,7 +46,7 @@ export default function Avatar({ name, size = 'md', src, className = '' }: Avata
 
   return (
     <motion.span
-      className={`relative inline-flex items-center justify-center rounded-full font-medium text-white ${bgColor} ${sizeMap[size]} ${className}`}
+      className={`relative inline-flex items-center justify-center rounded-full font-medium text-[#fff] ${bgColor} ${sizeMap[size]} ${className}`}
       title={name}
       aria-label={name}
       whileHover={{ scale: 1.1 }}

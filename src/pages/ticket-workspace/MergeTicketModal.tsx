@@ -1,5 +1,4 @@
 import React, { useState, useMemo } from 'react';
-import { Search } from 'lucide-react';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
 import type { TicketRecord } from '../../types/app';
@@ -106,7 +105,7 @@ export default function MergeTicketModal({
           <button
             type="button"
             onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-bold text-white rounded-lg transition-all duration-200 shadow-sm bg-error hover:bg-error-dark active:bg-error-dark focus-ring"
+            className="px-4 py-2 text-sm font-bold text-[#fff] rounded-lg transition-all duration-200 shadow-sm bg-error hover:bg-error-dark active:bg-error-dark focus-ring"
           >
             Merge
           </button>

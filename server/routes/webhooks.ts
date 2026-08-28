@@ -13,7 +13,7 @@ export function createWebhooksRouter(): Router {
   const router = Router();
 
   // ── List all webhooks ────────────────────────────────────────
-  router.get('/admin/webhooks', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res: Response) => {
+  router.get('/admin/webhooks', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const { data, error } = await supabase
       .from('webhooks')
       .select('id, name, url, events, is_active, last_fired_at, created_at')
@@ -23,7 +23,7 @@ export function createWebhooksRouter(): Router {
   });
 
   // ── Get single webhook ───────────────────────────────────────
-  router.get('/admin/webhooks/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.get('/admin/webhooks/:id', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res: Response) => {
     const { data, error } = await supabase
       .from('webhooks')
       .select('id, name, url, events, is_active, last_fired_at, created_at, created_by, tenant_id')
@@ -35,7 +35,7 @@ export function createWebhooksRouter(): Router {
   });
 
   // ── Create webhook ───────────────────────────────────────────
-  router.post('/admin/webhooks', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.post('/admin/webhooks', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const { name, url, events, tenant_id } = req.body;
     if (!name || !url) {
       return res.status(400).json({ error: 'name and url are required' });
@@ -59,7 +59,7 @@ export function createWebhooksRouter(): Router {
   // ── Update webhook ───────────────────────────────────────────
   const ALLOWED_UPDATE_FIELDS = new Set(['name', 'url', 'events', 'is_active', 'tenant_id']);
 
-  router.put('/admin/webhooks/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.put('/admin/webhooks/:id', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const allowed = ['name', 'url', 'events', 'is_active', 'tenant_id'];
     const patch: Record<string, unknown> = {};
     for (const key of allowed) {
@@ -93,7 +93,7 @@ export function createWebhooksRouter(): Router {
   });
 
   // ── Delete webhook ───────────────────────────────────────────
-  router.delete('/admin/webhooks/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.delete('/admin/webhooks/:id', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const { data, error: selectError } = await supabase
       .from('webhooks')
       .select('name')
@@ -109,7 +109,7 @@ const { error } = await supabase.from('webhooks').delete().eq('id', req.params.i
   });
 
   // ── Delivery log for a webhook ───────────────────────────────
-  router.get('/admin/webhooks/:id/deliveries', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.get('/admin/webhooks/:id/deliveries', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res: Response) => {
     const limit = Math.min(parseInt(req.query.limit as string, 10) || 50, 200);
     const offset = parseInt(req.query.offset as string, 10) || 0;
 
@@ -130,7 +130,7 @@ const { error } = await supabase.from('webhooks').delete().eq('id', req.params.i
   });
 
   // ── Test-fire a webhook (dry-run, dispatches but errors don't propagate) ──
-  router.post('/admin/webhooks/:id/test', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.post('/admin/webhooks/:id/test', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const { data: wh, error: selErr } = await supabase
       .from('webhooks')
       .select('id, url, events, is_active')

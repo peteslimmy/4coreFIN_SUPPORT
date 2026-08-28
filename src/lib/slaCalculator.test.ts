@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
 import { computeSlaDeadline, resolveSlaDuration } from './slaCalculator';
-import { TicketPriority } from '../types/app';
 
 const RULES = [{ id: 'r1', category: 'Payment Dispute', priority: 'HIGH', durationHours: 8 }];
 const NO_RULES: typeof RULES = [];

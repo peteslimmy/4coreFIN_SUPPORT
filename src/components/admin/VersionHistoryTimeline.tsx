@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, RotateCcw, Calendar, User, FileImage } from 'lucide-react';
+import { useToast } from '../../hooks/useToast';
+import ConfirmModal from '../ui/ConfirmModal';
 import type { ImageVersion } from './types';
 
 interface VersionHistoryTimelineProps {
@@ -19,6 +21,8 @@ export default function VersionHistoryTimeline({
   const [versions, setVersions] = useState<ImageVersion[]>([]);
   const [loading, setLoading] = useState(true);
   const [rollingBack, setRollingBack] = useState(false);
+  const [confirmVersion, setConfirmVersion] = useState<number | null>(null);
+  const { showToast } = useToast();
 
    useEffect(() => {
      let isMounted = true;
@@ -35,9 +39,9 @@ export default function VersionHistoryTimeline({
          if (isMounted) {
            setVersions(data || []);
          }
-       } catch (error) {
-         if (isMounted) {
-           console.error('Error fetching versions:', error);
+        } catch (_error) {
+          if (isMounted) {
+            showToast('Failed to load version history', 'error');
          }
        } finally {
          if (isMounted) {
@@ -51,13 +55,14 @@ export default function VersionHistoryTimeline({
      return () => {
        isMounted = false;
      };
-   }, [imageId]);
+   }, [imageId, showToast]);
 
   const handleRollback = async (version: number) => {
-    if (!confirm(`Are you sure you want to rollback to version ${version}?`)) {
-      return;
-    }
+    setConfirmVersion(version);
+  };
 
+  const confirmRollback = async () => {
+    if (confirmVersion === null) return;
     try {
       setRollingBack(true);
       const response = await fetch(`/api/landing-page/images/${imageId}/rollback`, {
@@ -65,18 +70,18 @@ export default function VersionHistoryTimeline({
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ version }),
+        body: JSON.stringify({ version: confirmVersion }),
         credentials: 'include',
       });
 
       if (!response.ok) throw new Error('Failed to rollback');
 
       onRollback();
-    } catch (error) {
-      console.error('Error rolling back:', error);
-      alert('Failed to rollback to version');
+    } catch (_error) {
+      showToast('Failed to rollback to version', 'error');
     } finally {
       setRollingBack(false);
+      setConfirmVersion(null);
     }
   };
 
@@ -91,7 +96,7 @@ export default function VersionHistoryTimeline({
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-surface/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -108,6 +113,7 @@ export default function VersionHistoryTimeline({
           </div>
           <button
             onClick={onClose}
+            aria-label="Close version history"
             className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
           >
             <X className="w-5 h-5 text-text-secondary" />
@@ -145,7 +151,7 @@ export default function VersionHistoryTimeline({
                     <div className="flex flex-col items-center">
                       <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                         version.version === currentVersion
-                          ? 'bg-accent text-white'
+                          ? 'bg-accent text-[#fff]'
                           : 'bg-surface-card border-2 border-border-subtle'
                       }`}>
                         <span className="text-sm font-bold">v{version.version}</span>
@@ -210,6 +216,15 @@ export default function VersionHistoryTimeline({
           </button>
         </div>
       </motion.div>
+      <ConfirmModal
+        isOpen={confirmVersion !== null}
+        onClose={() => setConfirmVersion(null)}
+        onConfirm={confirmRollback}
+        title="Rollback Version"
+        message={`Are you sure you want to rollback to version ${confirmVersion}? This action cannot be undone.`}
+        confirmLabel="Rollback"
+        variant="danger"
+      />
     </div>
   );
 }

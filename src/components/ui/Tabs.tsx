@@ -54,7 +54,7 @@ export default function Tabs({ tabs, activeTab, onChange, orientation = 'horizon
           {tab.label}
           {tab.badge !== undefined && (
             <span className={`ml-1 px-1.5 py-0.5 text-xs rounded-full font-medium ${
-              tab.value === activeTab ? 'bg-primary text-white' : 'bg-surface text-text-muted'
+              tab.value === activeTab ? 'bg-primary text-[#fff]' : 'bg-surface text-text-muted'
             }`}>
               {tab.badge}
             </span>

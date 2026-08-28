@@ -13,6 +13,9 @@ const statusStyles: Record<string, { bg: string; text: string }> = {
   RECEIPT: { bg: 'bg-[var(--color-status-receipt-bg)]', text: 'text-[var(--color-status-receipt-text)]' },
   ASSIGNED: { bg: 'bg-[var(--color-status-progress-bg)]', text: 'text-[var(--color-status-progress-text)]' },
   INVESTIGATE: { bg: 'bg-[var(--color-status-investigation-bg)]', text: 'text-[var(--color-status-investigation-text)]' },
+  WAITING_CUSTOMER: { bg: 'bg-warning-light dark:bg-warning/30', text: 'text-warning-dark dark:text-warning' },
+  WAITING_PARTNER: { bg: 'bg-warning-light dark:bg-warning/30', text: 'text-warning-dark dark:text-warning' },
+  WAITING_INTERNAL: { bg: 'bg-warning-light dark:bg-warning/30', text: 'text-warning-dark dark:text-warning' },
   RESOLVED: { bg: 'bg-[var(--color-status-resolved-bg)]', text: 'text-[var(--color-status-resolved-text)]' },
   CLOSED: { bg: 'bg-[var(--color-status-closed-bg)]', text: 'text-[var(--color-status-closed-text)]' },
 };

@@ -2,6 +2,7 @@
  * AI Prompt Injection Sanitization
  * Prevents prompt injection attacks on Gemini endpoints
  */
+import crypto from 'crypto';
 
 // Patterns that indicate potential prompt injection
 const INJECTION_PATTERNS = [
@@ -158,6 +159,3 @@ export function logAIRequest(
 function hashPrompt(prompt: string): string {
   return crypto.createHash('sha256').update(prompt).digest('hex').slice(0, 16);
 }
-
-// Need to import crypto
-import crypto from 'crypto';

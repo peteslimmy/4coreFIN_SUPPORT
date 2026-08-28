@@ -263,11 +263,21 @@ export function createReferenceRouter(): Router {
 
   router.use(requireAuth);
 
-  async function requireKindPermission(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
+  async function requireKindPermissionRead(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
     try {
       req.params.kind = await canonicalKind(req.params.kind);
       const def = await resolveKind(req.params.kind);
-      return requirePermission(def?.permission ?? 'admin:config')(req, res, next);
+      return requirePermission(def?.permission ?? 'admin:config:read')(req, res, next);
+    } catch (e) {
+      next(e);
+    }
+  }
+
+  async function requireKindPermissionWrite(req: AuthedRequest, res: Response, next: import('express').NextFunction) {
+    try {
+      req.params.kind = await canonicalKind(req.params.kind);
+      const def = await resolveKind(req.params.kind);
+      return requirePermission(def?.permission ?? 'admin:config:write')(req, res, next);
     } catch (e) {
       next(e);
     }
@@ -286,11 +296,11 @@ export function createReferenceRouter(): Router {
   }
 
   // ── Custom kinds ───────────────────────────────────────────────────
-  router.get('/kinds', requirePermission('admin:config'), async (_req: AuthedRequest, res: Response) => {
+  router.get('/kinds', requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     res.json(await listCustomReferenceKinds());
   });
 
-  router.post('/kinds', requirePermission('admin:config'), async (req: AuthedRequest, res: Response) => {
+  router.post('/kinds', requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
     const body = (req.body ?? {}) as Record<string, unknown>;
     const kind = String(body.kind ?? body.name ?? '').trim();
     const label = String(body.label ?? '').trim();
@@ -331,7 +341,7 @@ export function createReferenceRouter(): Router {
   });
 
   // ── List ────────────────────────────────────────────────────────────
-  router.get('/:kind', requireKindPermission, async (req: AuthedRequest, res: Response) => {
+  router.get('/:kind', requireKindPermissionRead, async (req: AuthedRequest, res: Response) => {
     const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
     const items =
@@ -344,7 +354,7 @@ export function createReferenceRouter(): Router {
   });
 
   // ── Create ──────────────────────────────────────────────────────────
-  router.post('/:kind', requireKindPermission, async (req: AuthedRequest, res: Response) => {
+  router.post('/:kind', requireKindPermissionWrite, async (req: AuthedRequest, res: Response) => {
     const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 
@@ -417,7 +427,7 @@ export function createReferenceRouter(): Router {
   });
 
   // ── Update ──────────────────────────────────────────────────────────
-  router.patch('/:kind/:id', requireKindPermission, async (req: AuthedRequest, res: Response) => {
+  router.patch('/:kind/:id', requireKindPermissionWrite, async (req: AuthedRequest, res: Response) => {
     const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 
@@ -486,7 +496,7 @@ await audit({ event: `REFERENCE_${req.params.kind.replace(/_/g, '_').toUpperCase
   });
 
   // ── Delete ──────────────────────────────────────────────────────────
-  router.delete('/:kind/:id', requireKindPermission, requireKindDeleteRole, async (req: AuthedRequest, res: Response) => {
+  router.delete('/:kind/:id', requireKindPermissionWrite, requireKindDeleteRole, async (req: AuthedRequest, res: Response) => {
     const def = await resolveKind(req.params.kind);
     if (!def) return res.status(404).json({ error: `Unknown reference kind: ${req.params.kind}` });
 

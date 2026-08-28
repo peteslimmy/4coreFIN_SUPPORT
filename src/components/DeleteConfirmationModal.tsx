@@ -29,7 +29,7 @@ export default function DeleteConfirmationModal({ isOpen, onClose, onConfirm, ti
               onConfirm();
               onClose();
             }}
-            className="px-4 py-2 text-sm font-bold text-white bg-error hover:bg-error-dark active:bg-error-dark rounded-lg transition-all duration-200 shadow-sm focus-ring"
+            className="px-4 py-2 text-sm font-bold text-[#fff] bg-error hover:bg-error-dark active:bg-error-dark rounded-lg transition-all duration-200 shadow-sm focus-ring"
           >
             Confirm Delete
           </button>

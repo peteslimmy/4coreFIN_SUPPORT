@@ -157,11 +157,11 @@ export default function ProfileSettingsPage() {
                     {avatarUrl ? (
                       <img src={avatarUrl} alt="Avatar" className="w-20 h-20 rounded-full object-cover border-2 border-border" />
                     ) : (
-                      <div className="w-20 h-20 rounded-full bg-accent flex items-center justify-center text-white text-xl font-bold border-2 border-border">
+                       <div className="w-20 h-20 rounded-full bg-accent flex items-center justify-center text-[#fff] text-xl font-bold border-2 border-border">
                         {initials}
                       </div>
                     )}
-                     <label className="absolute bottom-0 right-0 w-7 h-7 bg-accent text-white rounded-full flex items-center justify-center cursor-pointer hover:bg-accent-light transition">
+                      <label className="absolute bottom-0 right-0 w-7 h-7 bg-accent text-[#fff] rounded-full flex items-center justify-center cursor-pointer hover:bg-accent-light transition">
                       <Camera className="w-3.5 h-3.5" />
                       <input type="file" accept="image/*" className="hidden" onChange={handleAvatarUpload} />
                     </label>
@@ -198,7 +198,7 @@ export default function ProfileSettingsPage() {
                   </div>
                 </div>
 
-                <button onClick={handleSaveProfile} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-xs font-semibold transition disabled:opacity-50">
+                <button onClick={handleSaveProfile} disabled={saving} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-[#fff] rounded-lg text-xs font-semibold transition disabled:opacity-50">
                   <Save className="w-4 h-4" /> {saving ? 'Saving...' : 'Save Profile'}
                 </button>
               </div>
@@ -242,7 +242,7 @@ export default function ProfileSettingsPage() {
                         <p className="text-xs text-error mt-1">Passwords do not match</p>
                       )}
                     </div>
-                    <button onClick={handleChangePassword} disabled={changingPw || !isPasswordValid(newPassword) || newPassword !== confirmPassword} className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-light transition disabled:opacity-50">
+                    <button onClick={handleChangePassword} disabled={changingPw || !isPasswordValid(newPassword) || newPassword !== confirmPassword} className="flex items-center gap-2 px-4 py-2 bg-accent text-[#fff] rounded-lg text-xs font-semibold hover:bg-accent-light transition disabled:opacity-50">
                       <Lock className="w-4 h-4" /> {changingPw ? 'Changing...' : 'Change Password'}
                     </button>
                   </>

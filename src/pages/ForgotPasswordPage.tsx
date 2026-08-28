@@ -38,11 +38,14 @@ export default function ForgotPasswordPage() {
   return (
     <PageTransition>
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
+      <a href="#forgot-form" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
+        Skip to form
+      </a>
       <AuthBackground />
       <div className="relative z-10 w-full max-w-sm">
         <div className="mb-6 text-center">
           <AuthLogo />
-          <h1 className="text-display font-bold text-text-primary">Reset password</h1>
+          <h1 id="forgot-heading" className="text-display font-bold text-text-primary">Reset password</h1>
           <p className="mt-1 text-body-sm text-text-muted">We'll send you a recovery link</p>
         </div>
 
@@ -58,7 +61,7 @@ export default function ForgotPasswordPage() {
               <p className="text-body text-text-muted">Recovery link sent to <strong className="text-text-primary">{email}</strong></p>
             </div>
           ) : (
-            <form onSubmit={handleSubmit} className="space-y-4">
+            <form id="forgot-form" aria-labelledby="forgot-heading" onSubmit={handleSubmit} className="space-y-4">
               {error && (
                 <div className="text-caption text-error bg-error-light border border-error/20 rounded-lg px-3 py-2">{error}</div>
               )}
@@ -75,7 +78,7 @@ export default function ForgotPasswordPage() {
                   />
                 </div>
               </div>
-              <button type="submit" disabled={loading} className="w-full bg-accent hover:bg-accent-light text-white font-semibold py-2.5 rounded-lg transition-all duration-150 text-sm cursor-pointer disabled:opacity-50">
+              <button type="submit" disabled={loading} className="w-full bg-accent hover:bg-accent-light text-[#fff] font-semibold py-2.5 rounded-lg transition-all duration-150 text-sm cursor-pointer disabled:opacity-50">
                 {loading ? 'Sending...' : 'Send recovery link'}
               </button>
             </form>

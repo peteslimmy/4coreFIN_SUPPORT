@@ -53,7 +53,7 @@ export function createSurveysRouter(): Router {
   router.post(
     '/surveys/campaigns',
     requireAuth,
-    requirePermission('admin:config'),
+    requirePermission('admin:config:write'),
     async (req: AuthedRequest, res: Response) => {
       const parsed = campaignCreateSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -95,7 +95,7 @@ export function createSurveysRouter(): Router {
   router.patch(
     '/surveys/campaigns/:id',
     requireAuth,
-    requirePermission('admin:config'),
+    requirePermission('admin:config:write'),
     async (req: AuthedRequest, res: Response) => {
       const parsed = campaignUpdateSchema.safeParse(req.body);
       if (!parsed.success) {
@@ -135,7 +135,7 @@ export function createSurveysRouter(): Router {
   router.delete(
     '/surveys/campaigns/:id',
     requireAuth,
-    requirePermission('admin:config'),
+    requirePermission('admin:config:write'),
     async (req: AuthedRequest, res: Response) => {
       const { data: existing, error: fetchErr } = await supabase
         .from('surveys.survey_campaigns')

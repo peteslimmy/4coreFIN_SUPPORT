@@ -36,7 +36,7 @@ export default function useRipple(disabled?: boolean) {
     timers.current.add(t);
   }, [disabled]);
   const rippleElements = ripples.map(r => (
-    <span key={r.id} className="pointer-events-none absolute rounded-full bg-white/30 animate-ripple"
+    <span key={r.id} className="pointer-events-none absolute rounded-full bg-surface-card/30 animate-ripple"
       style={{ left: r.x, top: r.y, width: r.size, height: r.size }} />
   ));
   return { onMouseDown, rippleElements };

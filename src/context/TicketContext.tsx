@@ -103,14 +103,17 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       action,
       details
     };
-    const previousHash = auditLogs.length > 0 ? auditLogs[0].hash : '';
-    const entryWithHash: AuditLog = { ...newLog, previousHash, hash: '' };
+    const entryWithHash: AuditLog = { ...newLog, previousHash: '', hash: '' };
     entryWithHash.hash = await computeAuditHash(entryWithHash);
-    const updated = [entryWithHash, ...auditLogs];
-    saveToStorage(tickets, comments, updated);
-    setAuditLogs(updated);
+    setAuditLogs(prev => {
+      const previousHash = prev.length > 0 ? prev[0].hash : '';
+      entryWithHash.previousHash = previousHash;
+      const updated = [entryWithHash, ...prev];
+      saveToStorage(tickets, comments, updated);
+      return updated;
+    });
     syncAudit({ ticketId, action, details });
-  }, [currentUser, currentRole, tickets, comments, auditLogs, saveToStorage]);
+  }, [currentUser, currentRole, tickets, comments, saveToStorage]);
 
   // Notify watchers
   const notifyWatchers = useCallback((ticket: TicketRecord, message: string, updatedTicketsList?: TicketRecord[]) => {
@@ -128,12 +131,12 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       seen: false
     }));
     newNotifications.forEach(n => syncNotification(n));
-    // Side effects stay OUT of the state updater: React StrictMode double-invokes
-    // updater functions, which previously duplicated the persistence writes.
-    const updatedWN = [...newNotifications, ...watcherNotifications];
-    setWatcherNotifications(updatedWN);
-    saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents, updatedWN);
-  }, [tickets, comments, auditLogs, majorIncidents, watcherNotifications, saveToStorage]);
+    setWatcherNotifications(prev => {
+      const updatedWN = [...newNotifications, ...prev];
+      saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents, updatedWN);
+      return updatedWN;
+    });
+  }, [tickets, comments, auditLogs, majorIncidents, saveToStorage]);
 
   // Authoritative, rule-gated ticket lifecycle transition.
   const getAvailableTicketTransitions = useCallback(
@@ -145,26 +148,31 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
 
   const transitionTicket = useCallback(
     async (ticketId: string, toStatus: TicketStatus): Promise<TicketRecord> => {
-      const ticket = tickets.find(t => t.id === ticketId);
-      if (!ticket) throw new Error(`Ticket ${ticketId} not found`);
+      let updated!: TicketRecord;
+      let rule: TransitionRule | undefined;
 
-      const available = getAvailableTransitions(ticket, currentRole);
-      if (!available.some(r => r.to === toStatus)) {
-        const allowed = available.map(r => ({ to: r.to, label: r.label }));
-        const err = new TransitionError(
-          `Cannot move "${ticket.status}" → "${toStatus}" as ${currentRole}`,
-          'NOT_ALLOWED',
-          allowed
-        );
-        throw err;
-      }
+      setTickets(ts => {
+        const ticket = ts.find(t => t.id === ticketId);
+        if (!ticket) throw new Error(`Ticket ${ticketId} not found`);
 
-      const updated = applyTransition(ticket, toStatus, currentRole, {
-        actor: currentUser.firstName + ' ' + currentUser.lastName,
+        const available = getAvailableTransitions(ticket, currentRole);
+        if (!available.some(r => r.to === toStatus)) {
+          const allowed = available.map(r => ({ to: r.to, label: r.label }));
+          throw new TransitionError(
+            `Cannot move "${ticket.status}" → "${toStatus}" as ${currentRole}`,
+            'NOT_ALLOWED',
+            allowed
+          );
+        }
+
+        updated = applyTransition(ticket, toStatus, currentRole, {
+          actor: currentUser.firstName + ' ' + currentUser.lastName,
+        });
+        rule = available.find(r => r.to === toStatus);
+
+        return ts.map(t => (t.id === ticketId ? updated : t));
       });
-      const rule: TransitionRule | undefined = available.find(r => r.to === toStatus);
 
-      setTickets(ts => ts.map(t => (t.id === ticketId ? updated : t)));
       if (activeTicketIdRef.current === ticketId) setActiveTicketId(ticketId);
 
       logAuditAction(
@@ -177,7 +185,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
 
       return updated;
     },
-    [tickets, currentRole, logAuditAction, notifyWatchers, currentUser.firstName, currentUser.lastName, setActiveTicketId]
+    [currentRole, logAuditAction, notifyWatchers, currentUser.firstName, currentUser.lastName, setActiveTicketId]
   );
 
   // SLA risk check
@@ -277,6 +285,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       submittedBy: ticketData.submittedBy || 'BU_SUPPORT',
       submittedByName: ticketData.submittedByName,
       submittedByPhone: ticketData.submittedByPhone,
+      bankName: ticketData.bankName || 'N/A',
     };
     setTickets(prev => [record, ...prev]);
     const newAudit: AuditLog = {

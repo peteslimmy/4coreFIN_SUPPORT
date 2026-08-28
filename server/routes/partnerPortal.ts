@@ -8,8 +8,10 @@ import { supabase } from '../supabase';
 import { buildId } from '../lib/ids';
 import { listTickets } from '../repository';
 
-function partnerId(req: AuthedRequest): string {
-  return (req.user!.partner || req.user!.bu || '').toLowerCase();
+function partnerId(req: AuthedRequest): string | null {
+  const pid = (req.user!.partner || req.user!.bu || '').toLowerCase();
+  if (!pid) return null;
+  return pid;
 }
 
 const createSavedReplySchema = z.object({
@@ -28,6 +30,7 @@ export function createPartnerPortalRouter(): Router {
   // ── Scorecard ──────────────────────────────────────────────────────
   router.get('/partner/scorecard', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
     const now = new Date();
     const periodStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().slice(0, 10);
     const periodEnd = now.toISOString().slice(0, 10);
@@ -47,6 +50,7 @@ export function createPartnerPortalRouter(): Router {
 
   router.get('/partner/scorecard/history', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
     const limit = req.query.limit ? Math.min(Number(req.query.limit) || 12, 52) : 12;
 
     const { data, error } = await supabase
@@ -63,6 +67,7 @@ export function createPartnerPortalRouter(): Router {
   // ── Metrics ────────────────────────────────────────────────────────
   router.get('/partner/metrics', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
 
     const { data, error } = await supabase
       .from('partner_portal.partner_metrics')
@@ -77,6 +82,7 @@ export function createPartnerPortalRouter(): Router {
   // ── Saved Replies ──────────────────────────────────────────────────
   router.get('/partner/saved-replies', requireAuth, requirePermission('tickets:view'), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
 
     const { data, error } = await supabase
       .from('partner_portal.saved_replies')
@@ -90,6 +96,7 @@ export function createPartnerPortalRouter(): Router {
 
   router.post('/partner/saved-replies', requireAuth, requirePermission('tickets:edit'), validateBody(createSavedReplySchema), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
     const entry = {
       id: buildId('sr'),
       partner_id: pid,
@@ -115,6 +122,7 @@ export function createPartnerPortalRouter(): Router {
 
   router.patch('/partner/saved-replies/:id', requireAuth, requirePermission('tickets:edit'), validateBody(updateSavedReplySchema), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
 
     const { data: existing, error: fetchErr } = await supabase
       .from('partner_portal.saved_replies')
@@ -150,6 +158,7 @@ export function createPartnerPortalRouter(): Router {
 
   router.delete('/partner/saved-replies/:id', requireAuth, requirePermission('tickets:edit'), async (req: AuthedRequest, res: Response) => {
     const pid = partnerId(req);
+    if (!pid) return res.status(400).json({ error: 'Partner or business unit not set on your account' });
 
     const { data: existing, error: fetchErr } = await supabase
       .from('partner_portal.saved_replies')

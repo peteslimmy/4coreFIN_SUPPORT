@@ -57,7 +57,7 @@ export function createOperationsRouter(): Router {
       add('partners', () => getConfig('partners', []));
       add('categories', () => getConfig('categories', []));
     }
-    if (wants('config') && can('admin:config')) {
+    if (wants('config') && can('admin:config:read')) {
       add('slaRules', () => listJsonTable('sla_rules'));
       add('holidays', () => listJsonTable('holidays'));
       add('ticketTemplates', () => listJsonTable('ticket_templates'));

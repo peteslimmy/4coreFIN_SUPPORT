@@ -5,6 +5,52 @@
      (from-/via-/to-), ring, border-* variant and opacity-modifier utilities.
      Values mirror the :root/.dark custom properties below. */
   --color-accent: #8B0000;
+
+  /* — MD3 Spacing — */
+  --spacing-sm: 0.5rem;
+  --spacing-md: 1rem;
+  --spacing-lg: 1.5rem;
+
+  /* — MD3 Surface Container — */
+  --color-surface-container-lowest: #FFFFFF;
+  --color-surface-container-low: #F7F8FA;
+  --color-surface-container: #F1F3F5;
+  --color-surface-container-high: #ECEEF0;
+  --color-surface-container-highest: #E6E8EB;
+
+  /* — MD3 Primary Fixed — */
+  --color-primary-fixed: #FFE5E5;
+  --color-primary-fixed-dim: #FFC8C8;
+  --color-on-primary-fixed-variant: #3A0000;
+
+  /* — MD3 Tertiary Container — */
+  --color-tertiary-container: #E8DEF8;
+  --color-on-tertiary-container: #1D192B;
+
+  /* — MD3 On-surface variant — */
+  --color-on-surface-variant: #49454F;
+
+  /* — MD3 Outline — */
+  --color-outline: #79747E;
+  --color-outline-variant: #CAC4D0;
+
+  /* — MD3 Error Container — */
+  --color-error-container: #F9DEDC;
+  --color-on-error-container: #410E0B;
+
+  /* — MD3 Warning Container — */
+  --color-warning-container: #FFD966;
+  --color-on-warning-container: #3D2E00;
+
+  /* — MD3 Success Container — */
+  --color-success-container: #C7F0D2;
+  --color-on-success-container: #0B3D1A;
+
+  /* — MD3 Typography — */
+  --font-headline-md: var(--font-heading);
+  --font-label-caps: var(--font-sans);
+  --text-headline-md: 1.125rem;
+  --text-label-caps: 0.6875rem;
   --color-accent-light: #A52A2A;
   --color-accent-dark: #6B0000;
   --color-primary: #8B0000;
@@ -33,7 +79,7 @@
   --color-border-subtle: #EEF0F3;
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #4B5563;
-  --color-text-muted: #6B7280;
+  --color-text-muted: #5A6472;
 }
 
 @custom-variant dark (&.dark *);
@@ -65,7 +111,7 @@
   /* — Text — */
   --color-text-primary: #1A1A1A;
   --color-text-secondary: #4B5563;
-  --color-text-muted: #6B7280;
+  --color-text-muted: #5A6472;
 
   /* — Semantic — */
   --color-primary: #8B0000;
@@ -240,6 +286,40 @@
   --color-info: #8B0000;
   --color-info-light: #1A0808;
 
+  /* — MD3 Surface Container (dark) — */
+  --color-surface-container-lowest: #0A0A0A;
+  --color-surface-container-low: #0F0F0F;
+  --color-surface-container: #141414;
+  --color-surface-container-high: #1C1C1C;
+  --color-surface-container-highest: #2A2A2A;
+
+  /* — MD3 Primary Fixed (dark) — */
+  --color-primary-fixed: #3A1414;
+  --color-primary-fixed-dim: #2A0A0A;
+
+  /* — MD3 Tertiary Container (dark) — */
+  --color-tertiary-container: #2D1F3D;
+  --color-on-tertiary-container: #E8DEF8;
+
+  /* — MD3 On-surface variant (dark) — */
+  --color-on-surface-variant: #CAC4D0;
+
+  /* — MD3 Outline (dark) — */
+  --color-outline: #938F99;
+  --color-outline-variant: #49454F;
+
+  /* — MD3 Error Container (dark) — */
+  --color-error-container: #3A1414;
+  --color-on-error-container: #F9DEDC;
+
+  /* — MD3 Warning Container (dark) — */
+  --color-warning-container: #3D2E00;
+  --color-on-warning-container: #FFD966;
+
+  /* — MD3 Success Container (dark) — */
+  --color-success-container: #0B3D1A;
+  --color-on-success-container: #C7F0D2;
+
   /* — Shadows become ambient glows in dark — */
   --shadow-1: 0 1px 2px 0 rgb(0 0 0 / 0.4);
   --shadow-2: 0 1px 3px 0 rgb(0 0 0 / 0.5), 0 1px 2px -1px rgb(0 0 0 / 0.3);
@@ -375,6 +455,10 @@
 .text-caption { font-size: var(--text-caption); line-height: 1.4; }
 .text-overline { font-size: var(--text-overline); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; color: var(--color-text-muted); }
 .text-mono { font-family: var(--font-mono); font-size: var(--text-mono); line-height: 1.5; }
+
+/* MD3 Typography */
+.text-headline-md { font-family: var(--font-headline-md); font-size: var(--text-headline-md); font-weight: 600; line-height: 1.3; letter-spacing: -0.01em; }
+.text-label-caps { font-family: var(--font-label-caps); font-size: var(--text-label-caps); font-weight: 600; line-height: 1.4; text-transform: uppercase; letter-spacing: 0.06em; }
 
 /* Elevation */
 .shadow-1 { box-shadow: var(--shadow-1); }

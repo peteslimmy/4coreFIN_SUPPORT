@@ -1,20 +1,23 @@
 import React, { useState } from 'react';
-import { Ticket } from 'lucide-react';
+import { Ticket, List } from 'lucide-react';
 
 import PageTransition from '../components/layout/PageTransition';
 import Skeleton from '../components/ui/Skeleton';
 import EmptyState from '../components/ui/EmptyState';
 import type { CommentRecord, WatcherNotification, AuditLog } from '../types/app';
-import { TicketStatus, TicketPriority } from '../types/app';
+import { TicketStatus, TicketPriority, UserRole } from '../types/app';
 import { useApp } from '../context/AppContext';
 import { useUi } from '../context/UiContext';
 import { syncComment, syncTicketDelete, syncTicketUpdate, syncTicketTransition } from '../lib/sync';
 import { isBuSupportRole } from '../lib/rbac';
-import { isAddressed, applyMention, fullNameOf, mentionCandidates, resolveMention } from '../lib/mention';
+import { applyMention, fullNameOf, mentionCandidates, resolveMention } from '../lib/mention';
 import TicketListPane from './ticket-workspace/TicketListPane';
 import TicketDetailView from './ticket-workspace/TicketDetailView';
+import TicketChatPanel from './ticket-workspace/TicketChatPanel';
+import RightPanel from './ticket-workspace/RightPanel';
 import EscalationModals from './ticket-workspace/EscalationModals';
 import NewTicketModal, { type NewTicketFormState } from './ticket-workspace/NewTicketModal';
+import { N_A_BANK } from '../lib/formConfigs';
 import MergeTicketModal from './ticket-workspace/MergeTicketModal';
 
 interface TicketWorkspacePageProps {
@@ -31,7 +34,6 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     currentRole, currentUser,
     logAuditAction, saveToStorage, showToast,
     notifyWatchers,
-    evidence,
     handleCreateTicket, users,
     slaRules, holidays, ticketTemplates, kbArticles,
     can,
@@ -47,20 +49,20 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
   const [selectedWatcherIds, setSelectedWatcherIds] = useState<Set<string>>(new Set());
   const [rcaForm, setRcaForm] = useState({ rootCause: '', contributingFactors: '', correctiveActions: '', preventiveActions: '' });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-  const [feedbackInput, setFeedbackInput] = useState({ score: 5, comment: '' });
+  const [feedbackInput] = useState({ score: 5, comment: '' });
   const [showEscalationModal, setShowEscalationModal] = useState(false);
   const [escalationReason, setEscalationReason] = useState('');
   const [replyingTo, setReplyingTo] = useState<string | null>(null);
   const [showMentions, setShowMentions] = useState(false);
   const [mentionSearch, setMentionSearch] = useState('');
   const [mentionIndex, setMentionIndex] = useState(-1);
-  const [isRcaGenerating, setIsRcaGenerating] = useState(false);
+  const [, setIsRcaGenerating] = useState(false);
   const [showDeclareResolution, setShowDeclareResolution] = useState(false);
   const [isSendingComment, setIsSendingComment] = useState(false);
   const [showMobileTicketList, setShowMobileTicketList] = useState(false);
   const [directMessageText, setDirectMessageText] = useState('');
   const [showNewTicketPanel, setShowNewTicketPanel] = useState(false);
-  const [newTicketForm, setNewTicketForm] = useState<NewTicketFormState>({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
+  const [newTicketForm, setNewTicketForm] = useState<NewTicketFormState>({ customerFirstName: '', customerLastName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, bankName: N_A_BANK, amount: '', transactionId: '', description: '' });
   const [newTicketErrors, setNewTicketErrors] = useState<Record<string, string>>({});
   const activeTicket = tickets.find(t => t.id === activeTicketId) || null;
 
@@ -69,6 +71,11 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
 
   const handleBeginInvestigation = async () => {
     if (!activeTicket) return;
+    // Only payment-partner support (or platform admin) investigates; BU support submits/routes only.
+    if (!(currentRole === UserRole.PARTNER || currentRole === UserRole.SUPER_ADMIN)) {
+      showToast('Only Payment Partner support can investigate tickets.', 'error');
+      return;
+    }
     if (!activeTicket.assignedAgentId) {
       showToast('Investigation can only begin after the ticket is assigned to a team.', 'error');
       return;
@@ -209,7 +216,7 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     setShowMergeModal(true);
   };
 
-  const confirmMerge = (targetId: string) => {
+  const confirmMerge = async (targetId: string) => {
     if (!activeTicket) return;
     const target = tickets.find(t => t.id === targetId);
     if (!target) { showToast('Target ticket not found.', 'error'); return; }
@@ -218,30 +225,28 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
       showToast(`Target ticket is already a duplicate of ${target.duplicateOf}. Rejected to avoid merge chaining.`, 'error');
       return;
     }
-    const mergedComments = [...comments, { id: 'cm-' + Date.now(), ticketId: target, message: `Migrated from ${activeTicket.id}`, timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole, seen: false, isInternal: false } as CommentRecord];
-    const mergeLog = { id: 'al-' + Date.now(), ticketId: target, action: 'TICKET_MERGED', details: `Merged ${activeTicket.id}`, timestamp: new Date().toISOString(), actor: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole } as AuditLog;
+    const mergedComments = [...comments, { id: 'cm-' + Date.now(), ticketId: target.id, message: `Migrated from ${activeTicket.id}`, timestamp: new Date().toISOString(), author: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole, seen: false, isInternal: false } as CommentRecord];
+    const mergeLog = { id: 'al-' + Date.now(), ticketId: target.id, action: 'TICKET_MERGED', details: `Merged ${activeTicket.id}`, timestamp: new Date().toISOString(), actor: currentUser.firstName + ' ' + currentUser.lastName, role: currentRole } as AuditLog;
     const mergedAudits = [...auditLogs, mergeLog];
 
-    syncTicketDelete(activeTicket.id).catch(() => {
-      showToast('Failed to delete source ticket from server.', 'error');
+    try {
+      await Promise.all([
+        syncTicketDelete(activeTicket.id),
+        syncTicketUpdate(target.id, { comments: mergedComments, auditLogs: mergedAudits }),
+      ]);
+    } catch {
+      showToast('Failed to sync merge to server.', 'error');
       return;
-    });
-    syncTicketUpdate(target, {
-      comments: mergedComments,
-      auditLogs: mergedAudits
-    }).catch(() => {
-      showToast('Failed to update target ticket on server.', 'error');
-      return;
-    });
+    }
 
-    const updatedTickets = tickets.filter(t => t.id !== activeTicket.id && t.id !== target);
+    const updatedTickets = tickets.filter(t => t.id !== activeTicket.id && t.id !== target.id);
     setTickets(updatedTickets);
     setComments(mergedComments);
     setAuditLogs(mergedAudits);
     saveToStorage(updatedTickets, mergedComments, mergedAudits, majorIncidents, watcherNotifications, users, slaRules, holidays, ticketTemplates, kbArticles);
-    logAuditAction(target, 'TICKET_MERGED', `Merged ${activeTicket.id}`);
+    logAuditAction(target.id, 'TICKET_MERGED', `Merged ${activeTicket.id}`);
     showToast('Tickets merged.', 'success');
-    setActiveTicketId(target);
+    setActiveTicketId(target.id);
   };
 
   const handleSoftDeleteTicket = async (id: string) => {
@@ -271,20 +276,6 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     e.preventDefault();
     const trimmed = commentText.trim();
     if (!trimmed || !activeTicket || isSendingComment) return;
-    if (!isAddressed(trimmed)) {
-      setShowMentions(true);
-      setMentionSearch("");
-      setMentionIndex(0);
-      showToast("Choose who to send this to.", "info");
-      return;
-    }
-    performSend(trimmed);
-  };
-
-  const handleSendToEveryone = () => {
-    const trimmed = commentText.trim();
-    if (!trimmed || !activeTicket || isSendingComment) return;
-    setShowMentions(false);
     performSend(trimmed);
   };
 
@@ -341,11 +332,6 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     }
   };
 
-  const injectSavedReply = (reply: string) => {
-    setCommentText(prev => prev ? prev + ' ' + reply : reply);
-    showToast('Saved reply inserted.', 'info');
-  };
-
   const handleCommentKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (showMentions) {
       const filtered = mentionCandidates(users, currentUser.email).filter(u => fullNameOf(u).toLowerCase().includes(mentionSearch));
@@ -365,22 +351,15 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       if (isSendingComment || !commentText.trim() || !activeTicket) return;
-      if (!isAddressed(commentText.trim())) {
-        setShowMentions(true);
-        setMentionSearch('');
-        setMentionIndex(0);
-        showToast('Choose who to send this to.', 'info');
-        return;
-      }
       performSend(commentText.trim());
     }
   };
 
-  const handleNewTicketSubmit = (e: React.FormEvent) => {
-  e.preventDefault();
-  handleCreateTicket(newTicketForm);
+  const handleNewTicketSubmit = () => {
+  const fullName = `${newTicketForm.customerFirstName.trim()} ${newTicketForm.customerLastName.trim()}`.trim();
+  handleCreateTicket({ ...newTicketForm, customerName: fullName || 'Unknown Customer' });
   setShowNewTicketPanel(false);
-  setNewTicketForm({ customerName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, amount: '', transactionId: '', description: '' });
+  setNewTicketForm({ customerFirstName: '', customerLastName: '', customerEmail: '', customerPhone: '', customerId: undefined, partner: '', category: '', priority: TicketPriority.HIGH, bankName: N_A_BANK, amount: '', transactionId: '', description: '' });
   setNewTicketErrors({});
 };
 
@@ -407,41 +386,96 @@ function TicketWorkspacePage({ handleDeclareMajorIncident }: TicketWorkspacePage
     );
   }
 
-  return (
-    <PageTransition>
-      <div className="flex-1 flex overflow-hidden">
-        <TicketListPane
-          activeTicketId={activeTicketId}
-          showMobileTicketList={showMobileTicketList}
-          setShowMobileTicketList={setShowMobileTicketList}
-          onNewTicket={canCreateTicket ? () => setShowNewTicketPanel(true) : undefined}
-        />
+return (
+     <PageTransition>
+       <div className="flex-1 flex overflow-hidden">
+         {/* Column 1: Ticket List - 320px (hidden below lg; mobile overlay via toggle) */}
+         <div className="hidden lg:block w-72 shrink-0 border-r border-border">
+           <TicketListPane
+             activeTicketId={activeTicketId}
+             showMobileTicketList={showMobileTicketList}
+             setShowMobileTicketList={setShowMobileTicketList}
+             onNewTicket={canCreateTicket ? () => setShowNewTicketPanel(true) : undefined}
+           />
+         </div>
 
-        {activeTicket ? (
-          <TicketDetailView
-            activeTicket={activeTicket}
-            showDeclareResolution={showDeclareResolution}
-            setShowDeclareResolution={setShowDeclareResolution}
-            onArchive={handleSoftDeleteTicket}
-            onMerge={handleMergeTicket}
-            onEscalate={handleManualEscalate}
-            onDeclareMajorIncident={handleDeclareMajorIncidentWrapper}
-            onBeginInvestigation={handleBeginInvestigation}
-            onResolve={handleResolveTicket}
-            onResolutionResponse={handleResolutionResponse}
-            onSaveTemplate={() => {}}
-            onAiGenerateRca={handleAiGenerateRca}
-          />
-        ) : (
-          <div className="flex-1 flex items-center justify-center p-6">
-            <EmptyState
-              icon={<Ticket className="w-12 h-12" />}
-              title="No ticket selected"
-              message="Select a ticket from the list to view its details."
-            />
-          </div>
-        )}
-      </div>
+         {/* Column 2: Center - flex-1 */}
+         <div className="flex-1 flex flex-col overflow-hidden min-w-0">
+           {activeTicket ? (
+             <>
+               {/* Top: ticket details (scrollable) */}
+               <div className="flex-[3] min-h-0 overflow-y-auto">
+                 <TicketDetailView
+                   activeTicket={activeTicket}
+                   showDeclareResolution={showDeclareResolution}
+                   setShowDeclareResolution={setShowDeclareResolution}
+                   onArchive={handleSoftDeleteTicket}
+                   onMerge={handleMergeTicket}
+                   onEscalate={handleManualEscalate}
+                   onDeclareMajorIncident={handleDeclareMajorIncidentWrapper}
+                   onBeginInvestigation={handleBeginInvestigation}
+                   onResolve={handleResolveTicket}
+                   onResolutionResponse={handleResolutionResponse}
+                   onSaveTemplate={() => {}}
+                   onAiGenerateRca={handleAiGenerateRca}
+                 />
+               </div>
+               {/* Bottom: chat panel */}
+               <div className="flex-[2] min-h-0 p-3 pt-0">
+                 <TicketChatPanel
+                   activeTicket={activeTicket}
+                   commentText={commentText}
+                   setCommentText={setCommentText}
+                   isSendingComment={isSendingComment}
+                   replyingTo={replyingTo}
+                   setReplyingTo={setReplyingTo}
+                   showMentions={showMentions}
+                   setShowMentions={setShowMentions}
+                   mentionSearch={mentionSearch}
+                   setMentionSearch={setMentionSearch}
+                   mentionIndex={mentionIndex}
+                   setMentionIndex={setMentionIndex}
+                   onSendComment={handleSendComment}
+                     onKeyDown={handleCommentKeyDown}
+                   />
+               </div>
+             </>
+           ) : (
+             <div className="flex-1 flex items-center justify-center p-6">
+               <EmptyState
+                 icon={<Ticket className="w-12 h-12" />}
+                 title="No ticket selected"
+                 message="Select a ticket from the list to view its details."
+               />
+             </div>
+           )}
+         </div>
+
+          {/* Column 3: Right Panel - 320px (hidden below xl) */}
+          {activeTicket && (
+            <div className="hidden xl:block w-80 shrink-0 border-l border-border overflow-y-auto">
+             <RightPanel
+               activeTicket={activeTicket}
+               selectedWatcherIds={selectedWatcherIds}
+               setSelectedWatcherIds={setSelectedWatcherIds}
+               newWatcherEmail={newWatcherEmail}
+               setNewWatcherEmail={setNewWatcherEmail}
+               setNotifyWatcherModal={setNotifyWatcherModal}
+               setRemoveWatcherConfirm={setRemoveWatcherConfirm}
+             />
+           </div>
+         )}
+        </div>
+
+      {/* Mobile ticket-list toggle (below lg the left column is hidden) */}
+      <button
+        type="button"
+        onClick={() => setShowMobileTicketList(true)}
+        aria-label="Show ticket list"
+        className="lg:hidden fixed bottom-4 left-4 z-20 h-11 w-11 rounded-full bg-primary text-[#fff] shadow-lg flex items-center justify-center hover:bg-primary-dark transition-colors focus-ring"
+      >
+        <List className="w-5 h-5" />
+      </button>
 
       <EscalationModals
         activeTicket={activeTicket}

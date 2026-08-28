@@ -21,7 +21,8 @@ export type Permission =
   | 'reports:view'
   | 'executive:dashboard'
   | 'partner:rca'
-  | 'admin:config'
+  | 'admin:config:read'
+  | 'admin:config:write'
   | 'admin:users'
   | 'admin:forms'
   | 'admin:access'
@@ -78,7 +79,7 @@ export const BU_SUPPORT_L2_PERMISSIONS: Permission[] = [
 
 export const BU_SUPPORT_L3_PERMISSIONS: Permission[] = [
   ...BU_SUPPORT_L2_PERMISSIONS,
-  'tickets:delete', 'admin:config', 'audit:write',
+  'tickets:delete', 'admin:config:read', 'audit:write',
 ];
 
 /** Legacy flat role: the union the platform granted before tiers existed. */

@@ -157,9 +157,9 @@ export default function LandingPageManager() {
 
   const getStatusBadge = (status: string) => {
     const badges = {
-      draft: { icon: AlertCircle, color: 'bg-yellow-100 text-yellow-800 border-yellow-200', label: 'Draft' },
-      published: { icon: CheckCircle, color: 'bg-green-100 text-green-800 border-green-200', label: 'Published' },
-      archived: { icon: XCircle, color: 'bg-gray-100 text-gray-800 border-gray-200', label: 'Archived' },
+      draft: { icon: AlertCircle, color: 'bg-warning-light text-text-primary border-warning', label: 'Draft' },
+      published: { icon: CheckCircle, color: 'bg-success-light text-text-primary border-success', label: 'Published' },
+      archived: { icon: XCircle, color: 'bg-surface-card text-text-primary border-border', label: 'Archived' },
     };
     const badge = badges[status as keyof typeof badges] || badges.draft;
     const Icon = badge.icon;
@@ -202,7 +202,7 @@ export default function LandingPageManager() {
           onClick={() => setFilter('all')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             filter === 'all'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-[#fff]'
               : 'text-text-secondary hover:bg-surface-hover'
           }`}
         >
@@ -212,7 +212,7 @@ export default function LandingPageManager() {
           onClick={() => setFilter('draft')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             filter === 'draft'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-[#fff]'
               : 'text-text-secondary hover:bg-surface-hover'
           }`}
         >
@@ -222,7 +222,7 @@ export default function LandingPageManager() {
           onClick={() => setFilter('published')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             filter === 'published'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-[#fff]'
               : 'text-text-secondary hover:bg-surface-hover'
           }`}
         >
@@ -232,7 +232,7 @@ export default function LandingPageManager() {
           onClick={() => setFilter('archived')}
           className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
             filter === 'archived'
-              ? 'bg-accent text-white'
+              ? 'bg-accent text-[#fff]'
               : 'text-text-secondary hover:bg-surface-hover'
           }`}
         >

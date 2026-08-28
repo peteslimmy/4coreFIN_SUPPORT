@@ -51,13 +51,14 @@ function ImageCard({
         )}
 
         {/* Overlay */}
-        <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
+        <div className="absolute inset-0 bg-surface/60 opacity-0 group-hover:opacity-100 transition-opacity duration-200 flex items-center justify-center gap-2">
           <button
             onClick={onPreview}
-            className="p-2 bg-white/20 hover:bg-white/30 rounded-lg backdrop-blur-sm transition-colors"
+            aria-label="Preview image"
+            className="p-2 bg-surface-card/20 hover:bg-surface-card/30 rounded-lg backdrop-blur-sm transition-colors"
             title="Preview"
           >
-            <Eye className="w-5 h-5 text-white" />
+            <Eye className="w-5 h-5 text-[#fff]" />
           </button>
         </div>
 
@@ -67,7 +68,7 @@ function ImageCard({
         </div>
 
         {/* Version Badge */}
-        <div className="absolute top-3 right-3 bg-black/50 backdrop-blur-sm text-white text-xs px-2 py-1 rounded-md">
+        <div className="absolute top-3 right-3 bg-surface/50 backdrop-blur-sm text-[#fff] text-xs px-2 py-1 rounded-md">
           v{image.version}
         </div>
       </div>
@@ -109,6 +110,7 @@ function ImageCard({
           )}
           <button
             onClick={onViewVersions}
+            aria-label="View version history"
             className="p-2 btn btn-sm btn-secondary"
             title="Version History"
           >
@@ -117,6 +119,7 @@ function ImageCard({
           {isDeleted ? (
             <button
               onClick={onRestore}
+              aria-label="Restore image"
               className="p-2 btn btn-sm btn-primary"
               title="Restore"
             >
@@ -125,6 +128,7 @@ function ImageCard({
           ) : (
             <button
               onClick={onDelete}
+              aria-label="Delete image"
               className="p-2 btn btn-sm btn-danger"
               title="Delete"
             >

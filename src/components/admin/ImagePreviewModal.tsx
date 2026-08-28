@@ -13,7 +13,7 @@ export default function ImagePreviewModal({ image, onClose }: ImagePreviewModalP
   const [zoom, setZoom] = useState(100);
 
   return (
-    <div className="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+    <div className="fixed inset-0 bg-surface/90 backdrop-blur-sm flex items-center justify-center p-4 z-50">
       <motion.div
         initial={{ opacity: 0, scale: 0.95 }}
         animate={{ opacity: 1, scale: 1 }}
@@ -31,6 +31,7 @@ export default function ImagePreviewModal({ image, onClose }: ImagePreviewModalP
           <div className="flex items-center gap-2">
             <button
               onClick={() => setZoom(Math.max(...zoomLevels.filter(z => z < zoom)))}
+              aria-label="Zoom out"
               className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
               disabled={zoom <= zoomLevels[0]}
             >
@@ -39,6 +40,7 @@ export default function ImagePreviewModal({ image, onClose }: ImagePreviewModalP
             <span className="text-sm text-text-secondary w-16 text-center">{zoom}%</span>
             <button
               onClick={() => setZoom(Math.min(...zoomLevels.filter(z => z > zoom)))}
+              aria-label="Zoom in"
               className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
               disabled={zoom >= zoomLevels[zoomLevels.length - 1]}
             >
@@ -46,6 +48,7 @@ export default function ImagePreviewModal({ image, onClose }: ImagePreviewModalP
             </button>
             <button
               onClick={onClose}
+              aria-label="Close preview"
               className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-text-secondary" />
@@ -54,7 +57,7 @@ export default function ImagePreviewModal({ image, onClose }: ImagePreviewModalP
         </div>
 
         {/* Image */}
-        <div className="flex-1 overflow-auto flex items-center justify-center bg-black p-8">
+        <div className="flex-1 overflow-auto flex items-center justify-center bg-surface p-8">
           <img
             src={image.desktop_url || image.mobile_url || image.thumbnail_url}
             alt={image.alt_text}

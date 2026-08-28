@@ -8,7 +8,7 @@ export default function AuthLogo() {
         imgClassName="max-h-12 w-auto object-contain"
         fallback={
           <div className="w-12 h-12 bg-accent rounded-2xl flex items-center justify-center shadow-3 border border-accent/20">
-            <Shield className="w-6 h-6 text-white" />
+            <Shield className="w-6 h-6 text-[#fff]" />
           </div>
         }
       />

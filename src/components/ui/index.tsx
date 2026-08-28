@@ -257,7 +257,18 @@ export function DropdownMenu({ children }: WithKey<{ children: ReactNode }>) {
 
 export function DropdownMenuTrigger({ children }: WithKey<{ children?: ReactNode; asChild?: boolean }>) {
   const ctx = useContext(DropdownMenuContext);
-  return <span onClick={() => ctx?.setOpen(!ctx.open)}>{children}</span>;
+  return (
+    <span
+      role="button"
+      tabIndex={0}
+      aria-expanded={ctx?.open}
+      aria-haspopup="true"
+      onClick={() => ctx?.setOpen(!ctx.open)}
+      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); ctx?.setOpen(!ctx.open); } }}
+    >
+      {children}
+    </span>
+  );
 }
 
 export function DropdownMenuContent({ children, align = 'start' }: WithKey<{ children: ReactNode; align?: 'start' | 'end' }>) {

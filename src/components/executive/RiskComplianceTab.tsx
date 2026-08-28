@@ -406,7 +406,7 @@ export default function RiskComplianceTab({ onDrill, onCrossFilter, crossFilter 
               <button
                 key={m}
                 onClick={() => setHeatMapMetric(m)}
-                className={`px-2.5 py-1 text-[10px] font-semibold rounded transition cursor-pointer ${heatMapMetric === m ? 'bg-accent text-white' : 'bg-surface-hover text-text-secondary hover:bg-border-subtle'}`}
+                className={`px-2.5 py-1 text-[10px] font-semibold rounded transition cursor-pointer ${heatMapMetric === m ? 'bg-accent text-[#fff]' : 'bg-surface-hover text-text-secondary hover:bg-border-subtle'}`}
               >
                 {m}
               </button>

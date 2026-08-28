@@ -4,6 +4,8 @@ import { applyTheme } from '../../hooks/useTheme';
 import ColorPicker from '../ui/ColorPicker';
 import { Save, Monitor, Sun, Moon } from 'lucide-react';
 
+const SAVED_RESET_DELAY = 2000;
+
 const RADIUS_OPTIONS = [
   { label: 'Sharp', value: '0px' },
   { label: 'Rounded', value: '6px' },
@@ -41,7 +43,7 @@ export default function ThemeSettings() {
       'theme.border_radius': radius,
     });
     setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    setTimeout(() => setSaved(false), SAVED_RESET_DELAY);
   };
 
   return (
@@ -78,7 +80,7 @@ export default function ThemeSettings() {
               onClick={() => setMode(value)}
               className={`flex items-center gap-2 px-4 py-2.5 rounded-lg border text-xs font-semibold transition ${
                 mode === value
-                  ? 'bg-accent text-white border-accent'
+                  ? 'bg-accent text-[#fff] border-accent'
                   : 'bg-surface-elevated text-text-secondary border-border-subtle hover:bg-surface'
               }`}
             >
@@ -99,7 +101,7 @@ export default function ThemeSettings() {
               onClick={() => setRadius(value)}
               className={`px-4 py-2.5 border text-xs font-semibold transition ${
                 radius === value
-                  ? 'bg-accent text-white border-accent'
+                  ? 'bg-accent text-[#fff] border-accent'
                   : 'bg-surface-elevated text-text-secondary border-border-subtle hover:bg-surface'
               }`}
               style={{ borderRadius: value }}
@@ -109,7 +111,7 @@ export default function ThemeSettings() {
           ))}
         </div>
         <div className="mt-3 flex gap-2 items-center">
-          <div className="w-16 h-8 bg-accent text-white text-xs font-bold flex items-center justify-center" style={{ borderRadius: radius }}>
+          <div className="w-16 h-8 bg-accent text-[#fff] text-xs font-bold flex items-center justify-center" style={{ borderRadius: radius }}>
             Preview
           </div>
           <span className="text-xs text-text-muted">— {radius}</span>
@@ -119,7 +121,7 @@ export default function ThemeSettings() {
       {/* Save */}
       <button
         onClick={handleSave}
-        className="flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-xs font-semibold hover:bg-accent-light transition"
+        className="flex items-center gap-2 px-4 py-2 bg-accent text-[#fff] rounded-lg text-xs font-semibold hover:bg-accent-light transition"
       >
         <Save className="w-4 h-4" />
         {saved ? 'Saved!' : 'Save Theme'}

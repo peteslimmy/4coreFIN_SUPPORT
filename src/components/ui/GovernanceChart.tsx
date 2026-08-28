@@ -1,5 +1,8 @@
 import { memo, useMemo, useCallback, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+
+const EXPORT_LOADING_DELAY = 300;
+
 import {
   ResponsiveContainer,
   AreaChart as RechartsAreaChart, Area,
@@ -160,7 +163,7 @@ function GovernanceChart({
     if (csv) {
       triggerDownload(csv, `${title.replace(/\s+/g, '_').toLowerCase()}_data.csv`);
     }
-    setTimeout(() => setIsExporting(false), 300);
+    setTimeout(() => setIsExporting(false), EXPORT_LOADING_DELAY);
   }, [data, config, type, title]);
 
   const handleBarClick = useCallback((entry: ChartEntry) => {
@@ -672,7 +675,7 @@ function GovernanceChart({
                   onClick={() => onPeriodChange(opt.value)}
                   className={`px-2 py-1 text-[10px] font-semibold rounded transition cursor-pointer ${
                     periodValue === opt.value
-                      ? 'bg-accent text-white'
+                      ? 'bg-accent text-[#fff]'
                       : 'bg-surface-hover text-text-secondary hover:bg-border-subtle'
                   }`}
                 >

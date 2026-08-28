@@ -3,13 +3,13 @@ import type { ProgressWizardProps, ProgressWizardStep } from '../../types/ui';
 
 const statusStyles: Record<string, { circle: string; line: string; label: string; icon?: LucideIcon }> = {
   completed: {
-    circle: 'bg-success border-success text-white ring-2 ring-success-light',
+    circle: 'bg-success border-success text-[#fff] ring-2 ring-success-light',
     line: 'bg-success',
     label: 'text-success-dark font-semibold',
     icon: Check,
   },
   active: {
-    circle: 'bg-primary border-primary text-white ring-4 ring-primary-light',
+    circle: 'bg-primary border-primary text-[#fff] ring-4 ring-primary-light',
     line: 'bg-primary',
     label: 'text-primary font-semibold',
   },
@@ -19,13 +19,13 @@ const statusStyles: Record<string, { circle: string; line: string; label: string
     label: 'text-text-muted',
   },
   error: {
-    circle: 'bg-error border-error text-white',
+    circle: 'bg-error border-error text-[#fff]',
     line: 'bg-error',
     label: 'text-error-dark font-semibold',
     icon: X,
   },
   terminal: {
-    circle: 'bg-success border-success text-white ring-2 ring-success-light',
+    circle: 'bg-success border-success text-[#fff] ring-2 ring-success-light',
     line: 'bg-success',
     label: 'text-success-dark font-semibold',
     icon: Check,
@@ -59,7 +59,7 @@ export default function ProgressWizard({ steps, currentStep, className = '' }: P
               >
                 {Icon ? <Icon className="w-4 h-4" /> : i + 1}
                 {resolvedStatus === 'active' && step.errorCount && step.errorCount > 0 && (
-                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-error text-white text-[9px] font-bold flex items-center justify-center leading-none">{step.errorCount}</span>
+                  <span className="absolute -top-1 -right-1.5 min-w-[16px] h-4 px-1 rounded-full bg-error text-[#fff] text-[9px] font-bold flex items-center justify-center leading-none">{step.errorCount}</span>
                 )}
               </div>
               <span className={`text-[11px] mt-1.5 text-center max-w-[96px] leading-tight ${styles.label}`}>

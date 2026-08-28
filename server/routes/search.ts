@@ -12,8 +12,8 @@ export function createSearchRouter(): Router {
       const q = (req.query.q as string || '').trim();
       if (q.length < 2) return res.status(400).json({ error: 'Query must be at least 2 characters' });
 
-      // Escape Supabase filter wildcards to prevent injection
-      const safeQ = q.replace(/[%_,]/g, (c) => `\\${c}`);
+      // Strip characters that could break PostgREST .or() filter syntax or enable injection
+      const safeQ = q.replace(/[%'`,()\\]/g, '').slice(0, 200);
 
       const types = ((req.query.types as string) || 'tickets,customers,kb,documents').split(',');
       const limit = Math.min(50, parseInt(req.query.limit as string) || 10);

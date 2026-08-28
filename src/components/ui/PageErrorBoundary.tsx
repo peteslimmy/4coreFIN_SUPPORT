@@ -50,7 +50,7 @@ class PageErrorBoundaryClass extends React.Component<Props, State> {
             )}
             <button
               onClick={this.handleRetry}
-              className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-white rounded-lg text-sm font-semibold hover:bg-accent-light transition"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-accent text-[#fff] rounded-lg text-sm font-semibold hover:bg-accent-light transition"
             >
               <RefreshCw className="w-4 h-4" /> Retry
             </button>

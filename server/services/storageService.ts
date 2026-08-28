@@ -4,6 +4,56 @@ import { optimizeImage, type OptimizedImageResult, getStoragePaths } from './ima
 
 const BUCKET = 'branding-assets';
 
+/** Signed-URL lifetime for evidence downloads (24h). */
+export const EVIDENCE_SIGNED_URL_TTL_SECONDS = 86400;
+
+/**
+ * Extract the object path from an existing Supabase signed URL so a fresh
+ * signature can be issued after the old one expires.
+ */
+function extractSignedPath(url: string, bucket: string): string | null {
+  const marker = `/storage/v1/object/sign/${bucket}/`;
+  const idx = url.indexOf(marker);
+  if (idx === -1) return null;
+  const start = idx + marker.length;
+  const end = url.indexOf('?', start);
+  const path = end === -1 ? url.substring(start) : url.substring(start, end);
+  return decodeURIComponent(path) || null;
+}
+
+/**
+ * Issue fresh signed URLs for a batch of stored (possibly expired) signed URLs.
+ * Returns one entry per input, in order: a refreshed URL when the path could be
+ * recovered, otherwise the original value unchanged.
+ */
+export async function refreshSignedUrls(
+  urls: (string | null | undefined)[],
+  bucket: string = BUCKET,
+): Promise<string[]> {
+  const paths = urls.map(u => (u ? extractSignedPath(u, bucket) : null));
+  const results: string[] = urls.map(u => u || '');
+  const pending = new Map<number, string>();
+  paths.forEach((p, i) => { if (p) pending.set(i, p); });
+  if (pending.size === 0) return results;
+  try {
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .createSignedUrls(Array.from(pending.values()), EVIDENCE_SIGNED_URL_TTL_SECONDS);
+    if (error || !data) {
+      console.error('Signed URL refresh error:', error?.message);
+      return results;
+    }
+    const byPath = new Map(data.map(d => [d.path, d.signedUrl] as const));
+    pending.forEach((path, i) => {
+      const fresh = byPath.get(path);
+      if (fresh) results[i] = fresh;
+    });
+  } catch (err) {
+    console.error('Signed URL refresh failed:', err);
+  }
+  return results;
+}
+
 export async function ensureBucket(bucket: string): Promise<void> {
   const { data: buckets } = await supabase.storage.listBuckets();
   if (buckets?.some((b) => b.name === bucket)) return;
@@ -35,7 +85,7 @@ export async function uploadFile(
     return null;
   }
 
-  const { data: signedUrl } = await supabase.storage.from(bucket).createSignedUrl(filename, 3600);
+  const { data: signedUrl } = await supabase.storage.from(bucket).createSignedUrl(filename, EVIDENCE_SIGNED_URL_TTL_SECONDS);
   return signedUrl?.signedUrl || null;
 }
 

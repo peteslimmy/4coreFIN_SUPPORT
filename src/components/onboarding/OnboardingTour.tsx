@@ -143,14 +143,14 @@ export default function OnboardingTour() {
                 {isLast ? (
                   <button
                     onClick={dismiss}
-                    className="flex items-center gap-1 px-4 py-1.5 bg-accent hover:bg-accent-light text-white text-xs font-semibold rounded-lg transition cursor-pointer"
+                    className="flex items-center gap-1 px-4 py-1.5 bg-accent hover:bg-accent-light text-[#fff] text-xs font-semibold rounded-lg transition cursor-pointer"
                   >
                     <Check className="w-3.5 h-3.5" /> Done
                   </button>
                 ) : (
                   <button
                     onClick={() => setStep(s => s + 1)}
-                    className="flex items-center gap-1 px-4 py-1.5 bg-accent hover:bg-accent-light text-white text-xs font-semibold rounded-lg transition cursor-pointer"
+                    className="flex items-center gap-1 px-4 py-1.5 bg-accent hover:bg-accent-light text-[#fff] text-xs font-semibold rounded-lg transition cursor-pointer"
                   >
                     Next <ChevronRight className="w-3.5 h-3.5" />
                   </button>

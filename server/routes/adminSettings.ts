@@ -20,7 +20,7 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Get all settings ──────────────────────────────────
-  router.get('/admin/settings', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res) => {
+  router.get('/admin/settings', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res) => {
     const settings = await getSettings();
     // Mask sensitive fields
     if (settings['smtp.password']) {
@@ -30,7 +30,7 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Get single setting ────────────────────────────────
-  router.get('/admin/settings/:key', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.get('/admin/settings/:key', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res) => {
     const value = await getSetting(req.params.key);
     if (value === null) return res.status(404).json({ error: 'Setting not found' });
     res.json({ key: req.params.key, value });
@@ -77,7 +77,7 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Bulk update settings ──────────────────────────────
-  router.put('/admin/settings', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.put('/admin/settings', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
     const settings = req.body;
     if (!settings || typeof settings !== 'object') {
       return res.status(400).json({ error: 'Expected settings object' });
@@ -187,7 +187,7 @@ await audit({
   });
 
   // ── Admin: SMTP test ─────────────────────────────────────────
-  router.post('/admin/smtp/test', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.post('/admin/smtp/test', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
     try {
       const settings = await getSettings([
         'smtp.host', 'smtp.port', 'smtp.security', 'smtp.username',
@@ -217,7 +217,7 @@ await audit({
   });
 
   // ── Admin: API Keys ──────────────────────────────────────────
-  router.get('/admin/api-keys', requireAuth, requirePermission('admin:config'), async (_req: AuthedRequest, res) => {
+  router.get('/admin/api-keys', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res) => {
     const { data, error } = await supabase
       .from('api_keys')
       .select('id, name, service, is_active, created_at')
@@ -226,7 +226,7 @@ await audit({
     res.json(data);
   });
 
-  router.post('/admin/api-keys', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.post('/admin/api-keys', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
     const { name, service, key } = req.body;
     if (!name || !service || !key) {
       return res.status(400).json({ error: 'name, service, and key are required' });
@@ -242,14 +242,14 @@ await audit({
     res.status(201).json({ id, name, service, is_active: true });
   });
 
-  router.delete('/admin/api-keys/:id', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.delete('/admin/api-keys/:id', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
     const { error } = await supabase.from('api_keys').delete().eq('id', req.params.id);
     if (error) return res.status(500).json({ error: error.message });
     await audit({ event: 'ADMIN_API_KEY_DELETED', actor: req.user!.name, role: req.user!.role, action: AuditAction.ADMIN_API_KEY_DELETED, details: `Deleted API key: ${req.params.id}` });
     res.json({ ok: true });
   });
 
-  router.post('/admin/api-keys/:id/reveal', requireAuth, requirePermission('admin:config'), async (req: AuthedRequest, res) => {
+  router.post('/admin/api-keys/:id/reveal', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
     const { data, error } = await supabase.from('api_keys').select('encrypted_key').eq('id', req.params.id).single();
     if (error || !data) return res.status(404).json({ error: 'Not found' });
     const revealed = decrypt(data.encrypted_key);
