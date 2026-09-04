@@ -15,7 +15,7 @@ const WatcherNotificationsPage = lazy(() => import('./pages/WatcherNotifications
 const CustomerPortalPage = lazy(() => import('./pages/CustomerPortalPage'));
 const ExecutiveDashboardPage = lazy(() => import('./pages/ExecutiveDashboardPage'));
 const MajorIncidentsPage = lazy(() => import('./pages/MajorIncidentsPage'));
-const TicketWorkspacePage = lazy(() => import('./pages/TicketWorkspacePage'));
+const TicketWorkspacePageV2 = lazy(() => import('./pages/TicketWorkspacePageV2'));
 const LoginPage = lazy(() => import('./pages/LoginPage'));
 const PaymentPartnerPortalPage = lazy(() => import('./pages/PaymentPartnerPortalPage'));
 const CustomersPage = lazy(() => import('./pages/CustomersPage'));
@@ -28,6 +28,7 @@ const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
 const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
 // New pages for additional modules
 const NotificationPreferencesPage = lazy(() => import('./pages/NotificationPreferencesPage'));
+const AICopilotPage = lazy(() => import('./pages/AICopilotPage'));
 
 export default function App() {
   const app = useApp();
@@ -129,18 +130,9 @@ export default function App() {
 
   const effectiveTab = currentRole === UserRole.CUSTOMER ? 'customer_portal' : activeTab;
 
-// Role-based tab access guard
-  const ROLE_TABS: Partial<Record<UserRole, string[]>> = {
-    [UserRole.EXECUTIVE]: ['dashboard', 'audit_logs', 'watcher_notifications', 'major_incidents', 'kb', 'profile_settings', 'notifications'],
-    [UserRole.BU_SUPPORT]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'notifications'],
-    [UserRole.BU_SUPPORT_L1]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'notifications'],
-    [UserRole.BU_SUPPORT_L2]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'notifications'],
-    [UserRole.BU_SUPPORT_L3]: ['tickets', 'major_incidents', 'customers', 'customer_portal', 'kb', 'audit_logs', 'watcher_notifications', 'profile_settings', 'notifications'],
-    [UserRole.PARTNER]: ['payment_partner_portal', 'tickets', 'major_incidents', 'kb', 'profile_settings'],
-    [UserRole.CUSTOMER]: ['customer_portal', 'kb', 'profile_settings'],
-    [UserRole.SUPER_ADMIN]: ['tickets', 'major_incidents', 'dashboard', 'audit_logs', 'watcher_notifications', 'admin_settings', 'reference_data', 'kb', 'customers', 'customer_portal', 'payment_partner_portal', 'profile_settings', 'notifications'],
-  };
-
+  // Tab visibility derives solely from the server-backed permission model
+  // (FE-10). The former parallel ROLE_TABS lookup table drifted from can()
+  // and is removed; permissionTabs always includes 'kb'/'profile_settings'.
   const permissionTabs: string[] = [];
   if (can('tickets:view') || can('tickets:create')) permissionTabs.push('tickets', 'customer_portal');
   if (can('major-incidents:manage')) permissionTabs.push('major_incidents');
@@ -153,7 +145,7 @@ export default function App() {
   if (can('notifications:manage')) permissionTabs.push('notifications');
   if (can('ai:use')) permissionTabs.push('ai_copilot');
   permissionTabs.push('kb', 'profile_settings');
-  const allowedTabs = ROLE_TABS[currentRole] || permissionTabs || ['profile_settings'];
+  const allowedTabs = permissionTabs.length > 0 ? permissionTabs : ['profile_settings'];
   const safeTab = allowedTabs.includes(effectiveTab) ? effectiveTab : allowedTabs[0];
   return (
     <ErrorBoundary>
@@ -168,7 +160,7 @@ export default function App() {
         handleLogout={handleLogout}
       >
         {safeTab === 'tickets' && (
-          <TicketWorkspacePage handleDeclareMajorIncident={handleDeclareMajorIncident} />
+          <TicketWorkspacePageV2 handleDeclareMajorIncident={handleDeclareMajorIncident} />
         )}
         {safeTab === 'customer_portal' && <CustomerPortalPage />}
         {safeTab === 'dashboard' && <ExecutiveDashboardPage />}
@@ -194,15 +186,13 @@ export default function App() {
         )}
 
         {safeTab === 'kb' && (
-          <div className="flex-1 overflow-y-auto h-full">
-            <KnowledgeBaseTab
-              articles={kbArticles}
-              setArticles={updateKbArticles}
-              currentRole={currentRole}
-              currentUser={currentUser}
-              showToast={showToast}
-            />
-          </div>
+          <KnowledgeBaseTab
+            articles={kbArticles}
+            setArticles={updateKbArticles}
+            currentRole={currentRole}
+            currentUser={currentUser}
+            showToast={showToast}
+          />
         )}
 
         {safeTab === 'major_incidents' && (
@@ -217,6 +207,7 @@ export default function App() {
         {safeTab === 'reference_data' && <ReferenceDataPage />}
         {safeTab === 'profile_settings' && <ProfileSettingsPage />}
         {safeTab === 'notifications' && <NotificationPreferencesPage />}
+        {safeTab === 'ai_copilot' && <AICopilotPage />}
       </AppShell>
 
       <OnboardingTour />

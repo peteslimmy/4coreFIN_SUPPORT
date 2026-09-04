@@ -10,20 +10,30 @@ import dotenv from 'dotenv';
 // tests under src/ run — exactly the pre-migration behavior for local dev.
 const envFile = '.env.test';
 let testEnvReady = false;
+// Placeholder detection (QA-02): placeholder strings are truthy, so without
+// this guard vitest would silently run integration tests against a
+// non-existent project and fail confusingly at setup time.
+const PLACEHOLDER_MARKERS = ['your-test-project', 'please-change-me', 'your-test-project-service-role-key', 'your-test-project-anon-key'];
+function isPlaceholder(value: string | undefined): boolean {
+  return !value || PLACEHOLDER_MARKERS.some((marker) => value.includes(marker));
+}
 if (existsSync(envFile)) {
   const parsed = dotenv.parse(readFileSync(envFile, 'utf8'));
   testEnvReady = Boolean(
-    parsed.SUPABASE_URL && parsed.SUPABASE_SERVICE_KEY && parsed.SUPABASE_ANON_KEY && parsed.JWT_SECRET
+    !isPlaceholder(parsed.SUPABASE_URL) &&
+      !isPlaceholder(parsed.SUPABASE_SERVICE_KEY) &&
+      !isPlaceholder(parsed.SUPABASE_ANON_KEY) &&
+      !isPlaceholder(parsed.JWT_SECRET)
   );
 }
 
 if (!testEnvReady) {
   // CI / shell may pass the same variables directly.
   testEnvReady = Boolean(
-    process.env.SUPABASE_URL &&
-      process.env.SUPABASE_SERVICE_KEY &&
-      process.env.SUPABASE_ANON_KEY &&
-      process.env.JWT_SECRET
+    !isPlaceholder(process.env.SUPABASE_URL) &&
+      !isPlaceholder(process.env.SUPABASE_SERVICE_KEY) &&
+      !isPlaceholder(process.env.SUPABASE_ANON_KEY) &&
+      !isPlaceholder(process.env.JWT_SECRET)
   );
 }
 

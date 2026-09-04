@@ -17,6 +17,17 @@ import PageTransition from '../components/layout/PageTransition';
 import PageContainer from '../components/layout/PageContainer';
 import PageHeader from '../components/layout/PageHeader';
 import ConfirmModal from '../components/ui/ConfirmModal';
+import {
+  DEFAULT_PREFS,
+  defaultSection,
+  buildPayload,
+  type GeneralPrefs,
+  type EmailPrefs,
+  type SmsPrefs,
+  type InAppPrefs,
+  type TicketPrefs,
+  type SystemPrefs,
+} from '../lib/notificationPreferences';
 
 export default function NotificationPreferencesPage() {
   const { toast } = useToast();
@@ -25,73 +36,14 @@ export default function NotificationPreferencesPage() {
   const [saving, setSaving] = useState(false);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
 
-  // Form state
-  const [generalPrefs, setGeneralPrefs] = useState({
-    emailNotifications: true,
-    smsNotifications: false,
-    inAppNotifications: true,
-    notifyOnAssignment: true,
-    notifyOnStatusChange: true,
-    notifyOnComment: true,
-    notifyOnMention: true,
-    digestFrequency: 'immediate',
-    quietHoursEnabled: false,
-    quietHoursStart: '22:00',
-    quietHoursEnd: '06:00',
-  });
-
-  const [emailPrefs, setEmailPrefs] = useState({
-    emailEnabled: true,
-    notifyOnTicketUpdate: true,
-    notifyOnSlaBreach: true,
-    notifyOnMajorIncident: true,
-    notifyOnSurveyRequest: true,
-    emailFrequency: 'real-time',
-    includeTicketDetails: true,
-    includeAttachments: false,
-  });
-
-  const [smsPrefs, setSmsPrefs] = useState({
-    smsEnabled: false,
-    notifyOnCriticalTickets: true,
-    notifyOnMajorIncidents: true,
-    notifyOnEscalations: true,
-    phoneNumber: '',
-    carrier: '',
-  });
-
-  const [inAppPrefs, setInAppPrefs] = useState({
-    inAppEnabled: true,
-    notifyOnTicketUpdate: true,
-    notifyOnSlaBreach: true,
-    notifyOnMajorIncident: true,
-    notifyOnSurveyRequest: true,
-    showNotifications: true,
-    playSound: true,
-    notificationDuration: 5000,
-  });
-
-  const [ticketPrefs, setTicketPrefs] = useState({
-    ticketNotifications: true,
-    notifyOnNewTicket: true,
-    notifyOnAssignedTicket: true,
-    notifyOnStatusChange: true,
-    notifyOnPriorityChange: true,
-    notifyOnCustomerReply: true,
-    notifyOnInternalComment: false,
-    notifyOnMention: true,
-    autoWatchAssigned: true,
-    watchFrequency: 'real-time',
-  });
-
-  const [systemPrefs, setSystemPrefs] = useState({
-    systemAlertsEnabled: true,
-    notifyOnMaintenance: true,
-    notifyOnDeployments: true,
-    notifyOnSystemErrors: true,
-    maintenanceWindow: '02:00-04:00',
-    errorNotificationThreshold: 5,
-  });
+  // Form state (initialized from the canonical defaults so the reset flow and
+  // the initial render always agree).
+  const [generalPrefs, setGeneralPrefs] = useState<GeneralPrefs>(() => defaultSection('general'));
+  const [emailPrefs, setEmailPrefs] = useState<EmailPrefs>(() => defaultSection('email'));
+  const [smsPrefs, setSmsPrefs] = useState<SmsPrefs>(() => defaultSection('sms'));
+  const [inAppPrefs, setInAppPrefs] = useState<InAppPrefs>(() => defaultSection('inApp'));
+  const [ticketPrefs, setTicketPrefs] = useState<TicketPrefs>(() => defaultSection('ticket'));
+  const [systemPrefs, setSystemPrefs] = useState<SystemPrefs>(() => defaultSection('system'));
 
   useEffect(() => {
     const loadPreferences = async () => {
@@ -100,73 +52,33 @@ export default function NotificationPreferencesPage() {
         const data = await api.getNotificationPreferences();
         setPreferences(data as Record<string, unknown>);
 
-        // Initialize form states with loaded data
-        setGeneralPrefs({
-          emailNotifications: data.email_notifications ?? true,
-          smsNotifications: data.sms_notifications ?? false,
-          inAppNotifications: data.in_app_notifications ?? true,
-          notifyOnAssignment: data.notify_on_assignment ?? true,
-          notifyOnStatusChange: data.notify_on_status_change ?? true,
-          notifyOnComment: data.notify_on_comment ?? true,
-          notifyOnMention: data.notify_on_mention ?? true,
-          digestFrequency: data.digest_frequency ?? 'immediate',
-          quietHoursEnabled: data.quiet_hours_enabled ?? false,
-          quietHoursStart: data.quiet_hours_start ?? '22:00',
-          quietHoursEnd: data.quiet_hours_end ?? '06:00',
-        });
+        const raw = data as Record<string, any>;
+        setPreferences(raw);
 
-        setEmailPrefs({
-          emailEnabled: data.email_enabled ?? true,
-          notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
-          notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
-          notifyOnMajorIncident: data.notify_on_major_incident ?? true,
-          notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
-          emailFrequency: data.email_frequency ?? 'real-time',
-          includeTicketDetails: data.include_ticket_details ?? true,
-          includeAttachments: data.include_attachments ?? false,
-        });
+        // Hydrate each section from its own namespace (FE-03). The granular
+        // settings live in details.{general,email,sms,inApp,ticket,system};
+        // the three first-class channel columns remain the source of truth
+        // for their master switches.
+        const d = (raw.details ?? {}) as Record<string, Record<string, any> | undefined>;
 
-        setSmsPrefs({
-          smsEnabled: data.sms_enabled ?? false,
-          notifyOnCriticalTickets: data.notify_on_critical_tickets ?? true,
-          notifyOnMajorIncidents: data.notify_on_major_incidents ?? true,
-          notifyOnEscalations: data.notify_on_escalations ?? true,
-          phoneNumber: data.phone_number ?? '',
-          carrier: data.carrier ?? '',
-        });
-
-        setInAppPrefs({
-          inAppEnabled: data.in_app_enabled ?? true,
-          notifyOnTicketUpdate: data.notify_on_ticket_update ?? true,
-          notifyOnSlaBreach: data.notify_on_sla_breach ?? true,
-          notifyOnMajorIncident: data.notify_on_major_incident ?? true,
-          notifyOnSurveyRequest: data.notify_on_survey_request ?? true,
-          showNotifications: data.show_notifications ?? true,
-          playSound: data.play_sound ?? true,
-          notificationDuration: data.notification_duration ?? 5000,
-        });
-
-        setTicketPrefs({
-          ticketNotifications: data.ticket_notifications ?? true,
-          notifyOnNewTicket: data.notify_on_new_ticket ?? true,
-          notifyOnAssignedTicket: data.notify_on_assigned_ticket ?? true,
-          notifyOnStatusChange: data.notify_on_status_change ?? true,
-          notifyOnPriorityChange: data.notify_on_priority_change ?? true,
-          notifyOnCustomerReply: data.notify_on_customer_reply ?? true,
-          notifyOnInternalComment: data.notify_on_internal_comment ?? false,
-          notifyOnMention: data.notify_on_mention ?? true,
-          autoWatchAssigned: data.auto_watch_assigned ?? true,
-          watchFrequency: data.watch_frequency ?? 'real-time',
-        });
-
-        setSystemPrefs({
-          systemAlertsEnabled: data.system_alerts_enabled ?? true,
-          notifyOnMaintenance: data.notify_on_maintenance ?? true,
-          notifyOnDeployments: data.notify_on_deployments ?? true,
-          notifyOnSystemErrors: data.notify_on_system_errors ?? true,
-          maintenanceWindow: data.maintenance_window ?? '02:00-04:00',
-          errorNotificationThreshold: data.error_notification_threshold ?? 5,
-        });
+        setGeneralPrefs((prev) => ({ ...prev, ...(d.general ?? {}) }));
+        setEmailPrefs((prev) => ({
+          ...prev,
+          ...(d.email ?? {}),
+          emailEnabled: typeof raw.email_enabled === 'boolean' ? raw.email_enabled : prev.emailEnabled,
+        }));
+        setSmsPrefs((prev) => ({
+          ...prev,
+          ...(d.sms ?? {}),
+          smsEnabled: typeof raw.sms_enabled === 'boolean' ? raw.sms_enabled : prev.smsEnabled,
+        }));
+        setInAppPrefs((prev) => ({
+          ...prev,
+          ...(d.inApp ?? {}),
+          inAppEnabled: typeof raw.push_enabled === 'boolean' ? raw.push_enabled : prev.inAppEnabled,
+        }));
+        setTicketPrefs((prev) => ({ ...prev, ...(d.ticket ?? {}) }));
+        setSystemPrefs((prev) => ({ ...prev, ...(d.system ?? {}) }));
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : 'Failed to load preferences.';
         toast.error(`Failed to load preferences: ${message}`);
@@ -180,14 +92,14 @@ export default function NotificationPreferencesPage() {
   const handleSavePreferences = async () => {
     setSaving(true);
     try {
-      const combinedPrefs = {
-        ...generalPrefs,
-        ...emailPrefs,
-        ...smsPrefs,
-        ...inAppPrefs,
-        ...ticketPrefs,
-        ...systemPrefs,
-      };
+      const combinedPrefs = buildPayload({
+        general: generalPrefs,
+        email: emailPrefs,
+        sms: smsPrefs,
+        inApp: inAppPrefs,
+        ticket: ticketPrefs,
+        system: systemPrefs,
+      });
 
       await api.updateNotificationPreferences(combinedPrefs);
       toast.success('Notification preferences saved successfully');
@@ -207,51 +119,14 @@ export default function NotificationPreferencesPage() {
     setShowResetConfirm(false);
     setSaving(true);
     try {
-      await api.updateNotificationPreferences({
-        emailNotifications: true,
-        smsNotifications: false,
-        inAppNotifications: true,
-        notifyOnAssignment: true,
-        notifyOnStatusChange: true,
-        notifyOnComment: true,
-        notifyOnMention: true,
-        digestFrequency: 'immediate',
-        quietHoursEnabled: false,
-        quietHoursStart: '22:00',
-        quietHoursEnd: '06:00',
-        emailEnabled: true,
-        notifyOnTicketUpdate: true,
-        notifyOnSlaBreach: true,
-        notifyOnMajorIncident: true,
-        notifyOnSurveyRequest: true,
-        emailFrequency: 'real-time',
-        includeTicketDetails: true,
-        includeAttachments: false,
-        smsEnabled: false,
-        notifyOnCriticalTickets: true,
-        notifyOnMajorIncidents: true,
-        notifyOnEscalations: true,
-        phoneNumber: '',
-        carrier: '',
-        inAppEnabled: true,
-        showNotifications: true,
-        playSound: true,
-        notificationDuration: 5000,
-        ticketNotifications: true,
-        notifyOnNewTicket: true,
-        notifyOnAssignedTicket: true,
-        notifyOnPriorityChange: true,
-        notifyOnCustomerReply: true,
-        notifyOnInternalComment: false,
-        autoWatchAssigned: true,
-        watchFrequency: 'real-time',
-        systemAlertsEnabled: true,
-        notifyOnMaintenance: true,
-        notifyOnDeployments: true,
-        notifyOnSystemErrors: true,
-        maintenanceWindow: '02:00-04:00',
-        errorNotificationThreshold: 5,
-      });
+      await api.updateNotificationPreferences(buildPayload(DEFAULT_PREFS));
+      // Reflect the reset in the form immediately.
+      setGeneralPrefs(defaultSection('general'));
+      setEmailPrefs(defaultSection('email'));
+      setSmsPrefs(defaultSection('sms'));
+      setInAppPrefs(defaultSection('inApp'));
+      setTicketPrefs(defaultSection('ticket'));
+      setSystemPrefs(defaultSection('system'));
       toast.success('Preferences reset to default values');
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Failed to reset preferences.';

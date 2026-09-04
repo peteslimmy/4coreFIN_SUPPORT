@@ -31,6 +31,9 @@ RUN addgroup -g 1001 -S nodejs && \
 # Copy built assets and production dependencies from builder
 COPY --from=builder --chown=nextjs:nodejs /app/dist ./dist
 COPY --from=builder --chown=nextjs:nodejs /app/package.json ./
+# npm ci REQUIRES the lockfile (OPS fix: missing lockfile made the runtime
+# npm ci fail or fall back to untracked resolution).
+COPY --from=builder --chown=nextjs:nodejs /app/package-lock.json ./
 
 # Install only production dependencies
 RUN npm ci --omit=dev && npm cache clean --force

@@ -140,6 +140,19 @@ async function setup() {
   const { readdirSync } = await import('fs');
   const files = readdirSync(dir).filter((f) => f.endsWith('.sql')).sort();
 
+  // Warn on duplicate numeric prefixes (e.g. two 022_*.sql): the runner tracks
+  // applied migrations by full filename so nothing is skipped, but duplicate
+  // numbers make ordering and fix-migration references error-prone (DB-01).
+  const seenPrefixes = new Map<string, string>();
+  for (const file of files) {
+    const prefix = /^(\d+)_/.exec(file)?.[1];
+    if (prefix) {
+      const prev = seenPrefixes.get(prefix);
+      if (prev) console.warn(`⚠ Duplicate migration number ${prefix}: '${prev}' and '${file}'`);
+      else seenPrefixes.set(prefix, file);
+    }
+  }
+
   const applied = await getAppliedMigrations();
   const pending = files.filter((f) => !applied.includes(f));
 
@@ -151,47 +164,24 @@ async function setup() {
 
   for (const file of pending) {
     const sql = readFileSync(resolve(dir, file), 'utf8');
-    const statements = parseSqlStatements(sql);
-    console.log(`Applying ${file} (${statements.length} statements)...`);
+    const statementCount = parseSqlStatements(sql).length;
+    console.log(`Applying ${file} (${statementCount} statements, single transaction)...`);
 
-    let success = 0;
-    let failed = 0;
-    for (let i = 0; i < statements.length; i++) {
-      const stmt = statements[i];
-      const firstLine = stmt.split('\n')[0].substring(0, 80);
-      try {
-        const result = await runSql(stmt);
-        if (result.status === 200 || result.status === 201 || result.status === 204) {
-          console.log(`  [${i + 1}/${statements.length}] OK: ${firstLine}`);
-          success++;
-        } else {
-          const err = result.data?.message || result.data?.error || JSON.stringify(result.data).substring(0, 120);
-          // Treat idempotency errors ("already exists") as success so re-runs are safe.
-          if (/already exists/i.test(String(err))) {
-            console.log(`  [${i + 1}/${statements.length}] OK (idempotent): ${firstLine}\n     → ${err}`);
-            success++;
-          } else {
-            console.log(`  [${i + 1}/${statements.length}] ${result.status}: ${firstLine}\n     → ${err}`);
-            failed++;
-          }
-        }
-      } catch (e: any) {
-        const msg = String(e.message || '');
-        if (/already exists/i.test(msg)) {
-          console.log(`  [${i + 1}/${statements.length}] OK (idempotent): ${firstLine}\n     → ${msg}`);
-          success++;
-        } else {
-          console.log(`  [${i + 1}/${statements.length}] ERROR: ${firstLine}\n     → ${msg}`);
-          failed++;
-        }
+    // Apply the whole file inside one transaction so a mid-file failure can
+    // never leave a partially-applied migration behind (DB-01). The statement-
+    // by-statement loop previously committed each statement independently.
+    try {
+      const wrapped = `BEGIN;\n${sql}\nCOMMIT;`;
+      const result = await runSql(wrapped);
+      if (result.status === 200 || result.status === 201 || result.status === 204) {
+        await runSql(`INSERT INTO _applied_migrations (name) VALUES ('${file.replace(/'/g, "''")}');`);
+        console.log(`✔ ${file}: applied and recorded.\n`);
+      } else {
+        const err = result.data?.message || result.data?.error || JSON.stringify(result.data).substring(0, 400);
+        console.log(`✖ ${file}: transaction rolled back — not marked as applied; fix and re-run.\n     → ${err}\n`);
       }
-    }
-
-    if (failed === 0) {
-      await runSql(`INSERT INTO _applied_migrations (name) VALUES ('${file.replace(/'/g, "''")}');`);
-      console.log(`✔ ${file}: ${success} succeeded, ${failed} failed\n`);
-    } else {
-      console.log(`✖ ${file}: ${success} succeeded, ${failed} failed — not marked as applied; fix and re-run.\n`);
+    } catch (e: any) {
+      console.log(`✖ ${file}: transaction rolled back — not marked as applied; fix and re-run.\n     → ${e.message}\n`);
     }
   }
 

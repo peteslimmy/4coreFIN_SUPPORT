@@ -21,6 +21,10 @@ jobs:
         run: npm ci
       
       - name: Prepare test database (dedicated test project)
+        # Skipped when the disposable test project is not configured for this
+        # repo — vitest then runs unit tests only (placeholder .env.test values
+        # are detected and never treated as a real environment).
+        if: ${{ secrets.TEST_SUPABASE_PROJECT_REF != '' }}
         run: npm run test:prepare
         env:
           TEST_SUPABASE_PROJECT_REF: ${{ secrets.TEST_SUPABASE_PROJECT_REF }}
