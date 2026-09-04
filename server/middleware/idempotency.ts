@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { supabase } from '../supabase';
 import type { Request, Response, NextFunction } from 'express';
 import { logger } from '../logger';
+import { SESSION_COOKIE, parseCookies } from '../auth';
 
 /** Idempotency key header name */
 export const IDEMPOTENCY_HEADER = 'Idempotency-Key';
@@ -24,9 +25,26 @@ function extractIdempotencyKey(req: Request): string | undefined {
   return key || undefined;
 }
 
-/** Canonical body hash used to detect key reuse with a different payload. */
-export function hashBody(body: unknown): string {
-  return createHash('sha256').update(JSON.stringify(body ?? {})).digest('hex');
+/** Canonical body hash used to detect key reuse with a different payload.
+ * The optional actor scope is folded into the hash so two principals can
+ * never collide on (key, body). */
+export function hashBody(body: unknown, actorScope?: string): string {
+  const prefix = actorScope ? `${actorScope}|` : '';
+  return createHash('sha256').update(prefix + JSON.stringify(body ?? {})).digest('hex');
+}
+
+/**
+ * Actor scope for idempotency keys. Authentication happens per-route (after
+ * this middleware runs), so the principal is derived from the session cookie:
+ * two different users never share an idempotency namespace, which closes the
+ * cross-account response-replay hole (API-05). Unauthenticated callers (unit
+ * tests, pre-auth endpoints) share the 'anon' scope.
+ */
+function actorScopeOf(req: Request): string {
+  const cookies = parseCookies(req.headers.cookie);
+  const session = cookies[SESSION_COOKIE];
+  if (!session) return 'anon';
+  return 'sess-' + createHash('sha256').update(session).digest('hex').slice(0, 24);
 }
 
 /**
@@ -90,31 +108,58 @@ async function releaseClaim(key: string): Promise<void> {
     // A leaked pending claim ages out via PENDING_CLAIM_STALE_MS.
   }
 }
+const PRUNE_INTERVAL_MS = 10 * 60_000;
+let lastPruneAt = 0;
+
+/** Best-effort TTL prune of expired keys, throttled to once per interval so
+ * the idempotency_keys table cannot grow unboundedly (API-05). Failures are
+ * logged and never affect the request. */
+function pruneExpiredKeys(): void {
+  const now = Date.now();
+  if (now - lastPruneAt < PRUNE_INTERVAL_MS) return;
+  lastPruneAt = now;
+  Promise.resolve(
+    supabase.from('idempotency_keys').delete().lt('expires_at', new Date().toISOString())
+  )
+    .then(({ error }) => {
+      if (error) logger.info({ err: error }, 'idempotency prune error');
+    })
+    .catch((e) => logger.info({ err: e }, 'idempotency prune error'));
+}
 
 /**
- * Replay logic for POST/PUT requests that carry an Idempotency-Key header.
+ * Replay logic for POST/PUT/PATCH requests that carry an Idempotency-Key header.
  *
  * Existing w/ matching request hash  → replay the cached response unchanged.
  * Existing w/ different request hash → 409 conflict (key reused incorrectly).
  * Existing but expired               → discarded, treated as a fresh request.
  * Missing                            → atomically claim the key, then run.
  *
+ * Keys are namespaced per principal (session), and the principal is folded
+ * into the request hash, so user A can never replay user B's cached response
+ * by sending the same key + body (API-05).
+ *
  * The claim step closes the TOCTOU race where two concurrent requests with
  * the same key both observed "no record" and executed the handler twice,
  * creating duplicate resources despite idempotent intent.
  */
 export async function idempotencyMiddleware(req: Request, res: Response, next: NextFunction) {
-  if (req.method !== 'POST' && req.method !== 'PUT') {
+  if (req.method !== 'POST' && req.method !== 'PUT' && req.method !== 'PATCH') {
     return next();
   }
 
-  const key = extractIdempotencyKey(req);
-  if (!key) {
+  const rawKey = extractIdempotencyKey(req);
+  if (!rawKey) {
     return next();
   }
 
-  const requestHash = hashBody(req.body);
-  let record: IdempotencyRecord | null = null;
+  // Namespace the client-supplied key by principal so idempotency scopes are
+  // never shared across accounts, and bind the actor into the body hash.
+  const actorScope = actorScopeOf(req);
+  const key = `${actorScope}:${rawKey}`;
+  const requestHash = hashBody(req.body, actorScope);
+  pruneExpiredKeys();
+  let record: IdempotencyRecord | null;
 
   try {
     const { data, error } = await supabase.from('idempotency_keys')
@@ -150,7 +195,7 @@ export async function idempotencyMiddleware(req: Request, res: Response, next: N
     if (Date.now() - createdAtMs > PENDING_CLAIM_STALE_MS) {
       // Stale claim (handler crashed before caching) — clear it and re-claim below.
       await supabase.from('idempotency_keys').delete().eq('key', key).eq('response_status', 0);
-      record = null;
+      // Fall through to the fresh-key claim path.
     } else {
       for (let i = 0; i < 10; i++) {
         await new Promise((r) => setTimeout(r, 250));

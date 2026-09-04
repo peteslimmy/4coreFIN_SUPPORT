@@ -74,6 +74,12 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
     };
     // Validate role is from schema (not arbitrary input) - role is already validated by schema
     const validatedRole = role;
+    // Privilege guard (SEC-03): only SUPER_ADMIN may mint SUPER_ADMIN accounts.
+    // `admin:users` is assignable to custom roles via the DB-config editor, so
+    // holding it must not imply the ability to create superusers.
+    if (validatedRole === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only SUPER_ADMIN can create SUPER_ADMIN accounts' });
+    }
     const userId = id || buildId('usr');
     const resolvedAccountType = accountType ?? inferAccountType(validatedRole);
     const created = await supabaseCreateUser(email, password, name);
@@ -144,14 +150,22 @@ router.post('/users', requireAuth, requirePermission('admin:users'), validateBod
   router.patch('/users/:id', requireAuth, requirePermission('admin:users'), validateBody(z.object({ name: z.string().optional(), email: z.string().email().trim().optional(), role: z.enum([...USER_ROLES]).optional(), accountType: z.enum(['BU', 'PARTNER']).optional(), bu: z.string().optional(), partner: z.string().optional(), phone: z.string().optional(), password: z.string().min(8).optional() })), async (req: AuthedRequest, res: Response) => {
     const patch = req.body as { name?: string; email?: string; role?: string; accountType?: 'BU' | 'PARTNER'; bu?: string; partner?: string; phone?: string; password?: string };
 
-    // Only SUPER_ADMIN can change roles or assign executive roles
-    if (patch.role && patch.role !== req.user!.role) {
-      if (req.user!.role !== 'SUPER_ADMIN') {
-        return res.status(403).json({ error: 'Only SUPER_ADMIN can change user roles' });
-      }
+    const current = await findUserById(req.params.id);
+
+    // Privilege guards (SEC-03):
+    // 1. A SUPER_ADMIN account may only be modified by another SUPER_ADMIN.
+    //    This closes the password-reset escalation path: any `admin:users`
+    //    holder resetting a SUPER_ADMIN's password == full account takeover.
+    if (current?.role === 'SUPER_ADMIN' && req.user!.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only SUPER_ADMIN can modify a SUPER_ADMIN account' });
+    }
+    // 2. Any role *change* requires SUPER_ADMIN. (The previous check compared
+    //    the patch to the CALLER's own role, which let a non-SUPER_ADMIN admin
+    //    assign their own role to other users.)
+    if (patch.role && patch.role !== current?.role && req.user!.role !== 'SUPER_ADMIN') {
+      return res.status(403).json({ error: 'Only SUPER_ADMIN can change user roles' });
     }
 
-    const current = await findUserById(req.params.id);
     if (current?.auth_user_id) {
       await supabaseUpdateUser(current.auth_user_id, {
         email: patch.email,

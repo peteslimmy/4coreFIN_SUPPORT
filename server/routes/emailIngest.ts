@@ -5,6 +5,15 @@ import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { audit, AuditAction } from '../auditEvents';
 import { escapeLike } from '../lib/escapeLike';
+import { createHash, timingSafeEqual } from 'node:crypto';
+
+/** Constant-time secret comparison. Compares SHA-256 digests so neither
+ * length nor prefix of either value leaks through timing. */
+function secretsMatch(provided: string, expected: string): boolean {
+  const a = createHash('sha256').update(provided).digest();
+  const b = createHash('sha256').update(expected).digest();
+  return timingSafeEqual(a, b);
+}
 
 const TBL = (name: string) => `email_ingest.${name}` as any;
 
@@ -41,12 +50,15 @@ export function createEmailIngestRouter(): Router {
   router.post('/email/webhook',
     validateBody(webhookSchema),
     async (req: AuthedRequest, res: Response) => {
+      // Fail closed (SEC-02/API-04): this endpoint is CSRF-exempt and
+      // machine-to-machine, so it must NEVER be writable without the shared
+      // secret. A deployment with EMAIL_WEBHOOK_SECRET unset refuses every
+      // request with the same 401 as a wrong-secret request (no config-state
+      // disclosure), instead of silently accepting unauthenticated writes.
       const webhookSecret = process.env.EMAIL_WEBHOOK_SECRET;
-      if (webhookSecret) {
-        const provided = req.headers['x-webhook-secret'] as string;
-        if (!provided || provided !== webhookSecret) {
-          return res.status(401).json({ error: 'Unauthorized' });
-        }
+      const provided = req.headers['x-webhook-secret'] as string;
+      if (!webhookSecret || !provided || !secretsMatch(provided, webhookSecret)) {
+        return res.status(401).json({ error: 'Unauthorized' });
       }
       const body = req.body;
       const messageId = req.headers['message-id'] as string || `${Date.now()}-${crypto.randomUUID()}`;
@@ -70,17 +82,17 @@ export function createEmailIngestRouter(): Router {
         received_at: new Date().toISOString(),
       };
 
-      const { data: existing } = await supabase
-        .from(TBL('inbound_emails'))
-        .select('id')
-        .eq('message_id', messageId)
-        .single();
-      if (existing) {
-        return res.status(200).json({ ok: true, duplicate: true });
-      }
-
+      // Atomic dedupe (API-04): rely on the unique index on message_id
+      // (migration 077) instead of a check-then-insert race. A concurrent
+      // duplicate insert surfaces as 23505 and is answered as an idempotent
+      // duplicate, exactly like the SLA job's notification dedupe pattern.
       const { error } = await supabase.from(TBL('inbound_emails')).insert(emailRecord);
-      if (error) return res.status(400).json({ error: error.message });
+      if (error) {
+        if ((error as any).code === '23505' || /duplicate key|unique constraint/i.test(error.message)) {
+          return res.status(200).json({ ok: true, duplicate: true });
+        }
+        return res.status(400).json({ error: error.message });
+      }
 
       await audit({
         event: 'EMAIL_RECEIVED',
@@ -133,6 +145,10 @@ export function createEmailIngestRouter(): Router {
 
   // PATCH /api/email/inbox/:id/process — mark email as processed
   router.patch('/email/inbox/:id/process', requireAuth, requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
+    validateBody(z.object({
+      ticket_id: z.string().optional(),
+      error: z.string().optional(),
+    })),
     async (req: AuthedRequest, res: Response) => {
       const { ticket_id, error: err } = req.body;
       const { data: ex } = await supabase

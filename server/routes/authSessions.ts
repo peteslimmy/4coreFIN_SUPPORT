@@ -1,5 +1,6 @@
 import { Router, type Request, type Response } from 'express';
 import { z } from 'zod';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, findUserByEmail, findUserByAuthId, issueSession, clearSession, supabaseSignIn, toAuthUser, type AuthedRequest } from '../auth';
 import { audit, AuditAction } from '../auditEvents';
@@ -7,9 +8,19 @@ import { audit, AuditAction } from '../auditEvents';
 export function createAuthSessionsRouter(): Router {
   const router = Router();
 
+  // Rate limit login attempts: 50 per 15 minutes per IP to prevent brute-force
+  const loginLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 50,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    message: { error: 'Too many login attempts. Please try again later.' },
+  });
+
   // Every login goes through Supabase Auth (signInWithPassword). The app only
   // ever maps the confirmed Supabase identity to a provisioned app user row.
-  router.post('/auth/login', validateBody(z.object({ email: z.string().email().trim(), password: z.string().min(1) })), async (req: Request, res: Response) => {
+  router.post('/auth/login', loginLimiter, validateBody(z.object({ email: z.string().email().trim(), password: z.string().min(1) })), async (req: Request, res: Response) => {
     try {
       const { email, password } = req.body as { email: string; password: string };
       const ip = req.ip || req.socket.remoteAddress;
@@ -31,6 +42,18 @@ export function createAuthSessionsRouter(): Router {
       await audit({ event: 'USER_LOGIN', actor: userRow.name, role: userRow.role, action: AuditAction.USER_LOGIN, details: `User ${userRow.email} logged in` });
       res.json({ user: authUser, mustChangePassword: Boolean(authUser.mustChangePassword) || pendingActivation, pendingActivation });
     } catch (e: any) {
+      // A locked account must not be told "invalid password" (misleading and
+      // hides the lockout from the user), and infrastructure failures must
+      // surface as 503 rather than masquerading as bad credentials.
+      if (e?.code === 'ACCOUNT_LOCKED') {
+        return res.status(423).json({
+          error: 'Account temporarily locked due to too many failed attempts',
+          lockedUntil: e.lockedUntil,
+        });
+      }
+      if (e?.name === 'LockoutUnavailableError' || (Number.isInteger(e?.status) && e.status >= 500)) {
+        return res.status(503).json({ error: 'Login temporarily unavailable. Please try again shortly.' });
+      }
       // Return uniform error message to prevent email enumeration
       return res.status(401).json({ error: 'Invalid email or password' });
     }

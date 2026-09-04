@@ -12,6 +12,24 @@ export interface LockoutResult {
 }
 
 /**
+ * Error thrown when the lockout check cannot be evaluated. The login route
+ * maps this to a 503 so storage failures can never silently disable the
+ * brute-force gate (SEC-05: fail closed).
+ */
+export class LockoutUnavailableError extends Error {
+  status = 503;
+  constructor() {
+    super('Login temporarily unavailable');
+    this.name = 'LockoutUnavailableError';
+  }
+}
+
+/** True when a Supabase error means "no matching row" (PGRST116 from .single()). */
+function isNoRowError(error: unknown): boolean {
+  return Boolean(error) && (error as { code?: string }).code === 'PGRST116';
+}
+
+/**
  * Check if account is currently locked
  */
 export async function isAccountLocked(email: string): Promise<LockoutResult> {
@@ -21,7 +39,17 @@ export async function isAccountLocked(email: string): Promise<LockoutResult> {
     .ilike('email', escapeLike(email))
     .single();
 
-  if (error || !user) {
+  if (error) {
+    if (isNoRowError(error)) {
+      // Unknown/unprovisioned account — nothing to lock.
+      return { locked: false, attemptsRemaining: MAX_FAILED_ATTEMPTS };
+    }
+    // Real storage failure: we cannot prove the account is not locked, so
+    // refuse the attempt instead of silently bypassing the gate (SEC-05).
+    logger.error({ err: error }, 'isAccountLocked read error — failing closed');
+    throw new LockoutUnavailableError();
+  }
+  if (!user) {
     return { locked: false, attemptsRemaining: MAX_FAILED_ATTEMPTS };
   }
 
@@ -46,8 +74,11 @@ export async function isAccountLocked(email: string): Promise<LockoutResult> {
 }
 
 /**
- * Record a failed login attempt using an atomic increment to prevent TOCTOU
- * races under concurrent login attempts.
+ * Record a failed login attempt. The increment is atomic via the
+ * record_failed_login RPC (migration 079), preventing the TOCTOU race where
+ * two concurrent logins both read N and write N+1 and never reach the lock
+ * threshold. Falls back to the legacy read-modify-write path when the RPC has
+ * not been applied yet.
  */
 export async function recordFailedLogin(email: string, ip?: string, userAgent?: string): Promise<LockoutResult> {
   // First check if already locked (fast path — no write)
@@ -57,7 +88,22 @@ export async function recordFailedLogin(email: string, ip?: string, userAgent?: 
     .ilike('email', escapeLike(email))
     .single();
 
-  if (findError || !existing) {
+  if (findError) {
+    if (isNoRowError(findError)) {
+      logSecurityEvent('failed_login_unknown_user', 'medium', {
+        email,
+        ip,
+        userAgent,
+        details: 'Login attempt for non-existent account',
+      });
+      return { locked: false, attemptsRemaining: MAX_FAILED_ATTEMPTS };
+    }
+    // Storage failure while recording an attempt: the brute-force counter
+    // cannot work, so fail closed instead of silently losing the count.
+    logger.error({ err: findError }, 'recordFailedLogin lookup error — failing closed');
+    throw new LockoutUnavailableError();
+  }
+  if (!existing) {
     logSecurityEvent('failed_login_unknown_user', 'medium', {
       email,
       ip,
@@ -71,38 +117,54 @@ export async function recordFailedLogin(email: string, ip?: string, userAgent?: 
     return { locked: true, attemptsRemaining: 0, lockedUntil: existing.locked_until };
   }
 
-  // Atomic increment: UPDATE ... SET failed_login_attempts = failed_login_attempts + 1
-  // This prevents two concurrent requests from both reading N and writing N+1,
-  // which would skip the lock threshold.
-  const now = new Date().toISOString();
-  const { data: updated, error: incError } = await supabase
-    .from('users')
-    .update({
-      failed_login_attempts: (existing.failed_login_attempts || 0) + 1,
-      last_failed_login: now,
-    })
-    .eq('id', existing.id)
-    .select('failed_login_attempts')
-    .single();
+  const { data: rpcRows, error: rpcError } = await supabase.rpc('record_failed_login', {
+    p_user_id: existing.id,
+  });
 
-  if (incError || !updated) {
-    logger.error({ err: incError }, "Failed to record login attempt");
-    return { locked: false, attemptsRemaining: MAX_FAILED_ATTEMPTS };
-  }
-
-  const newAttempts = updated.failed_login_attempts || 0;
+  let newAttempts: number;
   let locked = false;
   let lockedUntil: string | undefined;
 
-  if (newAttempts >= MAX_FAILED_ATTEMPTS) {
-    locked = true;
-    lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
-
-    await supabase
+  if (!rpcError && Array.isArray(rpcRows) && rpcRows.length > 0) {
+    newAttempts = rpcRows[0].attempts ?? 0;
+    if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+      locked = true;
+      lockedUntil = rpcRows[0].locked_until
+        ?? new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+    }
+  } else {
+    if (rpcError) {
+      logger.info({ err: rpcError }, 'record_failed_login RPC unavailable — using legacy increment');
+    }
+    const now = new Date().toISOString();
+    const { data: updated, error: incError } = await supabase
       .from('users')
-      .update({ locked_until: lockedUntil })
-      .eq('id', existing.id);
+      .update({
+        failed_login_attempts: (existing.failed_login_attempts || 0) + 1,
+        last_failed_login: now,
+      })
+      .eq('id', existing.id)
+      .select('failed_login_attempts')
+      .single();
 
+    if (incError || !updated) {
+      logger.error({ err: incError }, 'Failed to record login attempt');
+      throw new LockoutUnavailableError();
+    }
+
+    newAttempts = updated.failed_login_attempts || 0;
+    if (newAttempts >= MAX_FAILED_ATTEMPTS) {
+      locked = true;
+      lockedUntil = new Date(Date.now() + LOCKOUT_DURATION_MS).toISOString();
+
+      await supabase
+        .from('users')
+        .update({ locked_until: lockedUntil })
+        .eq('id', existing.id);
+    }
+  }
+
+  if (locked) {
     logSecurityEvent('account_locked', 'high', {
       userId: existing.id,
       email,
@@ -142,7 +204,7 @@ export async function clearFailedAttempts(userId: string): Promise<void> {
     .eq('id', userId);
 
   if (error) {
-    logger.error({ err: error }, "Failed to clear failed attempts");
+    logger.error({ err: error }, 'Failed to clear failed attempts');
   }
 }
 
@@ -160,7 +222,7 @@ export async function unlockAccount(userId: string, adminUserId: string): Promis
     .eq('id', userId);
 
   if (error) {
-    logger.error({ err: error }, "Failed to unlock account");
+    logger.error({ err: error }, 'Failed to unlock account');
     return false;
   }
 
@@ -193,7 +255,7 @@ export async function getLockoutStatus(userId: string): Promise<{
     return { failedAttempts: 0, lockedUntil: null, lastFailedLogin: null, isLocked: false };
   }
 
-  const isLocked = user.locked_until && new Date(user.locked_until) > new Date();
+  const isLocked = Boolean(user.locked_until) && new Date(user.locked_until) > new Date();
 
   return {
     failedAttempts: user.failed_login_attempts || 0,
@@ -202,5 +264,3 @@ export async function getLockoutStatus(userId: string): Promise<{
     isLocked,
   };
 }
-
-

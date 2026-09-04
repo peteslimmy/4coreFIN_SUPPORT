@@ -7,6 +7,8 @@ import { audit, AuditAction } from '../auditEvents';
 
 const TBL = (name: string) => `notify.${name}` as any;
 
+const preferenceSection = z.record(z.string(), z.union([z.boolean(), z.string(), z.number()]));
+
 const preferencesSchema = z.object({
   emailEnabled: z.boolean().optional(),
   pushEnabled: z.boolean().optional(),
@@ -19,6 +21,10 @@ const preferencesSchema = z.object({
     end: z.string(),
   }).optional(),
   categories: z.record(z.string(), z.boolean()).optional(),
+  // Per-channel granular settings persisted verbatim (FE-03). Keys are
+  // namespaced by the client as { general, email, sms, inApp, ticket, system }
+  // so channels can never overwrite each other's toggles.
+  details: z.record(z.string(), preferenceSection).optional(),
 });
 
 const templateSchema = z.object({
@@ -73,6 +79,12 @@ export function createNotificationRouter(): Router {
       if (body.teamsEnabled !== undefined) update.teams_enabled = body.teamsEnabled;
       if (body.quietHours) update.quiet_hours = body.quietHours;
       if (body.categories) update.categories = body.categories;
+      if (body.details) update.details = body.details;
+      // Keep the first-class channel columns in sync with the namespaced
+      // details so the notification engine keeps reading accurate flags.
+      if (body.details?.email?.emailEnabled !== undefined) update.email_enabled = body.details.email.emailEnabled;
+      if (body.details?.sms?.smsEnabled !== undefined) update.sms_enabled = body.details.sms.smsEnabled;
+      if (body.details?.inApp?.inAppEnabled !== undefined) update.push_enabled = body.details.inApp.inAppEnabled;
 
       const { data: existing } = await supabase
         .from(TBL('preferences'))
@@ -129,6 +141,7 @@ export function createNotificationRouter(): Router {
   );
 
   router.patch('/notifications/templates/:code', requireAuth, requireRoles('SUPER_ADMIN'),
+    validateBody(templateSchema.partial()),
     async (req: AuthedRequest, res: Response) => {
       const { data: ex } = await supabase.from(TBL('templates')).select('code').eq('code', req.params.code).single();
       if (!ex) return res.status(404).json({ error: 'Template not found' });
