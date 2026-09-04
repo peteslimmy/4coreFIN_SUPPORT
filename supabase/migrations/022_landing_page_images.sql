@@ -8,6 +8,42 @@
 -- and the application writes audit rows itself (no audit trigger), so service-role writes
 -- are never aborted by a NULL auth.uid().
 
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Fresh-environment bootstrap fix (review finding DB-01):
+-- This migration previously created landing_page_image_versions with an FK to
+-- public.landing_page_images BEFORE that table existed (the table is created
+-- by migration 023, which sorts after this file). On a fresh database every
+-- statement referencing the table failed. The guarded CREATE TABLE below
+-- mirrors 023's DDL exactly; 023 remains the canonical definition and no-ops
+-- here via IF NOT EXISTS.
+-- ─────────────────────────────────────────────────────────────────────────────
+CREATE TABLE IF NOT EXISTS public.landing_page_images (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  title TEXT NOT NULL DEFAULT '',
+  description TEXT DEFAULT '',
+  file_name TEXT NOT NULL,
+  original_name TEXT NOT NULL,
+  mime_type TEXT NOT NULL,
+  file_size BIGINT NOT NULL DEFAULT 0,
+  width INTEGER,
+  height INTEGER,
+  storage_path TEXT NOT NULL,
+  thumbnail_path TEXT,
+  mobile_path TEXT,
+  desktop_path TEXT,
+  alt_text TEXT DEFAULT '',
+  seo_title TEXT DEFAULT '',
+  seo_description TEXT DEFAULT '',
+  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'published', 'archived', 'deleted')),
+  version INTEGER NOT NULL DEFAULT 1,
+  uploaded_by TEXT REFERENCES users(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  deleted_at TIMESTAMPTZ,
+  published_at TIMESTAMPTZ,
+  expires_at TIMESTAMPTZ
+);
+
 -- Enable necessary extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pgcrypto";
