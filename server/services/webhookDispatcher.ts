@@ -58,7 +58,7 @@ export async function registerDeliveryAttempt(params: {
 }
 
 export async function dispatchWebhook(eventType: WebhookEvent, payload: unknown): Promise<void> {
-  let active: any[] = [];
+  let active: any[];
   try {
     const { data } = await supabase.from('webhooks').select('*').eq('is_active', true);
     active = (data ?? []).filter((w: any) => (w.events || []).includes(eventType));
