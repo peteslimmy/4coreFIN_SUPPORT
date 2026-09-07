@@ -48,6 +48,7 @@ export function createTicketReferenceRouter(): Router {
   );
 
   router.patch('/ticket/categories/:id', requireAuth, requireRoles('SUPER_ADMIN'),
+    validateBody(createCategorySchema.partial()),
     async (req: AuthedRequest, res: Response) => {
       const { data: ex } = await supabase.from(TBL('categories')).select('id').eq('id', req.params.id).single();
       if (!ex) return res.status(404).json({ error: 'Category not found' });
@@ -81,6 +82,7 @@ export function createTicketReferenceRouter(): Router {
   );
 
   router.patch('/ticket/severities/:id', requireAuth, requireRoles('SUPER_ADMIN'),
+    validateBody(createSeveritySchema.partial()),
     async (req: AuthedRequest, res: Response) => {
       const { data: ex } = await supabase.from(TBL('severities')).select('id').eq('id', req.params.id).single();
       if (!ex) return res.status(404).json({ error: 'Severity not found' });

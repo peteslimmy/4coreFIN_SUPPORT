@@ -40,7 +40,7 @@ export function createSurveysRouter(): Router {
   const router = Router();
 
   // ── List campaigns ─────────────────────────────────────────────────
-  router.get('/surveys/campaigns', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/surveys/campaigns', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const { data, error } = await supabase
       .from('surveys.survey_campaigns')
       .select('*')
@@ -162,7 +162,7 @@ export function createSurveysRouter(): Router {
   );
 
   // ── Campaign stats ─────────────────────────────────────────────────
-  router.get('/surveys/campaigns/:id/stats', requireAuth, async (req: AuthedRequest, res: Response) => {
+  router.get('/surveys/campaigns/:id/stats', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res: Response) => {
     const { data, error } = await supabase
       .from('surveys.campaign_stats')
       .select('*')
@@ -174,7 +174,7 @@ export function createSurveysRouter(): Router {
   });
 
   // ── Campaign responses (paginated) ─────────────────────────────────
-  router.get('/surveys/campaigns/:id/responses', requireAuth, async (req: AuthedRequest, res: Response) => {
+  router.get('/surveys/campaigns/:id/responses', requireAuth, requirePermission('admin:config:read'), async (req: AuthedRequest, res: Response) => {
     const page = Math.max(1, Number(req.query.page) || 1);
     const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 20));
     const from = (page - 1) * pageSize;
@@ -237,7 +237,7 @@ export function createSurveysRouter(): Router {
   });
 
   // ── Overall stats across all campaigns ─────────────────────────────
-  router.get('/surveys/overall', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/surveys/overall', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const { data, error } = await supabase
       .from('surveys.campaign_stats')
       .select('*');

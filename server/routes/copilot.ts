@@ -52,7 +52,7 @@ const aiIpLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many AI requests, please try again later.' },
-  keyGenerator: ipKeyGenerator,
+  keyGenerator: (req) => ipKeyGenerator(req.ip),
 });
 
 /**

@@ -2,6 +2,7 @@ import { openTicketsForSla, insertNotification, getConfig } from './repository';
 import { supabase } from './supabase';
 import { broadcast } from './broadcast';
 import { notifyByEmail, appHomeUrl } from './services/notifyEmails';
+import { escapeHtml } from './lib/htmlSanitize';
 import { buildId } from './lib/ids';
 
 export interface EscalationAction {
@@ -137,8 +138,8 @@ async function runEscalationCheckInner(): Promise<{ escalated: number; scanned: 
 
         void notifyByEmail(
           recipient,
-          `[4C] Escalation — Ticket ${ticket.id}`,
-          `<h3>[ESCALATION] ${rule.name}</h3><p>Ticket <strong>${ticket.id}</strong> (${ticket.priority} / ${ticket.category || '—'}) triggered escalation rule <strong>${rule.id}</strong>.</p><p>${action.message || ''}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+          `[4C] Escalation — Ticket ${escapeHtml(ticket.id)}`,
+          `<h3>[ESCALATION] ${escapeHtml(rule.name)}</h3><p>Ticket <strong>${escapeHtml(ticket.id)}</strong> (${escapeHtml(ticket.priority || '')} / ${escapeHtml(ticket.category || '—')}) triggered escalation rule <strong>${escapeHtml(rule.id)}</strong>.</p><p>${escapeHtml(action.message || '')}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
         );
 
         broadcast('escalation_triggered', {

@@ -22,7 +22,7 @@ const DANGEROUS_PATTERNS: Array<{ pattern: RegExp; label: string }> = [
 
   // data: URI that could carry script content
   { pattern: /data\s*:\s*text\/html/i, label: 'data: URI with text/html' },
-  { pattern: /data\s*:\s*application\/x\-javascript/i, label: 'data: URI with JS' },
+  { pattern: /data\s*:\s*application\/x-javascript/i, label: 'data: URI with JS' },
 
   // foreignObject can embed arbitrary XHTML
   { pattern: /<foreignobject[\s>]/i, label: '<foreignObject> (XHTML embed)' },

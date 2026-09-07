@@ -1,11 +1,14 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
+import { validateBody } from '../middleware/validateBody';
 import { getSetting, getSettings, getPublicSettings, setSetting, setSettings } from '../services/settingsService';
 import { uploadFileToStorage, deleteFile } from '../services/storageService';
 import { encrypt, decrypt, maskValue } from '../services/encryptionService';
 import { sendEmail, invalidateSmtpSettingsCache } from '../services/emailService';
 import { audit, AuditAction } from '../auditEvents';
+import { escapeHtml } from '../lib/htmlSanitize';
 import { supabase } from '../supabase';
 import { buildId } from '../lib/ids';
 import { validateSvgBuffer } from '../lib/svgSanitize';
@@ -48,7 +51,9 @@ export function createAdminSettingsRouter(): Router {
     'auth.password_require_uppercase', 'auth.password_require_number', 'auth.password_require_special',
   ]);
 
-  router.put('/admin/settings/:key', requireAuth, requireRoles('SUPER_ADMIN'), async (req: AuthedRequest, res) => {
+  router.put('/admin/settings/:key', requireAuth, requireRoles('SUPER_ADMIN'),
+    validateBody(z.object({ value: z.unknown() })),
+    async (req: AuthedRequest, res) => {
     const { key } = req.params;
     if (!ALLOWED_SETTING_KEYS.has(key)) {
       return res.status(400).json({ error: `Unknown setting key: ${key}` });
@@ -77,7 +82,9 @@ export function createAdminSettingsRouter(): Router {
   });
 
   // ── Admin: Bulk update settings ──────────────────────────────
-  router.put('/admin/settings', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
+  router.put('/admin/settings', requireAuth, requirePermission('admin:config:write'),
+    validateBody(z.record(z.string(), z.unknown())),
+    async (req: AuthedRequest, res) => {
     const settings = req.body;
     if (!settings || typeof settings !== 'object') {
       return res.status(400).json({ error: 'Expected settings object' });
@@ -201,7 +208,7 @@ await audit({
       const result = await sendEmail({
         to: req.user!.email,
         subject: '4CoreFin SMTP Test',
-        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px"><h2 style="color:#1e293b;margin:0 0 8px">SMTP test successful</h2><p style="color:#475569;line-height:1.6">This message confirms that your SMTP configuration for <strong>${settings['smtp.host']}:${settings['smtp.port']}</strong> is working correctly.</p></div>`,
+        html: `<div style="font-family:Arial,sans-serif;max-width:560px;margin:auto;padding:24px;border:1px solid #e2e8f0;border-radius:12px"><h2 style="color:#1e293b;margin:0 0 8px">SMTP test successful</h2><p style="color:#475569;line-height:1.6">This message confirms that your SMTP configuration for <strong>${escapeHtml(settings['smtp.host'] || '')}:${escapeHtml(String(settings['smtp.port'] || ''))}</strong> is working correctly.</p></div>`,
         text: 'SMTP test successful. Your 4CoreFin SMTP configuration is working correctly.',
       });
 
@@ -226,11 +233,14 @@ await audit({
     res.json(data);
   });
 
-  router.post('/admin/api-keys', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res) => {
-    const { name, service, key } = req.body;
-    if (!name || !service || !key) {
-      return res.status(400).json({ error: 'name, service, and key are required' });
-    }
+  router.post('/admin/api-keys', requireAuth, requirePermission('admin:config:write'),
+    validateBody(z.object({
+      name: z.string().min(1),
+      service: z.string().min(1),
+      key: z.string().min(1),
+    })),
+    async (req: AuthedRequest, res) => {
+      const { name, service, key } = req.body;
     const id = buildId('ak');
     const encryptedKey = encrypt(key);
     const { error } = await supabase.from('api_keys').insert({

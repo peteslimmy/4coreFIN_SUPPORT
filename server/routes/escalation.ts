@@ -23,8 +23,6 @@ const EscalationRuleSchema = z.object({
   })),
 });
 
-const EscalationRulesArraySchema = z.array(EscalationRuleSchema);
-
 function configItemId(item: any): string {
   if (item == null) return '';
   if (typeof item === 'string') return String(item);

@@ -113,9 +113,10 @@ export function createProfileRouter(): Router {
 
   // ── Verify current password ──────────────────────────────────
   // Confirms the password against Supabase Auth (the single source of truth).
-  router.post('/auth/verify-password', requireAuth, async (req: AuthedRequest, res) => {
-    const { password } = req.body;
-    if (!password) return res.status(400).json({ error: 'Password required' });
+  router.post('/auth/verify-password', requireAuth,
+    validateBody(z.object({ password: z.string().min(1) })),
+    async (req: AuthedRequest, res) => {
+      const { password } = req.body;
     try {
       await supabaseSignIn(req.user!.email, password);
       res.json({ valid: true });
@@ -176,7 +177,7 @@ export function createProfileRouter(): Router {
     legacyHeaders: false,
     keyGenerator: (req) => {
       const email = (req.body?.email || '').toLowerCase().trim();
-      const ip = ipKeyGenerator(req);
+      const ip = ipKeyGenerator(req.ip);
       return email ? `${ip}:${email}` : ip;
     },
     message: { error: 'Too many reset attempts. Please try again later.' },
@@ -194,11 +195,25 @@ export function createProfileRouter(): Router {
   });
 
   // ── Reset password (Supabase recovery token) ─────────────────
-  router.post('/auth/reset-password', async (req, res) => {
-    const { token, newPassword } = req.body;
-    if (!token || !newPassword) {
-      return res.status(400).json({ error: 'Token and new password required' });
-    }
+  const resetPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000, // 1 hour
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    keyGenerator: (req) => ipKeyGenerator(req.ip),
+    message: { error: 'Too many password reset attempts. Please try again later.' },
+  });
+
+  router.post('/auth/reset-password', resetPasswordLimiter,
+    validateBody(z.object({
+      token: z.string().min(1),
+      newPassword: z.string().min(8),
+    })),
+    async (req, res) => {
+      const { token, newPassword } = req.body;
+      if (!token || !newPassword) {
+        return res.status(400).json({ error: 'Token and new password required' });
+      }
     // Password strength validation
     if (newPassword.length < 8) {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });

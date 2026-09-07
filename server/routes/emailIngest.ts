@@ -1,4 +1,4 @@
-import { Router, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction } from 'express';
 import { z } from 'zod';
 import { supabase } from '../supabase';
 import { validateBody } from '../middleware/validateBody';
@@ -15,6 +15,20 @@ function secretsMatch(provided: string, expected: string): boolean {
   return timingSafeEqual(a, b);
 }
 
+/** Fail-closed M2M auth gate for the inbound webhook. Applied as the FIRST
+ * middleware on POST /api/email/webhook (before body validation) so every
+ * unauthenticated/mis-authenticated request - regardless of body validity -
+ * returns a uniform 401 and discloses no endpoint/schema metadata. */
+function webhookSecretRequired(req: Request, res: Response, next: NextFunction): void {
+  const webhookSecret = process.env.EMAIL_WEBHOOK_SECRET;
+  const provided = req.headers['x-webhook-secret'] as string;
+  if (!webhookSecret || !provided || !secretsMatch(provided, webhookSecret)) {
+    res.status(401).json({ error: 'Unauthorized' });
+    return;
+  }
+  next();
+}
+
 const TBL = (name: string) => `email_ingest.${name}` as any;
 
 const webhookSchema = z.object({
@@ -26,12 +40,17 @@ const webhookSchema = z.object({
   text: z.string().optional().default(''),
   html: z.string().optional().default(''),
   headers: z.record(z.string(), z.any()).optional().default({}),
-  attachments: z.array(z.object({
-    filename: z.string(),
-    contentType: z.string(),
-    size: z.number(),
-    content: z.string().optional(),
-  })).optional().default([]),
+  attachments: z
+    .array(
+      z.object({
+        filename: z.string(),
+        contentType: z.string(),
+        size: z.number(),
+        content: z.string().optional(),
+      }),
+    )
+    .optional()
+    .default([]),
 });
 
 const ruleSchema = z.object({
@@ -47,21 +66,14 @@ export function createEmailIngestRouter(): Router {
   const router = Router();
 
   // POST /api/email/webhook — receive inbound email (requires shared-secret header when EMAIL_WEBHOOK_SECRET is set)
-  router.post('/email/webhook',
+  router.post(
+    '/email/webhook',
+    webhookSecretRequired,
     validateBody(webhookSchema),
     async (req: AuthedRequest, res: Response) => {
-      // Fail closed (SEC-02/API-04): this endpoint is CSRF-exempt and
-      // machine-to-machine, so it must NEVER be writable without the shared
-      // secret. A deployment with EMAIL_WEBHOOK_SECRET unset refuses every
-      // request with the same 401 as a wrong-secret request (no config-state
-      // disclosure), instead of silently accepting unauthenticated writes.
-      const webhookSecret = process.env.EMAIL_WEBHOOK_SECRET;
-      const provided = req.headers['x-webhook-secret'] as string;
-      if (!webhookSecret || !provided || !secretsMatch(provided, webhookSecret)) {
-        return res.status(401).json({ error: 'Unauthorized' });
-      }
       const body = req.body;
-      const messageId = req.headers['message-id'] as string || `${Date.now()}-${crypto.randomUUID()}`;
+      const messageId =
+        (req.headers['message-id'] as string) || `${Date.now()}-${crypto.randomUUID()}`;
 
       const emailRecord = {
         id: crypto.randomUUID(),
@@ -88,7 +100,10 @@ export function createEmailIngestRouter(): Router {
       // duplicate, exactly like the SLA job's notification dedupe pattern.
       const { error } = await supabase.from(TBL('inbound_emails')).insert(emailRecord);
       if (error) {
-        if ((error as any).code === '23505' || /duplicate key|unique constraint/i.test(error.message)) {
+        if (
+          (error as any).code === '23505' ||
+          /duplicate key|unique constraint/i.test(error.message)
+        ) {
           return res.status(200).json({ ok: true, duplicate: true });
         }
         return res.status(400).json({ error: error.message });
@@ -103,11 +118,14 @@ export function createEmailIngestRouter(): Router {
       });
 
       res.status(202).json({ ok: true, id: emailRecord.id });
-    }
+    },
   );
 
   // GET /api/email/inbox — list inbound emails
-  router.get('/email/inbox', requireAuth, requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
+  router.get(
+    '/email/inbox',
+    requireAuth,
+    requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
     async (req: AuthedRequest, res: Response) => {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(100, parseInt(req.query.limit as string) || 25);
@@ -127,11 +145,14 @@ export function createEmailIngestRouter(): Router {
 
       if (error) return res.status(500).json({ error: error.message });
       res.json({ items: data ?? [], total: count ?? 0, page, limit });
-    }
+    },
   );
 
   // GET /api/email/inbox/:id — get single inbound email
-  router.get('/email/inbox/:id', requireAuth, requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
+  router.get(
+    '/email/inbox/:id',
+    requireAuth,
+    requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
     async (req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('inbound_emails'))
@@ -140,15 +161,20 @@ export function createEmailIngestRouter(): Router {
         .single();
       if (error || !data) return res.status(404).json({ error: 'Email not found' });
       res.json(data);
-    }
+    },
   );
 
   // PATCH /api/email/inbox/:id/process — mark email as processed
-  router.patch('/email/inbox/:id/process', requireAuth, requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
-    validateBody(z.object({
-      ticket_id: z.string().optional(),
-      error: z.string().optional(),
-    })),
+  router.patch(
+    '/email/inbox/:id/process',
+    requireAuth,
+    requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
+    validateBody(
+      z.object({
+        ticket_id: z.string().optional(),
+        error: z.string().optional(),
+      }),
+    ),
     async (req: AuthedRequest, res: Response) => {
       const { ticket_id, error: err } = req.body;
       const { data: ex } = await supabase
@@ -160,16 +186,24 @@ export function createEmailIngestRouter(): Router {
 
       const { error } = await supabase
         .from(TBL('inbound_emails'))
-        .update({ processed: true, processed_at: new Date().toISOString(), ticket_id: ticket_id || null, error: err || null })
+        .update({
+          processed: true,
+          processed_at: new Date().toISOString(),
+          ticket_id: ticket_id || null,
+          error: err || null,
+        })
         .eq('id', req.params.id);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ ok: true });
-    }
+    },
   );
 
   // ── Inbound Rules ─────────────────────────────────────────
 
-  router.get('/email/rules', requireAuth, requireRoles('SUPER_ADMIN'),
+  router.get(
+    '/email/rules',
+    requireAuth,
+    requireRoles('SUPER_ADMIN'),
     async (_req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('inbound_rules'))
@@ -177,10 +211,13 @@ export function createEmailIngestRouter(): Router {
         .order('priority', { ascending: false });
       if (error) return res.status(500).json({ error: error.message });
       res.json(data ?? []);
-    }
+    },
   );
 
-  router.post('/email/rules', requireAuth, requireRoles('SUPER_ADMIN'),
+  router.post(
+    '/email/rules',
+    requireAuth,
+    requireRoles('SUPER_ADMIN'),
     validateBody(ruleSchema),
     async (req: AuthedRequest, res: Response) => {
       const { matchField, matchOp, matchValue, action, actionValue, priority } = req.body;
@@ -195,30 +232,53 @@ export function createEmailIngestRouter(): Router {
       };
       const { error } = await supabase.from(TBL('inbound_rules')).insert(entry);
       if (error) return res.status(400).json({ error: error.message });
-      await audit({ event: 'CONFIG_UPDATED', actor: req.user!.name, role: req.user!.role, action: AuditAction.CONFIG_UPDATED, details: `Email rule created: ${matchField} ${matchOp}` });
+      await audit({
+        event: 'CONFIG_UPDATED',
+        actor: req.user!.name,
+        role: req.user!.role,
+        action: AuditAction.CONFIG_UPDATED,
+        details: `Email rule created: ${matchField} ${matchOp}`,
+      });
       res.status(201).json(entry);
-    }
+    },
   );
 
-  router.patch('/email/rules/:id', requireAuth, requireRoles('SUPER_ADMIN'),
+  router.patch(
+    '/email/rules/:id',
+    requireAuth,
+    requireRoles('SUPER_ADMIN'),
     validateBody(ruleSchema.partial()),
     async (req: AuthedRequest, res: Response) => {
-      const { data: ex } = await supabase.from(TBL('inbound_rules')).select('id').eq('id', req.params.id).single();
+      const { data: ex } = await supabase
+        .from(TBL('inbound_rules'))
+        .select('id')
+        .eq('id', req.params.id)
+        .single();
       if (!ex) return res.status(404).json({ error: 'Rule not found' });
-      const { error } = await supabase.from(TBL('inbound_rules')).update(req.body).eq('id', req.params.id);
+      const { error } = await supabase
+        .from(TBL('inbound_rules'))
+        .update(req.body)
+        .eq('id', req.params.id);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ ok: true });
-    }
+    },
   );
 
-  router.delete('/email/rules/:id', requireAuth, requireRoles('SUPER_ADMIN'),
+  router.delete(
+    '/email/rules/:id',
+    requireAuth,
+    requireRoles('SUPER_ADMIN'),
     async (req: AuthedRequest, res: Response) => {
-      const { data: ex } = await supabase.from(TBL('inbound_rules')).select('id').eq('id', req.params.id).single();
+      const { data: ex } = await supabase
+        .from(TBL('inbound_rules'))
+        .select('id')
+        .eq('id', req.params.id)
+        .single();
       if (!ex) return res.status(404).json({ error: 'Rule not found' });
       const { error } = await supabase.from(TBL('inbound_rules')).delete().eq('id', req.params.id);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ ok: true });
-    }
+    },
   );
 
   return router;

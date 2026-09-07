@@ -202,7 +202,7 @@ export function createConfigRouter(): Router {
   });
 
   // ── Form configs ──
-  router.get('/form-configs', requireAuth, async (req: AuthedRequest, res: Response) => {
+  router.get('/form-configs', requireAuth, requirePermission('admin:forms'), async (req: AuthedRequest, res: Response) => {
     const configs: any[] = await getConfig('buFormConfigs', getDefaultBuFormConfigs());
     const bu = req.query.bu as string | undefined;
     if (bu) {
@@ -223,7 +223,7 @@ export function createConfigRouter(): Router {
   });
 
   // ── Saved Replies ──
-  router.get('/saved-replies', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/saved-replies', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const saved: any[] = await getConfig('savedReplies', []);
     res.json(saved);
   });
@@ -251,7 +251,7 @@ export function createConfigRouter(): Router {
   });
 
   // ── Business Units / Providers / Categories ──
-  router.get('/business-units', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/business-units', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const bus: any[] = await getConfig('businessUnits', []);
     res.json(bus);
   });
@@ -262,7 +262,7 @@ export function createConfigRouter(): Router {
     res.json(req.body);
   });
 
-  router.get('/partners', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/partners', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const partners: any[] = await getConfig('partners', []);
     res.json(partners);
   });
@@ -272,7 +272,7 @@ export function createConfigRouter(): Router {
     res.json(req.body);
   });
 
-  router.get('/categories', requireAuth, async (_req: AuthedRequest, res: Response) => {
+  router.get('/categories', requireAuth, requirePermission('admin:config:read'), async (_req: AuthedRequest, res: Response) => {
     const categories: any[] = await getConfig('categories', []);
     res.json(categories);
   });

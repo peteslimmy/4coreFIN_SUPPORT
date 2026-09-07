@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../supabase';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
+import { requirePermission } from '../middleware/requirePermission';
 import { audit, AuditAction } from '../auditEvents';
 import { escapeLike } from '../lib/escapeLike';
 
@@ -35,6 +36,21 @@ const versionSchema = z.object({
   changeNotes: z.string().max(500).optional().default(''),
 });
 
+/** Admin roles that can access all documents regardless of BU. */
+const GLOBAL_ROLES = new Set(['SUPER_ADMIN', 'EXECUTIVE']);
+
+/**
+ * Check whether the requesting user is authorized to access a document.
+ * Authorization passes if the user is a global admin, or if the document was
+ * uploaded by the user, or if the document's BU matches the user's BU.
+ */
+function canAccessDocument(doc: any, user: { role: string; bu?: string; name: string }): boolean {
+  if (GLOBAL_ROLES.has(user.role)) return true;
+  if (doc.uploaded_by === user.name) return true;
+  if (doc.business_unit && doc.business_unit === user.bu) return true;
+  return false;
+}
+
 export function createDocumentRouter(): Router {
   const router = Router();
 
@@ -51,7 +67,7 @@ export function createDocumentRouter(): Router {
     }
   );
 
-  router.post('/documents/folders', requireAuth,
+  router.post('/documents/folders', requireAuth, requirePermission('documents:create'),
     validateBody(createFolderSchema),
     async (req: AuthedRequest, res: Response) => {
       const entry = { id: crypto.randomUUID(), ...req.body, created_by: req.user!.name };
@@ -64,7 +80,7 @@ export function createDocumentRouter(): Router {
 
   // ── Documents ─────────────────────────────────────────────
 
-  router.get('/documents', requireAuth,
+  router.get('/documents', requireAuth, requirePermission('documents:view'),
     async (req: AuthedRequest, res: Response) => {
       const page = Math.max(1, parseInt(req.query.page as string) || 1);
       const limit = Math.min(100, parseInt(req.query.limit as string) || 25);
@@ -72,6 +88,11 @@ export function createDocumentRouter(): Router {
 
       let query = supabase.from(TBL('document_registry')).select('*', { count: 'exact' })
         .eq('status', 'active');
+
+      // BU-scoped filtering: PARTNER and BU roles only see their own BU's documents
+      if (!GLOBAL_ROLES.has(req.user!.role) && req.user!.bu && req.user!.bu !== 'ALL') {
+        query = query.eq('business_unit', req.user!.bu);
+      }
 
       const folderId = req.query.folderId as string;
       if (folderId) query = query.eq('folder_id', folderId);
@@ -91,7 +112,7 @@ export function createDocumentRouter(): Router {
     }
   );
 
-  router.get('/documents/:id', requireAuth,
+  router.get('/documents/:id', requireAuth, requirePermission('documents:view'),
     async (req: AuthedRequest, res: Response) => {
       const { data, error } = await supabase
         .from(TBL('document_registry'))
@@ -99,11 +120,14 @@ export function createDocumentRouter(): Router {
         .eq('id', req.params.id)
         .single();
       if (error || !data) return res.status(404).json({ error: 'Document not found' });
+      if (!canAccessDocument(data, req.user!)) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
       res.json(data);
     }
   );
 
-  router.post('/documents', requireAuth,
+  router.post('/documents', requireAuth, requirePermission('documents:create'),
     validateBody(createDocSchema),
     async (req: AuthedRequest, res: Response) => {
       const entry = {
@@ -112,6 +136,7 @@ export function createDocumentRouter(): Router {
         version: 1,
         status: 'active',
         uploaded_by: req.user!.name,
+        business_unit: req.user!.bu || '',
       };
       const { error } = await supabase.from(TBL('document_registry')).insert(entry);
       if (error) return res.status(400).json({ error: error.message });
@@ -134,21 +159,27 @@ export function createDocumentRouter(): Router {
     }
   );
 
-  router.patch('/documents/:id', requireAuth,
+  router.patch('/documents/:id', requireAuth, requirePermission('documents:edit'),
     validateBody(createDocSchema.partial()),
     async (req: AuthedRequest, res: Response) => {
-      const { data: ex } = await supabase.from(TBL('document_registry')).select('id').eq('id', req.params.id).single();
-      if (!ex) return res.status(404).json({ error: 'Document not found' });
+      const { data: doc } = await supabase.from(TBL('document_registry')).select('*').eq('id', req.params.id).single();
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!canAccessDocument(doc, req.user!)) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
       const { error } = await supabase.from(TBL('document_registry')).update({ ...req.body, updated_at: new Date().toISOString() }).eq('id', req.params.id);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ ok: true });
     }
   );
 
-  router.delete('/documents/:id', requireAuth,
+  router.delete('/documents/:id', requireAuth, requirePermission('documents:delete'),
     async (req: AuthedRequest, res: Response) => {
-      const { data: ex } = await supabase.from(TBL('document_registry')).select('id').eq('id', req.params.id).single();
-      if (!ex) return res.status(404).json({ error: 'Document not found' });
+      const { data: doc } = await supabase.from(TBL('document_registry')).select('*').eq('id', req.params.id).single();
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!canAccessDocument(doc, req.user!)) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
       const { error } = await supabase.from(TBL('document_registry')).update({ status: 'deleted', updated_at: new Date().toISOString() }).eq('id', req.params.id);
       if (error) return res.status(400).json({ error: error.message });
       res.json({ ok: true });
@@ -157,8 +188,17 @@ export function createDocumentRouter(): Router {
 
   // ── Versions ──────────────────────────────────────────────
 
-  router.get('/documents/:id/versions', requireAuth,
+  router.get('/documents/:id/versions', requireAuth, requirePermission('documents:view'),
     async (req: AuthedRequest, res: Response) => {
+      const { data: doc } = await supabase
+        .from(TBL('document_registry'))
+        .select('*')
+        .eq('id', req.params.id)
+        .single();
+      if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!canAccessDocument(doc, req.user!)) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
       const { data, error } = await supabase
         .from(TBL('document_versions'))
         .select('*')
@@ -169,15 +209,18 @@ export function createDocumentRouter(): Router {
     }
   );
 
-  router.post('/documents/:id/versions', requireAuth,
+  router.post('/documents/:id/versions', requireAuth, requirePermission('documents:edit'),
     validateBody(versionSchema),
     async (req: AuthedRequest, res: Response) => {
       const { data: doc } = await supabase
         .from(TBL('document_registry'))
-        .select('id, version')
+        .select('*')
         .eq('id', req.params.id)
         .single();
       if (!doc) return res.status(404).json({ error: 'Document not found' });
+      if (!canAccessDocument(doc, req.user!)) {
+        return res.status(404).json({ error: 'Document not found' });
+      }
 
       const newVersion = doc.version + 1;
       const entry = {
@@ -206,12 +249,18 @@ export function createDocumentRouter(): Router {
 
   // ── Stats ─────────────────────────────────────────────────
 
-  router.get('/documents/stats/summary', requireAuth,
-    async (_req: AuthedRequest, res: Response) => {
-      const { data: docs, error } = await supabase
+  router.get('/documents/stats/summary', requireAuth, requirePermission('documents:view'),
+    async (req: AuthedRequest, res: Response) => {
+      let query = supabase
         .from(TBL('document_registry'))
         .select('id, file_size, status, folder_id')
         .eq('status', 'active');
+
+      if (!GLOBAL_ROLES.has(req.user!.role) && req.user!.bu && req.user!.bu !== 'ALL') {
+        query = query.eq('business_unit', req.user!.bu);
+      }
+
+      const { data: docs, error } = await query;
       if (error) return res.status(500).json({ error: error.message });
 
       const items = docs ?? [];

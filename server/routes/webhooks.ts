@@ -1,13 +1,29 @@
 import { Router, type Response } from 'express';
+import { z } from 'zod';
 import { randomBytes } from 'crypto';
 import { requireAuth, type AuthedRequest } from '../auth';
 import { requirePermission } from '../middleware/requirePermission';
+import { validateBody } from '../middleware/validateBody';
 import { audit, AuditAction } from '../auditEvents';
 import { supabase } from '../supabase';
-import { registerDeliveryAttempt } from '../services/webhookDispatcher';
 import { dispatchWebhook } from '../services/webhookDispatcher';
 import { buildId } from '../lib/ids';
 import { checkWebhookUrl } from '../lib/webhookUrlGuard';
+
+const webhookCreateSchema = z.object({
+  name: z.string().min(1),
+  url: z.string().url(),
+  events: z.array(z.string()).optional().default([]),
+  tenant_id: z.string().optional(),
+});
+
+const webhookUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  url: z.string().url().optional(),
+  events: z.array(z.string()).optional(),
+  is_active: z.boolean().optional(),
+  tenant_id: z.string().optional(),
+}).refine(obj => Object.keys(obj).length > 0, { message: 'At least one field must be provided' });
 
 export function createWebhooksRouter(): Router {
   const router = Router();
@@ -35,11 +51,10 @@ export function createWebhooksRouter(): Router {
   });
 
   // ── Create webhook ───────────────────────────────────────────
-  router.post('/admin/webhooks', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
-    const { name, url, events, tenant_id } = req.body;
-    if (!name || !url) {
-      return res.status(400).json({ error: 'name and url are required' });
-    }
+  router.post('/admin/webhooks', requireAuth, requirePermission('admin:config:write'),
+    validateBody(webhookCreateSchema),
+    async (req: AuthedRequest, res: Response) => {
+      const { name, url, events, tenant_id } = req.body;
     const urlCheck = await checkWebhookUrl(String(url));
     if (!urlCheck.ok) {
       return res.status(400).json({ error: urlCheck.reason });
@@ -59,17 +74,18 @@ export function createWebhooksRouter(): Router {
   // ── Update webhook ───────────────────────────────────────────
   const ALLOWED_UPDATE_FIELDS = new Set(['name', 'url', 'events', 'is_active', 'tenant_id']);
 
-  router.put('/admin/webhooks/:id', requireAuth, requirePermission('admin:config:write'), async (req: AuthedRequest, res: Response) => {
-    const allowed = ['name', 'url', 'events', 'is_active', 'tenant_id'];
-    const patch: Record<string, unknown> = {};
-    for (const key of allowed) {
-      if (Object.prototype.hasOwnProperty.call(req.body, key)) {
-        patch[key] = req.body[key];
+  router.put('/admin/webhooks/:id', requireAuth, requirePermission('admin:config:write'),
+    validateBody(webhookUpdateSchema),
+    async (req: AuthedRequest, res: Response) => {
+      const patch: Record<string, unknown> = {};
+      for (const key of Object.keys(req.body)) {
+        if (ALLOWED_UPDATE_FIELDS.has(key)) {
+          patch[key] = req.body[key];
+        }
       }
-    }
-    if (Object.keys(patch).length === 0) {
-      return res.status(400).json({ error: 'No updatable fields provided' });
-    }
+      if (Object.keys(patch).length === 0) {
+        return res.status(400).json({ error: 'No updatable fields provided' });
+      }
     if (Object.prototype.hasOwnProperty.call(patch, 'url')) {
       const urlCheck = await checkWebhookUrl(String(patch.url));
       if (!urlCheck.ok) {

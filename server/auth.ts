@@ -5,7 +5,6 @@ import crypto from 'crypto';
 import { supabase, supabaseAuth } from './supabase';
 import { logger, logSecurityEvent } from './logger';
 import type { AuthUser } from './compliance';
-import { isBuSupportRole, isGlobalRole } from './rbac';
 import { tenantIdForBu } from './tenant';
 import { isAccountLocked, recordFailedLogin, clearFailedAttempts } from './services/lockoutService';
 import { getCachedUserRow, setUserRowCache } from './lib/userCache';
@@ -281,13 +280,16 @@ export async function findUserById(id: string) {
 /**
  * Verify a password against Supabase Auth. Returns the Supabase user id on
  * success, or throws an AuthError with a safe message.
+ * Also returns the Supabase access token so the session can carry it for
+ * per-request user-JWT Supabase clients (SEC-01): the app-issued session JWT
+ * cannot authorize against Supabase RLS, the Supabase token can.
  */
 export async function supabaseSignIn(
   email: string,
   password: string,
   ip?: string,
   userAgent?: string
-): Promise<{ id: string; email: string }> {
+): Promise<{ id: string; email: string; accessToken?: string }> {
   // Check for account lockout first
   const lockoutStatus = await isAccountLocked(email);
   if (lockoutStatus.locked) {
@@ -324,7 +326,7 @@ export async function supabaseSignIn(
     await clearFailedAttempts(localUser.id);
   }
 
-  return { id: data.user.id, email: data.user.email || email };
+  return { id: data.user.id, email: data.user.email || email, accessToken: data.session?.access_token };
 }
 
 /**

@@ -2,6 +2,7 @@ import { Router, type Response } from 'express';
 import { z } from 'zod';
 import { supabase } from '../supabase';
 import { requireAuth, type AuthedRequest } from '../auth';
+import { requirePermission } from '../middleware/requirePermission';
 
 const TBL = (name: string) => `analytics.${name}` as any;
 
@@ -9,7 +10,7 @@ export function createAnalyticsRouter(): Router {
   const router = Router();
 
   // GET /api/analytics/sla — SLA analytics summary
-  router.get('/analytics/sla', requireAuth,
+  router.get('/analytics/sla', requireAuth, requirePermission('reports:view'),
     async (req: AuthedRequest, res: Response) => {
       const days = Math.min(90, Math.max(1, parseInt(req.query.days as string) || 30));
       const startDate = new Date();
@@ -42,7 +43,7 @@ export function createAnalyticsRouter(): Router {
   );
 
   // GET /api/analytics/tickets — ticket flow analytics
-  router.get('/analytics/tickets', requireAuth,
+  router.get('/analytics/tickets', requireAuth, requirePermission('reports:view'),
     async (req: AuthedRequest, res: Response) => {
       const days = Math.min(90, Math.max(1, parseInt(req.query.days as string) || 30));
       const startDate = new Date();
@@ -78,7 +79,7 @@ export function createAnalyticsRouter(): Router {
   );
 
   // GET /api/analytics/partners — partner performance
-  router.get('/analytics/partners', requireAuth,
+  router.get('/analytics/partners', requireAuth, requirePermission('reports:view'),
     async (req: AuthedRequest, res: Response) => {
       const days = Math.min(90, Math.max(1, parseInt(req.query.days as string) || 30));
       const startDate = new Date();
@@ -118,7 +119,7 @@ export function createAnalyticsRouter(): Router {
   );
 
   // GET /api/analytics/snapshot — trigger or check snapshot status
-  router.get('/analytics/snapshot/status', requireAuth,
+  router.get('/analytics/snapshot/status', requireAuth, requirePermission('reports:view'),
     async (_req: AuthedRequest, res: Response) => {
       const { data: latest, error } = await supabase
         .from(TBL('sla_daily_snapshot'))

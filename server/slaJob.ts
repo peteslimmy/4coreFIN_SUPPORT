@@ -1,11 +1,12 @@
 import { audit, AuditAction } from './auditEvents';
 import { openTicketsForSla, insertNotification, getConfig } from './repository';
 import { supabase } from './supabase';
-import { resolveSlaDuration, effectiveSlaDeadline } from '../src/lib/slaCalculator';
+import { resolveSlaDuration, effectiveSlaDeadline } from '../shared/slaCalculator';
 import { TicketPriority } from '../src/types/app';
 import { broadcast } from './broadcast';
 import { dispatchWebhook } from './services/webhookDispatcher';
 import { notifyByEmail, appHomeUrl } from './services/notifyEmails';
+import { escapeHtml } from './lib/htmlSanitize';
 import { buildId } from './lib/ids';
 
 const FALLBACK_RISK_FRACTION = 0.25;
@@ -64,11 +65,56 @@ async function pruneClaims(): Promise<void> {
 // notification fan-out, event-loop contention under load).
 let slaRunInProgress = false;
 
+// Multi-instance guard (audit fix): an in-process flag cannot stop a second
+// replica from scanning concurrently. A session-level Postgres advisory lock
+// serializes scans across ALL instances; a replica that cannot acquire the
+// lock skips its tick. The lock is released when the connection closes.
+const SLA_JOB_LOCK_KEY = 0x534c414a; // 'SLAJ'
+let lockConnection: { query: (sql: string) => Promise<unknown>; release?: () => void } | null = null;
+
+async function acquireJobLock(): Promise<boolean> {
+  try {
+    const { Client } = await import('pg');
+    if (!process.env.DATABASE_URL) return true; // no direct DB — best-effort
+    const client = new Client({ connectionString: process.env.DATABASE_URL });
+    await client.connect();
+    const res = await client.query('SELECT pg_try_advisory_lock($1) AS ok', [SLA_JOB_LOCK_KEY]);
+    if (!res.rows?.[0]?.ok) {
+      await client.end().catch(() => {});
+      return false;
+    }
+    lockConnection = client as unknown as typeof lockConnection;
+    return true;
+  } catch {
+    return true; // lock infrastructure unavailable — degrade to per-process guard
+  }
+}
+
+async function releaseJobLock(): Promise<void> {
+  if (!lockConnection) return;
+  const client = lockConnection as unknown as {
+    query: (sql: string, values?: unknown[]) => Promise<unknown>;
+    end: () => Promise<void>;
+  };
+  lockConnection = null;
+  try {
+    await client.query('SELECT pg_advisory_unlock($1)', [SLA_JOB_LOCK_KEY]);
+    await client.end();
+  } catch {
+    /* connection already gone — lock dies with the session */
+  }
+}
+
 export async function runSlaCheck() {
   if (slaRunInProgress) return;
   slaRunInProgress = true;
   try {
-    await runSlaCheckInner();
+    if (!(await acquireJobLock())) return;
+    try {
+      await runSlaCheckInner();
+    } finally {
+      await releaseJobLock();
+    }
   } finally {
     slaRunInProgress = false;
   }
@@ -94,13 +140,23 @@ async function runSlaCheckInner() {
       const hoursLeft = (deadline - now) / 3600000;
       const recipients = new Set<string>();
 
-      for (const c of configs) {
-        if (c.email) recipients.add(c.email);
+      // Recipients are scoped to the ticket's context (audit fix: every
+      // breach previously fanned out to ALL configured notification emails —
+      // alert fatigue and a cross-BU information leak). Only watchers,
+      // the assigned agent, and configs explicitly targeting this ticket's
+      // BU/partner are notified.
+      const ticketBu = String(t.businessUnit || '').toLowerCase();
+      const ticketPartner = String(t.partner || '').toLowerCase();
+      for (const c of configs as Array<{ id?: string; stage?: string; email?: string; businessUnit?: string; partner?: string; bu?: string }>) {
+        if (!c.email) continue;
+        const cBu = String(c.businessUnit || c.bu || '').toLowerCase();
+        const cPartner = String(c.partner || '').toLowerCase();
+        const matches = (!cBu || cBu === ticketBu) && (!cPartner || cPartner === ticketPartner);
+        if (matches) recipients.add(c.email);
       }
       for (const w of t.watchers || []) {
         if (w) recipients.add(w);
       }
-      if (t.assignedAgentId) recipients.add(`${(t.partner || 'ops').toLowerCase()}-ops@4core.local`);
 
       const slaDuration = resolveSlaDuration(t.category || '', t.priority as TicketPriority, []).durationHours;
       const riskThreshold = Math.max(slaDuration * FALLBACK_RISK_FRACTION, MIN_RISK_HOURS);
@@ -120,8 +176,8 @@ async function runSlaCheckInner() {
           });
           void notifyByEmail(
             recipient,
-            `[4C] SLA Breach — Ticket ${t.id}`,
-            `<h3>[SLA_BREACH] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> breached its SLA deadline (<strong>${t.priority}</strong> / ${t.category || '—'}). Immediate action is required.</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+            `[4C] SLA Breach — Ticket ${escapeHtml(t.id)}`,
+            `<h3>[SLA_BREACH] Ticket ${escapeHtml(t.id)}</h3><p>Ticket <strong>${escapeHtml(t.id)}</strong> breached its SLA deadline (<strong>${escapeHtml(t.priority || '')}</strong> / ${escapeHtml(t.category || '—')}). Immediate action is required.</p><p><strong>Deadline:</strong> ${escapeHtml(String(t.slaDeadline || '—'))}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
           );
         }));
         // Audit the breach once per ticket, not on every monitor tick.
@@ -151,8 +207,8 @@ async function runSlaCheckInner() {
           });
           void notifyByEmail(
             recipient,
-            `[4C] SLA At Risk — Ticket ${t.id}`,
-            `<h3>[SLA_AT_RISK] Ticket ${t.id}</h3><p>Ticket <strong>${t.id}</strong> is at risk — <strong>${hoursLeft.toFixed(1)}h</strong> remaining before SLA breach (<strong>${t.priority}</strong> / ${t.category || '—'}).</p><p><strong>Deadline:</strong> ${t.slaDeadline || '—'}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
+            `[4C] SLA At Risk — Ticket ${escapeHtml(t.id)}`,
+            `<h3>[SLA_AT_RISK] Ticket ${escapeHtml(t.id)}</h3><p>Ticket <strong>${escapeHtml(t.id)}</strong> is at risk — <strong>${hoursLeft.toFixed(1)}h</strong> remaining before SLA breach (<strong>${escapeHtml(t.priority || '')}</strong> / ${escapeHtml(t.category || '—')}).</p><p><strong>Deadline:</strong> ${escapeHtml(String(t.slaDeadline || '—'))}</p><p><a href="${appHomeUrl()}">Open 4CoreFin</a></p>`
           );
         }));
         riskCount++;

@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabase } from '../supabase';
 import { validateBody } from '../middleware/validateBody';
 import { requireAuth, requireRoles, type AuthedRequest } from '../auth';
+import { requirePermission } from '../middleware/requirePermission';
 import { audit, AuditAction } from '../auditEvents';
 
 const TAGS = (name: string) => `tags.${name}` as any;
@@ -94,7 +95,7 @@ export function createTagsRouter(): Router {
     }
   );
 
-  router.post('/tickets/tags', requireAuth,
+  router.post('/tickets/tags', requireAuth, requirePermission('tickets:edit'),
     validateBody(ticketTagSchema),
     async (req: AuthedRequest, res: Response) => {
       const { ticketId, tagId } = req.body;
@@ -105,7 +106,7 @@ export function createTagsRouter(): Router {
     }
   );
 
-  router.delete('/tickets/:ticketId/tags/:tagId', requireAuth,
+  router.delete('/tickets/:ticketId/tags/:tagId', requireAuth, requirePermission('tickets:edit'),
     async (req: AuthedRequest, res: Response) => {
       const { error } = await supabase
         .from(TAGS('ticket_tags'))
@@ -132,6 +133,13 @@ export function createTagsRouter(): Router {
   );
 
   router.post('/kb/:articleId/versions', requireAuth, requireRoles('SUPER_ADMIN', 'BU_SUPPORT'),
+    validateBody(z.object({
+      title: z.string().optional().default(''),
+      category: z.string().optional().default(''),
+      content: z.string().optional().default(''),
+      tags: z.array(z.string()).optional().default([]),
+      changeNotes: z.string().optional().default(''),
+    })),
     async (req: AuthedRequest, res: Response) => {
       const { data: versions } = await supabase
         .from(KB('kb_article_versions'))
@@ -173,7 +181,11 @@ export function createTagsRouter(): Router {
     }
   );
 
-  router.post('/kb/:articleId/feedback', requireAuth,
+  router.post('/kb/:articleId/feedback', requireAuth, requirePermission('knowledge-base:edit'),
+    validateBody(z.object({
+      rating: z.number().int().min(1).max(5),
+      comment: z.string().optional().default(''),
+    })),
     async (req: AuthedRequest, res: Response) => {
       const entry = {
         id: crypto.randomUUID(),
@@ -191,7 +203,7 @@ export function createTagsRouter(): Router {
 
   // ── KB View Tracking ──────────────────────────────────────
 
-  router.post('/kb/:articleId/view', requireAuth,
+  router.post('/kb/:articleId/view', requireAuth, requirePermission('knowledge-base:view'),
     async (req: AuthedRequest, res: Response) => {
       const entry = {
         id: crypto.randomUUID(),

@@ -1,4 +1,5 @@
 import type { Response } from 'express';
+import { publishRemote, subscribeRemote } from './eventBus';
 
 interface SseClient {
   res: Response;
@@ -85,8 +86,17 @@ export function removeSseClient(res: Response) {
  * Fan an event out to subscribers scoped by the source tenant. Source events
  * that carry no tenant id are only delivered to global-visibility clients so a
  * scoped user never receives another tenant's data.
+ *
+ * Delivery: local registry first (synchronous), then the Postgres event bus so
+ * SSE clients connected to OTHER processes (second server during the
+ * Express→Next transition, or other replicas) receive the event too.
  */
 export function broadcast(event: string, data: any, tenantId?: string | null) {
+  fanoutLocal(event, data, tenantId);
+  publishRemote(event, data, tenantId);
+}
+
+function fanoutLocal(event: string, data: any, tenantId?: string | null) {
   const msg = `event: ${event}\ndata: ${JSON.stringify(data)}\n\n`;
   // Fall back to the tenant id bundled on the payload when not passed explicitly.
   const sourceTenant = tenantId ?? data?.tenantId ?? data?.tenant_id ?? null;
@@ -105,6 +115,12 @@ export function broadcast(event: string, data: any, tenantId?: string | null) {
   // Prune clients whose socket died so they don't accumulate.
   for (const client of dead) sseClients.delete(client);
 }
+
+// Receive events published by other processes and fan them out locally with
+// the same tenant scoping rules.
+subscribeRemote((payload) => {
+  fanoutLocal(payload.event, payload.data, payload.tenantId);
+});
 
 function safeWrite(client: SseClient, msg: string): boolean {
   try {
