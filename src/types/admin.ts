@@ -21,6 +21,9 @@ export interface SlaRule {
   category: string;
   priority: TicketPriority;
   durationHours: number;
+  partnerOrgId?: string;
+  version?: string;
+  isDefault?: boolean;
 }
 
 export interface HolidayRecord {

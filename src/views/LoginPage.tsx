@@ -45,14 +45,16 @@ export default function LoginPage() {
     }
     setLoading(true);
     try {
-      const success = await handleLogin(email.trim(), password.trim());
-      if (success) {
+      const result = await handleLogin(email.trim(), password.trim());
+      if (result.ok) {
         setSuccessAnim(true);
         setTimeout(() => {
           setSuccessAnim(false);
         }, 600);
       } else {
-        setError('Invalid email or password.');
+        // Show the server's exact reason (invalid credentials, account
+        // locked, suspended, network failure) instead of a generic message.
+        setError(result.message || 'Invalid email or password.');
       }
     } catch {
       setError('Login failed. Please try again.');
@@ -95,7 +97,7 @@ export default function LoginPage() {
     <PageTransition>
       <main className="relative flex min-h-screen overflow-hidden bg-app">
         {/* Skip link */}
-        <a href="#login-form" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
+        <a href="#login-form" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
           Skip to login form
         </a>
 
@@ -122,13 +124,13 @@ export default function LoginPage() {
           <div className="absolute -right-20 -top-20 h-80 w-80 rounded-full bg-surface-card/10 blur-3xl" aria-hidden="true" />
           <div className="absolute -bottom-24 -left-16 h-72 w-72 rounded-full bg-surface-card/5 blur-3xl" aria-hidden="true" />
 
-          <div className="relative z-10 mx-auto max-w-md text-center w-full">
-            <p className="mt-3 text-sm text-[#fff]/85 whitespace-nowrap">
+          <div className="relative z-10 mx-auto w-full max-w-[28rem] text-center">
+            <p className="mt-3 text-sm text-[#fff]/85 whitespace-nowrap animate-fade-in-stagger">
               Manage incidents, evidence, and compliance from one command center.
             </p>
             <ul className="mt-6 space-y-3">
-              {HIGHLIGHTS.map((item) => (
-                <li key={item} className="flex items-center justify-center gap-2.5 text-sm text-[#fff]/90">
+              {HIGHLIGHTS.map((item, index) => (
+                <li key={item} className="flex items-center justify-center gap-2.5 text-sm text-[#fff]/90 animate-fade-in-stagger" style={{ animationDelay: `${150 + index * 100}ms` }}>
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-surface-card/15">
                     <Check className="h-3 w-3 text-[#fff]" />
                   </span>
@@ -138,7 +140,7 @@ export default function LoginPage() {
             </ul>
           </div>
 
-          <footer className="relative z-10 pt-10 text-center text-xs text-[#fff]/70">
+          <footer className="relative z-10 pt-10 text-center text-xs text-[#fff]/70 animate-fade-in-stagger" style={{ animationDelay: '500ms' }}>
             © {year} {orgName} Support. All rights reserved.
           </footer>
         </aside>
@@ -147,7 +149,7 @@ export default function LoginPage() {
         <section className="relative flex flex-1 min-w-0 items-center justify-center p-4 md:p-8" aria-labelledby="login-heading">
           <AuthBackground />
 
-          <div className="relative z-10 w-full max-w-sm">
+          <div className="relative z-10 w-full max-w-[24rem] animate-fade-in-stagger">
             <AuthLogo />
             <h1 id="login-heading" className="text-center text-display font-bold text-text-primary">Sign in</h1>
             <p className="mt-1 text-center text-body-sm text-text-muted">Welcome back! Please sign in to continue</p>
@@ -184,7 +186,7 @@ export default function LoginPage() {
                     autoComplete="email"
                     autoFocus
                     disabled={loading}
-                    className={`h-12 w-full rounded-full border bg-surface pl-11 pr-12 text-sm text-text-primary outline-none transition-all duration-200 placeholder:text-text-muted focus:ring-2 focus:ring-accent/15 focus-ring disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`h-12 w-full rounded-xl border bg-surface pl-11 pr-12 text-sm text-text-primary outline-none transition-all duration-200 placeholder:text-text-muted focus:ring-2 focus:ring-accent/15 focus-ring disabled:cursor-not-allowed disabled:opacity-50 ${
                       emailValid ? 'border-success focus:border-success' : emailInvalid ? 'border-error focus:border-error' : 'border-border focus:border-accent'
                     }`}
                     aria-invalid={emailInvalid ? 'true' : undefined}
@@ -233,7 +235,7 @@ export default function LoginPage() {
                     placeholder="Enter your password"
                     autoComplete="current-password"
                     disabled={loading}
-                    className={`h-12 w-full rounded-full border bg-surface pl-11 pr-12 text-sm text-text-primary outline-none transition-all duration-200 placeholder:text-text-muted focus:ring-2 focus:ring-accent/15 focus-ring disabled:cursor-not-allowed disabled:opacity-50 ${
+                    className={`h-12 w-full rounded-xl border bg-surface pl-11 pr-12 text-sm text-text-primary outline-none transition-all duration-200 placeholder:text-text-muted focus:ring-2 focus:ring-accent/15 focus-ring disabled:cursor-not-allowed disabled:opacity-50 ${
                       password ? 'border-accent focus:border-accent' : 'border-border focus:border-accent'
                     }`}
                   />
@@ -270,7 +272,7 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={loading || !email.trim() || !password.trim()}
-                className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-full bg-gradient-to-r from-accent to-accent-light text-sm font-semibold text-[#fff] shadow-card transition-all duration-150 hover:shadow-card-hover hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
+                className="flex h-12 w-full cursor-pointer items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-accent to-accent-light text-sm font-semibold text-[#fff] shadow-card transition-all duration-150 hover:shadow-card-hover hover:brightness-110 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none"
               >
                 {loading ? (
                   <>

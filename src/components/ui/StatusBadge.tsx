@@ -5,7 +5,7 @@ interface StatusBadgeProps {
   status?: TicketStatus;
   priority?: TicketPriority;
   label?: string;
-  size?: 'sm' | 'md';
+  size?: 'xs' | 'sm' | 'md';
   className?: string;
 }
 
@@ -28,8 +28,9 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
 };
 
 const sizeStyles = {
-  sm: 'text-[11px] leading-none px-2 py-1',
-  md: 'text-xs leading-none px-2.5 py-1',
+  xs: 'text-micro leading-none px-1.5 py-0.5',
+  sm: 'text-ticket-caption leading-none px-2 py-1',
+  md: 'text-caption leading-none px-2.5 py-1',
 };
 
 export default function StatusBadge({ status, priority, label, size = 'sm', className = '' }: StatusBadgeProps) {

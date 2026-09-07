@@ -51,6 +51,7 @@ export default function ThemeSettings() {
       {/* Color Pickers */}
       <div>
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">Brand Colors</h4>
+        <p className="text-[11px] text-text-muted mb-3">Primary: main buttons and links. Secondary: muted text and borders. Accent: highlights and notifications.</p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <ColorPicker value={primary} onChange={setPrimary} label="Primary" />
           <ColorPicker value={secondary} onChange={setSecondary} label="Secondary" />
@@ -69,6 +70,7 @@ export default function ThemeSettings() {
       {/* Dark Mode */}
       <div>
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">Appearance</h4>
+        <p className="text-[11px] text-text-muted mb-3">System mode follows your device's light/dark setting automatically.</p>
         <div className="flex gap-2">
           {[
             { value: 'light', label: 'Light', icon: Sun },
@@ -94,6 +96,7 @@ export default function ThemeSettings() {
       {/* Border Radius */}
       <div>
         <h4 className="text-xs font-semibold text-text-secondary uppercase tracking-wide mb-3">Border Radius</h4>
+        <p className="text-[11px] text-text-muted mb-3">Controls the roundness of buttons, cards, and input fields across the app.</p>
         <div className="flex gap-2 flex-wrap">
           {RADIUS_OPTIONS.map(({ label, value }) => (
             <button

@@ -18,7 +18,6 @@ interface WatcherNotificationsPageProps {
   auditLogs: AuditLog[];
   majorIncidents: MajorIncidentRecord[];
   setWatcherNotifications: React.Dispatch<React.SetStateAction<WatcherNotification[]>>;
-  saveToStorage: (t?: TicketRecord[], c?: CommentRecord[], a?: AuditLog[], m?: MajorIncidentRecord[], wn?: WatcherNotification[]) => void;
   showToast: (message: string, type?: 'success' | 'info' | 'error') => void;
   setActiveTicketId: (id: string) => void;
   setActiveTab: (tab: string) => void;
@@ -26,7 +25,7 @@ interface WatcherNotificationsPageProps {
 
 export default function WatcherNotificationsPage({
   watcherNotifications, currentUser, tickets, comments, auditLogs, majorIncidents,
-  setWatcherNotifications, saveToStorage, showToast, setActiveTicketId, setActiveTab
+  setWatcherNotifications, showToast, setActiveTicketId, setActiveTab
 }: WatcherNotificationsPageProps) {
   const { isLoading } = useApp();
   const userNotifs = watcherNotifications.filter(n => n.recipient.toLowerCase() === currentUser.email.toLowerCase());
@@ -39,7 +38,6 @@ export default function WatcherNotificationsPage({
       n.recipient.toLowerCase() !== currentUser.email.toLowerCase()
     );
     setWatcherNotifications(updatedWN);
-    saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN);
     showToast('Your notification feed cleared.', 'info');
     setShowClearConfirm(false);
   };
@@ -61,7 +59,6 @@ export default function WatcherNotificationsPage({
                       : n
                   );
                   setWatcherNotifications(updatedWN);
-                  saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN);
                   updatedWN.forEach(n => { if (n.seen) syncNotificationRead(n.id); });
                   showToast('All notifications marked as read.', 'success');
                 }}
@@ -126,7 +123,6 @@ export default function WatcherNotificationsPage({
                     n.id === notif.id ? { ...n, seen: true } : n
                   );
                   setWatcherNotifications(updatedWN);
-                  saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN);
                   syncNotificationRead(notif.id);
                   setActiveTicketId(notif.ticketId);
                   setActiveTab('tickets');

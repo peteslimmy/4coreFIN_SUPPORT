@@ -1,4 +1,4 @@
-import { useState, lazy, type SetStateAction } from 'react';
+import { useState, useEffect, lazy, type SetStateAction } from 'react';
 
 import ErrorBoundary from './components/ui/ErrorBoundary';
 import AppShell from './components/layout/AppShell';
@@ -6,29 +6,31 @@ import { KbArticle } from './types/admin';
 import { UserRole } from './types/app';
 import { useApp } from './context/AppContext';
 import { useUi } from './context/UiContext';
+import { TicketUIProvider } from './context/TicketUIContext';
+import { SlaTimerProvider } from './context/SlaTimerContext';
 import { syncKbArticles } from './lib/sync';
 import OnboardingTour from './components/onboarding/OnboardingTour';
 
 const KnowledgeBaseTab = lazy(() => import('./components/KnowledgeBaseTab'));
-const AuditLogsPage = lazy(() => import('./pages/AuditLogsPage'));
-const WatcherNotificationsPage = lazy(() => import('./pages/WatcherNotificationsPage'));
-const CustomerPortalPage = lazy(() => import('./pages/CustomerPortalPage'));
-const ExecutiveDashboardPage = lazy(() => import('./pages/ExecutiveDashboardPage'));
-const MajorIncidentsPage = lazy(() => import('./pages/MajorIncidentsPage'));
-const TicketWorkspacePageV2 = lazy(() => import('./pages/TicketWorkspacePageV2'));
-const LoginPage = lazy(() => import('./pages/LoginPage'));
-const PaymentPartnerPortalPage = lazy(() => import('./pages/PaymentPartnerPortalPage'));
-const CustomersPage = lazy(() => import('./pages/CustomersPage'));
-const AdminSettingsPage = lazy(() => import('./pages/AdminSettingsPage'));
-const ReferenceDataPage = lazy(() => import('./pages/ReferenceDataPage'));
-const ProfileSettingsPage = lazy(() => import('./pages/ProfileSettingsPage'));
-const ChangePasswordRequiredPage = lazy(() => import('./pages/ChangePasswordRequiredPage'));
-const ForgotPasswordPage = lazy(() => import('./pages/ForgotPasswordPage'));
-const ResetPasswordPage = lazy(() => import('./pages/ResetPasswordPage'));
-const PrivacyPolicyPage = lazy(() => import('./pages/PrivacyPolicyPage'));
+const AuditLogsPage = lazy(() => import('./views/AuditLogsPage'));
+const WatcherNotificationsPage = lazy(() => import('./views/WatcherNotificationsPage'));
+const CustomerPortalPage = lazy(() => import('./views/CustomerPortalPage'));
+const ExecutiveDashboardPage = lazy(() => import('./views/ExecutiveDashboardPage'));
+const MajorIncidentsPage = lazy(() => import('./views/MajorIncidentsPage'));
+const TicketWorkspacePageV2 = lazy(() => import('./views/TicketWorkspacePageV2'));
+const LoginPage = lazy(() => import('./views/LoginPage'));
+const PaymentPartnerPortalPage = lazy(() => import('./views/PaymentPartnerPortalPage'));
+const CustomersPage = lazy(() => import('./views/CustomersPage'));
+const AdminSettingsPage = lazy(() => import('./views/AdminSettingsPage'));
+const ReferenceDataPage = lazy(() => import('./views/ReferenceDataPage'));
+const ProfileSettingsPage = lazy(() => import('./views/ProfileSettingsPage'));
+const ChangePasswordRequiredPage = lazy(() => import('./views/ChangePasswordRequiredPage'));
+const ForgotPasswordPage = lazy(() => import('./views/ForgotPasswordPage'));
+const ResetPasswordPage = lazy(() => import('./views/ResetPasswordPage'));
+const PrivacyPolicyPage = lazy(() => import('./views/PrivacyPolicyPage'));
 // New pages for additional modules
-const NotificationPreferencesPage = lazy(() => import('./pages/NotificationPreferencesPage'));
-const AICopilotPage = lazy(() => import('./pages/AICopilotPage'));
+const NotificationPreferencesPage = lazy(() => import('./views/NotificationPreferencesPage'));
+const AICopilotPage = lazy(() => import('./views/AICopilotPage'));
 
 export default function App() {
   const app = useApp();
@@ -45,6 +47,23 @@ export default function App() {
   const { activeTab, setActiveTab, activeTicketId, setActiveTicketId } = ui;
 
   const [selectedMajorIncidentId, setSelectedMajorIncidentId] = useState<string | null>('MI-001');
+
+  // Effective tab before permission filtering (mirrors the definition below so
+  // the URL-adoption effect can reference it before the early returns).
+  const effectiveTab = currentRole === UserRole.CUSTOMER ? 'customer_portal' : activeTab;
+
+  // URL adoption: whenever the authenticated shell renders from a path outside
+  // /app (the user signed in at /auth/login, refreshed a live session there, or
+  // was bounced by a forced password change), move the URL into the /app
+  // namespace. UiContext deliberately never writes URLs under /auth* or public
+  // pages, so without this the session stays parked on /auth/login and the
+  // tab ↔ URL sync (deep links, back/forward) never engages.
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    const p = window.location.pathname;
+    if (p.startsWith('/app/') || p === '/app') return;
+    window.history.replaceState(null, '', `/app/${effectiveTab}`);
+  }, [isAuthenticated, effectiveTab]);
 
   const updateKbArticles = (newArticles: SetStateAction<KbArticle[]>) => {
     setKbArticles(prev => {
@@ -100,6 +119,21 @@ export default function App() {
 
   
 
+   // Session restore in progress: never flash the login page while a valid
+   // session cookie is being verified against /api/auth/me.
+   if (app.isLoading) {
+     return (
+       <ErrorBoundary>
+         <div className="flex min-h-screen items-center justify-center bg-app" role="status" aria-live="polite">
+           <div className="flex flex-col items-center gap-3">
+             <span className="h-8 w-8 animate-spin rounded-full border-2 border-border border-t-accent" aria-hidden="true" />
+             <span className="text-caption font-medium text-text-muted">Restoring your session…</span>
+           </div>
+         </div>
+       </ErrorBoundary>
+     );
+   }
+
    // Path-based routing for standalone public/auth/legal pages. Supabase recovery
    // tokens arrive in the URL hash (e.g. /reset-password#access_token=...),
    // so routing is path-based, never hash-based.
@@ -127,8 +161,6 @@ export default function App() {
   if (app.mustChangePassword) {
     return <ChangePasswordRequiredPage />;
   }
-
-  const effectiveTab = currentRole === UserRole.CUSTOMER ? 'customer_portal' : activeTab;
 
   // Tab visibility derives solely from the server-backed permission model
   // (FE-10). The former parallel ROLE_TABS lookup table drifted from can()
@@ -159,8 +191,11 @@ export default function App() {
         setActiveTab={setActiveTab}
         handleLogout={handleLogout}
       >
+        <SlaTimerProvider>
         {safeTab === 'tickets' && (
-          <TicketWorkspacePageV2 handleDeclareMajorIncident={handleDeclareMajorIncident} />
+          <TicketUIProvider>
+            <TicketWorkspacePageV2 handleDeclareMajorIncident={handleDeclareMajorIncident} />
+          </TicketUIProvider>
         )}
         {safeTab === 'customer_portal' && <CustomerPortalPage />}
         {safeTab === 'dashboard' && <ExecutiveDashboardPage />}
@@ -208,6 +243,7 @@ export default function App() {
         {safeTab === 'profile_settings' && <ProfileSettingsPage />}
         {safeTab === 'notifications' && <NotificationPreferencesPage />}
         {safeTab === 'ai_copilot' && <AICopilotPage />}
+        </SlaTimerProvider>
       </AppShell>
 
       <OnboardingTour />

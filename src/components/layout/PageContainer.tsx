@@ -19,7 +19,7 @@ interface PageContainerProps {
 
 export default function PageContainer({ children, className = '', maxWidth = 'full' }: PageContainerProps) {
   return (
-    <div className={`flex-1 overflow-y-auto p-3 sm:p-4 lg:p-5 ${widthMap[maxWidth]} mx-auto ${className}`}>
+    <div className={`flex-1 p-3 sm:p-4 lg:p-5 ${widthMap[maxWidth]} mx-auto ${className}`}>
       {children}
     </div>
   );

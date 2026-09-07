@@ -20,7 +20,7 @@ export default function DeleteConfirmationModal({ isOpen, onClose, onConfirm, ti
         <div className="flex justify-end gap-3 w-full">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring"
+            className="px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover rounded-xl transition-all duration-200 focus-ring"
           >
             Cancel
           </button>
@@ -29,7 +29,7 @@ export default function DeleteConfirmationModal({ isOpen, onClose, onConfirm, ti
               onConfirm();
               onClose();
             }}
-            className="px-4 py-2 text-sm font-bold text-[#fff] bg-error hover:bg-error-dark active:bg-error-dark rounded-lg transition-all duration-200 shadow-sm focus-ring"
+            className="px-4 py-2 text-sm font-bold text-white bg-error hover:bg-error-dark active:bg-error-dark rounded-xl transition-all duration-200 focus-ring"
           >
             Confirm Delete
           </button>
@@ -37,10 +37,10 @@ export default function DeleteConfirmationModal({ isOpen, onClose, onConfirm, ti
       }
     >
       <div className="flex flex-col items-center text-center gap-4">
-        <div className="p-3 bg-error-light rounded-xl">
+        <div className="p-3 bg-error/10 rounded-xl">
           <AlertTriangle className="w-8 h-8 text-error" />
         </div>
-        <p className="text-sm text-text-muted">{message}</p>
+        <p className="text-body-sm text-text-secondary">{message}</p>
       </div>
     </Modal>
   );

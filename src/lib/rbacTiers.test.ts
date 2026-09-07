@@ -50,6 +50,13 @@ describe('BU support tier differentiation', () => {
     expect(can('BU_SUPPORT_L3', 'audit:write')).toBe(true);
   });
 
+  it('does not grant resolve permission to any BU_SUPPORT tier', () => {
+    expect(can('BU_SUPPORT_L1', 'tickets:resolve')).toBe(false);
+    expect(can('BU_SUPPORT_L2', 'tickets:resolve')).toBe(false);
+    expect(can('BU_SUPPORT_L3', 'tickets:resolve')).toBe(false);
+    expect(can('BU_SUPPORT', 'tickets:resolve')).toBe(false);
+  });
+
   it('keeps the legacy flat role at full power (migration safety)', () => {
     expect(can('BU_SUPPORT', 'tickets:delete')).toBe(true);
     expect(can('BU_SUPPORT', 'tickets:escalate')).toBe(true);

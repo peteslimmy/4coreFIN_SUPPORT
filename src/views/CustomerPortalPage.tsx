@@ -25,6 +25,7 @@ import {
   IncidentDetailsStep,
   TransactionInfoStep,
   DescriptionEvidenceStep,
+  ReviewSubmitStep,
   ComplaintSuccessModal,
 } from '../components/portal';
 
@@ -59,7 +60,7 @@ const defaultNewTicket: NewTicketForm = {
 export default function CustomerPortalPage() {
   const {
     isLoading, ticketTemplates, currentUser, showToast,
-    tickets, setTickets, comments, setAuditLogs, saveToStorage,
+    tickets, setTickets, comments, setAuditLogs,
     slaRules, holidays, currentRole, auditLogs,
     setEvidence, buFormConfigs, setComments, paymentChannels,
     businessUnitCodes,
@@ -309,7 +310,6 @@ export default function CustomerPortalPage() {
     const updatedAudits = [assignedAudit, newAudit, ...auditLogs];
     setTickets(updatedTickets);
     setAuditLogs(updatedAudits);
-    saveToStorage(updatedTickets, comments, updatedAudits);
 
     let serverConfirmed = false;
     try {
@@ -337,7 +337,6 @@ export default function CustomerPortalPage() {
     setTickets(updatedTickets);
     setComments(prev => [mergeComment, ...prev]);
     setAuditLogs(prev => [mergeAudit, ...prev]);
-    saveToStorage(updatedTickets, [mergeComment, ...comments], [mergeAudit, ...auditLogs]);
     syncTicketUpdate(existing.id, { description: merged.description, amount: merged.amount, transactionId: merged.transactionId, customFields: merged.customFields || {} });
     syncComment(mergeComment);
     syncAudit({ ticketId: existing.id, action: 'MERGED_DUPLICATE', details: mergeAudit.details });
@@ -497,6 +496,24 @@ export default function CustomerPortalPage() {
                           onFilesAdd={handleFilesAdd}
                           onFileRemove={(i) => setUploadedFiles(prev => prev.filter((_, idx) => idx !== i))}
                           fileInputRef={fileInputRef}
+                        />
+                      ),
+                    },
+                    {
+                      label: 'Review', title: 'Review & Submit', subtitle: 'Verify all details before submitting your complaint.',
+                      content: (
+                        <ReviewSubmitStep
+                          customerFirstName={newTicket.customerFirstName}
+                          customerLastName={newTicket.customerLastName}
+                          customerEmail={newTicket.customerEmail}
+                          customerPhone={newTicket.customerPhone}
+                          partner={newTicket.partner}
+                          category={newTicket.category}
+                          bankName={newTicket.bankName}
+                          buFormConfig={buFormConfig}
+                          txValues={txValues}
+                          description={newTicket.description}
+                          uploadedFiles={uploadedFiles}
                         />
                       ),
                     },

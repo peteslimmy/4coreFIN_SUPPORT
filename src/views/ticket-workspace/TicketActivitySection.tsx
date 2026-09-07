@@ -7,6 +7,7 @@ import EmptyState from "../../components/ui/EmptyState";
 import { useApp } from "../../context/AppContext";
 import { syncEvidenceUpload } from "../../lib/sync";
 import { applyMention, extractAddressPartial, fullNameOf, mentionCandidates, stripLeadingMention } from "../../lib/mention";
+import { relativeTime, formatDateLabel } from "../../lib/dateUtils";
 
 interface TicketActivitySectionProps {
   activeTicket: TicketRecord;
@@ -57,19 +58,6 @@ export default function TicketActivitySection({
     el.style.height = "auto";
     el.style.height = Math.min(el.scrollHeight, 140) + "px";
   }, [commentText]);
-
-  const relativeTime = (ts: string) => {
-    // eslint-disable-next-line react-hooks/purity -- relative time refreshes on each render; acceptable here.
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return "now";
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(ts).toLocaleDateString();
-  };
 
   const renderMessage = (message: string) => {
     return message.split(/(@\w+\s?\w*|\*\*[^*]+\*\*)/).map((part, i) => {
@@ -194,16 +182,6 @@ export default function TicketActivitySection({
             ...topLevel.map(c => ({ kind: 'comment' as const, ts: new Date(c.timestamp).getTime(), comment: c })),
             ...ticketEvidence.map(ev => ({ kind: 'evidence' as const, ts: new Date(ev.uploadedAt).getTime(), ev })),
           ].sort((a, b) => a.ts - b.ts);
-
-          const formatDateLabel = (ts: string) => {
-            const d = new Date(ts);
-            const today = new Date();
-            const yesterday = new Date(today);
-            yesterday.setDate(yesterday.getDate() - 1);
-            if (d.toDateString() === today.toDateString()) return "Today";
-            if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-            return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
-          };
 
           const renderBubble = (c: CommentRecord, isReply: boolean) => {
             const isMine = c.author === currentUser.firstName + " " + currentUser.lastName;

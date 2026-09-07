@@ -52,7 +52,7 @@ export default function MergeTicketModal({
     onClose();
   };
 
-  return (
+return (
     <Modal open={isOpen} onClose={handleClose} title="Merge Tickets" size="sm">
       <div className="space-y-4">
         <Input
@@ -65,7 +65,7 @@ export default function MergeTicketModal({
         />
 
         {partnerMismatch && (
-          <div className="bg-warning/10 border border-warning/20 rounded-lg px-4 py-3">
+          <div className="bg-warning/10 border border-warning/20 rounded-xl px-4 py-3">
             <p className="text-xs text-warning-dark font-medium">
               Cross-partner merge warning: the target ticket belongs to a different payment partner. Merging across partners could misroute the case.
             </p>
@@ -75,14 +75,14 @@ export default function MergeTicketModal({
         {availableTickets.length > 0 && (
           <div>
             <p className="text-xs font-semibold text-text-muted uppercase tracking-wide mb-2">Available Tickets</p>
-            <div className="max-h-48 overflow-y-auto rounded-lg border border-border divide-y divide-border">
+            <div className="max-h-48 overflow-y-auto rounded-xl border border-border divide-y divide-border">
               {availableTickets.slice(0, 20).map(t => (
                 <button
                   key={t.id}
                   type="button"
                   onClick={() => { setTargetId(t.id); setError(''); }}
                   className={`w-full text-left px-3 py-2 text-xs flex items-center justify-between hover:bg-surface-hover transition-colors duration-150 ${
-                    targetId === t.id ? 'bg-accent/10 text-accent-dark' : 'text-text-primary'
+                    targetId === t.id ? 'bg-accent/10 text-accent' : 'text-text-primary'
                   }`}
                 >
                   <span className="font-mono font-semibold">{t.id}</span>
@@ -98,14 +98,14 @@ export default function MergeTicketModal({
           <button
             type="button"
             onClick={handleClose}
-            className="px-4 py-2 text-sm font-semibold text-text-muted hover:bg-surface rounded-lg transition-all duration-200 focus-ring"
+            className="px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover rounded-xl transition-all duration-200 focus-ring"
           >
             Cancel
           </button>
           <button
             type="button"
             onClick={handleConfirm}
-            className="px-4 py-2 text-sm font-bold text-[#fff] rounded-lg transition-all duration-200 shadow-sm bg-error hover:bg-error-dark active:bg-error-dark focus-ring"
+            className="px-4 py-2 text-sm font-bold text-white rounded-xl transition-all duration-200 bg-error hover:bg-error-dark active:bg-error-dark focus-ring"
           >
             Merge
           </button>

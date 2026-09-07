@@ -15,6 +15,16 @@ const colorStyles: Record<string, string> = {
   slate: 'bg-surface-hover text-text-muted',
 };
 
+// Subtle gradient backgrounds for each color variant
+const gradientStyles: Record<string, string> = {
+  brand: 'from-primary/5 via-transparent to-transparent',
+  emerald: 'from-success/5 via-transparent to-transparent',
+  amber: 'from-warning/5 via-transparent to-transparent',
+  blue: 'from-info/5 via-transparent to-transparent',
+  red: 'from-error/5 via-transparent to-transparent',
+  slate: 'from-text-muted/5 via-transparent to-transparent',
+};
+
 const trendIconMap = {
   up: TrendingUp,
   down: TrendingDown,
@@ -36,20 +46,24 @@ function KpiCard({ title, value, trend, icon, color = 'brand', onClick, animateV
   const display = isNumeric && animateValue
     ? (format ? format(count) : Math.round(count).toLocaleString())
     : value;
+  const gradientClass = gradientStyles[color] || gradientStyles.brand;
 
   return (
     <Tilt3D className={onClick ? 'h-full' : undefined}>
       <MotionTag
         onClick={onClick}
         onMouseDown={onClick ? onMouseDown : undefined}
-        className={`bg-surface-card rounded-xl border border-border-subtle p-5 transition-all duration-150 ${
-          onClick ? 'hover:border-border hover:shadow-card-hover cursor-pointer text-left w-full relative overflow-hidden' : ''
+        className={`surface-interactive rounded-xl p-5 transition-all duration-150 ${
+          onClick ? 'cursor-pointer text-left w-full relative overflow-hidden' : ''
         } ${className}`}
         aria-label={onClick ? `${title}: ${value}` : undefined}
         whileHover={onClick ? { y: -2, transition: { duration: 0.15 } } : undefined}
         whileTap={onClick ? { scale: 0.98 } : undefined}
       >
-        <div className="flex items-start justify-between mb-3">
+        {/* Subtle gradient accent at top */}
+        <div className={`absolute inset-0 bg-gradient-to-br ${gradientClass} opacity-0 hover:opacity-100 transition-opacity duration-300 pointer-events-none`} aria-hidden="true" />
+        
+        <div className="relative flex items-start justify-between mb-3">
           {icon && (
             <span className={`p-1.5 rounded-lg ${colorStyles[color] || colorStyles.brand}`}>
               {icon}
@@ -62,8 +76,8 @@ function KpiCard({ title, value, trend, icon, color = 'brand', onClick, animateV
             </span>
           )}
         </div>
-        <p className="text-h3 font-bold text-text-primary mb-0.5">{display}</p>
-        <p className="text-caption text-text-muted font-medium">{title}</p>
+        <p className="relative text-h3 font-bold text-text-primary mb-0.5">{display}</p>
+        <p className="relative text-caption text-text-muted font-medium">{title}</p>
         {onClick && rippleElements}
       </MotionTag>
     </Tilt3D>

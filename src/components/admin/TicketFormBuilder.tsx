@@ -238,6 +238,7 @@ function AddFieldModal({ open, onClose, fields, library, onAdd }: {
         ) : (
           <div className="space-y-4">
             <Input label="Field label" value={label} onChange={e => setLabel(e.target.value)} placeholder="e.g. NIP Session ID" autoFocus />
+            <p className="text-[11px] text-text-muted -mt-2">The display name customers will see on the form.</p>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <Select label="Field type" value={type} onChange={e => setType(e.target.value as FormFieldType)} options={FIELD_TYPES.map(t => ({ value: t.value, label: t.label }))} />
               <Input label="Placeholder (optional)" value={placeholder} onChange={e => setPlaceholder(e.target.value)} />
@@ -448,8 +449,11 @@ function StageWorkspace({ title, icon, intro, draftFields, library, onFieldsChan
                 <button type="button" onClick={() => removeField(selectedField.id)} className="p-1.5 rounded-md text-text-muted hover:text-error hover:bg-error/10 transition-colors cursor-pointer" title="Remove field"><Trash2 className="w-4 h-4" /></button>
               </div>
               <Input label="Label" value={selectedField.label} onChange={e => updateSelectedField({ label: e.target.value })} />
+              <p className="text-[11px] text-text-muted -mt-2">The field name customers see on the form.</p>
               <Input label="Help text (optional)" value={selectedField.helpText ?? ''} onChange={e => updateSelectedField({ helpText: e.target.value || undefined })} placeholder="Shown as a hint below the field" />
+              <p className="text-[11px] text-text-muted -mt-2">Optional hint text displayed below the input to guide the user.</p>
               <Input label="Placeholder (optional)" value={selectedField.placeholder ?? ''} onChange={e => updateSelectedField({ placeholder: e.target.value || undefined })} />
+              <p className="text-[11px] text-text-muted -mt-2">Greyed-out text inside the input field before the user types.</p>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <Select
                   label="Field type"
@@ -478,6 +482,7 @@ function StageWorkspace({ title, icon, intro, draftFields, library, onFieldsChan
                   <Toggle checked={!!selectedField.duplicateKey} onChange={v => updateSelectedField({ duplicateKey: v })} /> Duplicate key
                 </label>
               </div>
+              <p className="text-[11px] text-text-muted">Required: customer must fill this field. Duplicate key: used to detect duplicate ticket submissions.</p>
               <details className="group border border-border rounded-lg overflow-hidden">
                 <summary className="flex items-center gap-2 px-3 py-2.5 text-sm font-medium text-text-primary cursor-pointer select-none hover:bg-surface-hover transition-colors list-none">
                   <Info className="w-4 h-4 text-text-muted" /> Validation rules

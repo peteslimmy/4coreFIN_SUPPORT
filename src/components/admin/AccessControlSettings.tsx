@@ -87,6 +87,7 @@ export default function AccessControlSettings() {
       </div>
 
       <Section title="Create Custom Role">
+        <p className="text-[11px] text-text-muted mb-3">Create a new role then assign specific permissions below. Custom roles are scoped to a business unit.</p>
         <div className="flex flex-col sm:flex-row gap-3">
           <Input label="Role name" placeholder="e.g. Compliance Officer" value={newRoleName} onChange={(e) => setNewRoleName(e.target.value)} />
           <div className="flex-1">

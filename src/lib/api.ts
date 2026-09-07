@@ -279,28 +279,66 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Idempotency key per logical mutation (SEC-64): each in-flight mutation gets
+ * a fresh key; retries of the SAME mutation reuse the key so the server can
+ * dedupe, while a genuine second submission gets a new one.
+ */
+const idempotencyKeys = new Map<string, string>();
+
+function idempotencyKeyFor(path: string, method: string): string | null {
+  if (method === 'GET' || method === 'HEAD' || method === 'OPTIONS') return null;
+  const key = `${method} ${path}`;
+  const existing = idempotencyKeys.get(key);
+  if (existing) return existing;
+  const fresh =
+    typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
+  idempotencyKeys.set(key, fresh);
+  // Release the key when the request settles so a later retry of the same
+  // logical action generates a new key (the dedupe window is server-side).
+  return fresh;
+}
+
+export function releaseIdempotencyKey(path: string, method: string): void {
+  idempotencyKeys.delete(`${method.toUpperCase()} ${path}`);
+}
+
 export async function apiFetch<T = unknown>(path: string, options: RequestInit = {}): Promise<T> {
+  const method = (options.method || 'GET').toUpperCase();
   const headers = new Headers(options.headers || {});
   if (!headers.has('Content-Type') && options.body) {
     headers.set('Content-Type', 'application/json');
   }
+  const idemKey = idempotencyKeyFor(path, method);
+  if (idemKey && !headers.has('Idempotency-Key')) {
+    headers.set('Idempotency-Key', idemKey);
+  }
 
-  const res = await authorizedFetch(path, { ...options, headers });
-  if (res.status === 401 && hasSession()) {
-    window.dispatchEvent(new CustomEvent('auth:expired'));
-  }
-  if (!res.ok) {
-    let message = res.statusText;
-    try {
-      const body = await res.json();
-      message = body.error || body.message || message;
-    } catch {
-      /* ignore */
+  try {
+    const res = await authorizedFetch(path, { ...options, method, headers });
+    if (res.status === 401 && hasSession()) {
+      window.dispatchEvent(new CustomEvent('auth:expired'));
     }
-    throw new ApiError(res.status, message);
+    if (!res.ok) {
+      let message = res.statusText;
+      try {
+        const body = await res.json();
+        message = body.error || body.message || message;
+      } catch {
+        /* ignore */
+      }
+      throw new ApiError(res.status, message);
+    }
+    if (res.status === 204) return undefined as T;
+    return res.json() as Promise<T>;
+  } finally {
+    // The key covers the in-flight window only: a double-click racing the same
+    // endpoint reuses it (server dedupes); a settled request frees it so the
+    // next genuine submission gets a fresh key.
+    if (idemKey) releaseIdempotencyKey(path, method);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
 }
 
 export const api = {

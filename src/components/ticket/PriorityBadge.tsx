@@ -13,7 +13,7 @@ export default function PriorityBadge({ priority }: { priority: string }) {
   const style = PRIORITY_STYLES[priority] || DEFAULT_STYLE;
   return (
     <span
-      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wider border shrink-0"
+      className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wider border shrink-0"
       style={{ backgroundColor: style.bg, color: style.text, borderColor: style.border }}
     >
       <Info className="w-3 h-3" aria-hidden="true" /> {priority}

@@ -157,6 +157,7 @@ setTimeout(() => {
       {/* Organization Name */}
       <div>
         <label htmlFor="org-name" className="text-xs font-medium text-text-secondary block mb-1">Organization Name</label>
+        <p className="text-[11px] text-text-muted mb-1">Displayed in the sidebar, browser tab, and email templates.</p>
         <input
           id="org-name"
           type="text"
@@ -221,6 +222,7 @@ setTimeout(() => {
         <label htmlFor="logo-size" className="text-xs font-medium text-text-secondary block mb-1">
           Logo Size
         </label>
+        <p className="text-[11px] text-text-muted mb-1">Adjusts the height of the logo in the sidebar. Recommended: 28–40px.</p>
         <div className="flex items-center space-x-3">
           <input
             id="logo-size"
@@ -263,6 +265,7 @@ setTimeout(() => {
       </div>
 
       {/* Hero Image */}
+      <p className="text-[11px] text-text-muted">Full-width background image shown on the public login page.</p>
       <FileUpload
         label="Landing Page Hero Image"
         accept="image/png,image/jpeg,image/webp"

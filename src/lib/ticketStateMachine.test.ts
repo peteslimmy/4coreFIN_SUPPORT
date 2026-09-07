@@ -150,10 +150,10 @@ describe('ticketStateMachine', () => {
     expect(reopened.escalationCount).toBe(1);
   });
 
-  it('reopen is allowed from CLOSED back to INVESTIGATE', () => {
+it('reopen is allowed from CLOSED to REOPENED', () => {
     const closed = fullRcaTicket({ status: TicketStatus.CLOSED, feedbackScore: 5 });
-    expect(canTransition(closed, TicketStatus.INVESTIGATE, UserRole.BU_SUPPORT)).toBe(true);
-  });
+    expect(canTransition(closed, TicketStatus.REOPENED, UserRole.BU_SUPPORT)).toBe(true);
+});
 
   it('merge-close is allowed from active states', () => {
     for (const s of [

@@ -21,7 +21,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           <input
             ref={ref}
             id={inputId}
-            className={`w-full rounded-lg border bg-surface-elevated px-3 py-2 text-sm text-text-primary placeholder:text-text-muted transition-all duration-200 focus-ring ${
+            className={`w-full h-10 rounded-xl border bg-surface-elevated px-3 text-sm text-text-primary placeholder:text-text-muted transition-all duration-200 focus-ring ${
               error ? 'border-error focus:border-error' : 'border-border focus:border-primary'
             } ${icon && iconPosition === 'left' ? 'pl-10' : ''} ${icon && iconPosition === 'right' ? 'pr-10' : ''} ${className}`}
             aria-invalid={error ? 'true' : undefined}
@@ -32,7 +32,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
             <span className="absolute right-3 top-1/2 -translate-y-1/2 text-text-muted pointer-events-none">{icon}</span>
           )}
         </div>
-        {error && <p id={`${inputId}-error`} className="text-xs text-error" role="alert">{error}</p>}
+        {error && <p id={`${inputId}-error`} className="text-xs text-error animate-slide-in" role="alert">{error}</p>}
         {helperText && !error && <p id={`${inputId}-helper`} className="text-xs text-text-muted">{helperText}</p>}
       </div>
     );

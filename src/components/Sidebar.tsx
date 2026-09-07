@@ -1,6 +1,6 @@
 import { motion, AnimatePresence } from 'framer-motion';
 import { Ticket, Activity, BarChart2, Lock, Bell, BookOpen, Plus, ChevronLeft, ChevronRight, ClipboardList, Users, Palette, User, X, LucideIcon, Database, Sparkles } from 'lucide-react';
-import { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { UserRole, TicketStatus, TicketRecord, MajorIncidentRecord, WatcherNotification } from '../types/app';
 import Avatar from './ui/Avatar';
 import ThemeToggle from './ThemeToggle';
@@ -58,15 +58,15 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
     { id: 'customers', label: 'Customers', icon: Users, roles: [UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operate' },
     { id: 'customer_portal', label: 'Log Complaint', icon: Plus, roles: [UserRole.CUSTOMER, UserRole.BU_SUPPORT, UserRole.BU_SUPPORT_L1, UserRole.BU_SUPPORT_L2, UserRole.BU_SUPPORT_L3, UserRole.SUPER_ADMIN], section: 'Operate' },
     { id: 'payment_partner_portal', label: 'Payment Partner Portal', icon: ClipboardList, roles: [UserRole.PARTNER], section: 'Operate' },
-    { id: 'dashboard', label: 'Performance Desk', icon: BarChart2, section: 'Analyze', executive: true },
+    { id: 'dashboard', label: 'Performance', icon: BarChart2, section: 'Analyze', executive: true },
     { id: 'audit_logs', label: 'Audit Logs', icon: Lock, section: 'Analyze' },
-    { id: 'watcher_notifications', label: 'Watcher Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Analyze' },
+    { id: 'watcher_notifications', label: 'Alerts', icon: Bell, badge: unreadWatcherCount, section: 'Analyze' },
     { id: 'kb', label: 'Knowledge Base', icon: BookOpen, section: 'Knowledge' },
     { id: 'ai_copilot', label: 'AI Copilot', icon: Sparkles, section: 'Knowledge' },
     { id: 'admin_settings', label: 'Customization', icon: Palette, roles: [UserRole.SUPER_ADMIN], section: 'Admin' },
     { id: 'reference_data', label: 'Reference Data', icon: Database, roles: [UserRole.SUPER_ADMIN], section: 'Admin' },
-    { id: 'notifications', label: 'Notification Settings', icon: Bell, section: 'Admin' },
-    { id: 'profile_settings', label: 'Profile & Security', icon: User, section: 'Account' },
+    { id: 'notifications', label: 'Notifications', icon: Bell, section: 'Admin' },
+    { id: 'profile_settings', label: 'Profile', icon: User, section: 'Account' },
   ];
 
   // Filter items by role and executive relevance
@@ -85,11 +85,11 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
 
   return (
     <>
-      <nav aria-label="Main navigation" className={`flex-1 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'px-2 py-3'} space-y-1`}>
+      <nav aria-label="Main navigation" className="flex-1 overflow-y-auto ${collapsed ? 'px-2 py-3' : 'px-2 py-3'} space-y-1">
         {Object.entries(groupedItems).map(([section, items]) => (
           <div key={section}>
             {!collapsed && (
-              <div className="text-overline px-3 py-3">{section}</div>
+              <div className="text-overline text-xs text-text-muted uppercase tracking-wider px-3 py-2 font-semibold">{section}</div>
             )}
             {items.map(item => {
               const Icon = item.icon;
@@ -100,24 +100,24 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
                   onClick={() => { setActiveTab(item.id); onNavClick?.(); }}
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={collapsed ? item.label : undefined}
-                  className={`w-full flex items-center rounded-lg text-left transition-all duration-150 focus-ring relative ${
+                  className={`w-full flex items-center rounded-xl text-left transition-all duration-200 ease-out focus-ring relative ${
                     collapsed ? 'justify-center p-2.5' : 'gap-3 pl-3 pr-2.5 py-2'
                   } ${
                     isActive
-                      ? 'bg-accent/10 text-accent font-semibold'
+                      ? 'bg-accent/8 text-accent font-semibold'
                       : 'text-text-muted hover:text-text-secondary hover:bg-surface-card font-medium'
                   }`}
                   title={collapsed ? item.label : undefined}
                 >
                   {isActive && !collapsed && (
-                    <span className="absolute left-0 top-1/2 -translate-y-1/2 w-0.5 h-5 bg-accent rounded-r-full" />
+                    <div className="absolute left-0 top-0 h-full w-1 bg-accent rounded-r-xl" />
                   )}
                   <Icon className={`shrink-0 ${collapsed ? 'w-5 h-5' : 'w-[18px] h-[18px]'} ${isActive ? 'text-accent' : ''}`} />
                   {!collapsed && (
                     <>
-                      <span className="text-[13px] flex-1 truncate">{item.label}</span>
+                      <span className="text-sm flex-1 truncate">{item.label}</span>
                       {item.badge !== undefined && typeof item.badge === 'number' && item.badge > 0 && (
-                        <span className={`text-[10px] font-mono font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-md px-1 ${
+                        <span className={`text-xs font-mono font-bold min-w-[18px] h-[18px] flex items-center justify-center rounded-md px-1 ${
                           item.id === 'watcher_notifications'
                             ? 'bg-accent/15 text-accent'
                             : item.id === 'major_incidents'
@@ -182,7 +182,7 @@ function SidebarContent({ activeTab, setActiveTab, currentUser, currentRole, tic
   );
 }
 
-export default function Sidebar({ activeTab, setActiveTab, currentUser, currentRole, tickets, majorIncidents, watcherNotifications, mobileOpen, onMobileClose }: SidebarProps) {
+const Sidebar = React.memo(function Sidebar({ activeTab, setActiveTab, currentUser, currentRole, tickets, majorIncidents, watcherNotifications, mobileOpen, onMobileClose }: SidebarProps) {
   const [collapsed, setCollapsed] = useState(false);
 
   const desktopSidebar = (
@@ -252,4 +252,6 @@ export default function Sidebar({ activeTab, setActiveTab, currentUser, currentR
       {mobileSidebar}
     </>
   );
-}
+});
+
+export default Sidebar;

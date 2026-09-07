@@ -51,7 +51,7 @@ const STEPS: Step[] = [
 ];
 
 export default function OnboardingTour() {
-  const [open, setOpen] = React.useState(true);
+  const [open, setOpen] = React.useState(false);
   const [step, setStep] = React.useState(0);
   const [dismissed, setDismissed] = React.useState(() => {
     try { return localStorage.getItem('4c_tour_dismissed') === 'true'; } catch { return false; }
@@ -76,7 +76,7 @@ export default function OnboardingTour() {
     <AnimatePresence>
       {open && (
         <motion.div
-          className="fixed inset-0 z-[9999] flex items-center justify-center bg-overlay backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-overlay backdrop-blur-sm"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -91,6 +91,7 @@ export default function OnboardingTour() {
           >
             <button
               onClick={handleClose}
+              aria-label="Close tour"
               className="absolute top-3 right-3 p-1.5 rounded-lg text-text-muted hover:text-text-secondary hover:bg-surface-hover transition cursor-pointer"
             >
               <X className="w-4 h-4" />

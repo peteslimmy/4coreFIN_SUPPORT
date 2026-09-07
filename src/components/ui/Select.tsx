@@ -19,7 +19,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           <select
             ref={ref}
             id={inputId}
-            className={`w-full rounded-lg border bg-surface-elevated px-3 py-2 text-sm text-text-primary transition-all duration-200 focus-ring appearance-none ${
+            className={`w-full h-10 rounded-xl border bg-surface-elevated px-3 text-sm text-text-primary transition-all duration-200 focus-ring appearance-none pr-10 ${
               error ? 'border-error focus:border-error' : 'border-border focus:border-primary'
             } ${className}`}
             aria-invalid={error ? 'true' : undefined}
@@ -33,7 +33,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(
           </select>
           <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-muted pointer-events-none" />
         </div>
-        {error && <p id={`${inputId}-error`} className="text-xs text-error" role="alert">{error}</p>}
+        {error && <p id={`${inputId}-error`} className="text-xs text-error animate-slide-in" role="alert">{error}</p>}
       </div>
     );
   }

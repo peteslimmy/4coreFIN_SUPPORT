@@ -27,7 +27,7 @@ const MAX_PREVIEW_ERRORS = 20;
 function ErrorList({ title, errors, accent }: { title: string; errors: BulkImportError[]; accent: 'error' | 'warning' }) {
   if (errors.length === 0) return null;
   return (
-    <div className="rounded-lg border border-border p-3 space-y-1">
+    <div className="rounded-xl border border-border p-3 space-y-1">
       <p className={`text-xs font-semibold ${accent === 'error' ? 'text-error' : 'text-warning'}`}>
         {title} ({errors.length})
       </p>
@@ -157,7 +157,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
       <div className="space-y-4">
         {phase === 'pick' && (
           <>
-            <p className="text-sm text-text-muted">
+            <p className="text-body-sm text-text-secondary">
               Upload a <span className="font-semibold text-text-primary">.csv</span> or <span className="font-semibold text-text-primary">.xlsx</span>{' '}
               file with one {kind.label.toLowerCase()} per row. Duplicates and invalid rows are skipped and reported — nothing else is changed.
             </p>
@@ -179,7 +179,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
         )}
 
         {fileName && phase !== 'pick' && (
-          <div className="rounded-lg border border-border bg-surface-elevated p-3 flex items-center gap-2 text-sm">
+          <div className="rounded-xl border border-border bg-surface-elevated p-3 flex items-center gap-2 text-sm">
             <Upload className="w-4 h-4 text-text-muted shrink-0" />
             <span className="font-medium text-text-primary truncate">{fileName}</span>
             <span className="text-xs text-text-muted ml-auto shrink-0">{validRows} ready</span>
@@ -189,21 +189,21 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
         {phase === 'preview' && (
           <div className="space-y-3">
             <div className="grid grid-cols-3 gap-3">
-              <div className="rounded-lg border border-border p-3 flex items-center gap-2">
+              <div className="rounded-xl border border-border p-3 flex items-center gap-2">
                 <CheckCircle2 className="w-4 h-4 text-success" />
                 <div>
                   <p className="text-lg font-bold text-text-primary leading-none">{validRows}</p>
                   <p className="text-xs text-text-muted">Ready to import</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-border p-3 flex items-center gap-2">
+              <div className="rounded-xl border border-border p-3 flex items-center gap-2">
                 <XCircle className="w-4 h-4 text-warning" />
                 <div>
                   <p className="text-lg font-bold text-text-primary leading-none">{duplicateCount}</p>
                   <p className="text-xs text-text-muted">Duplicates</p>
                 </div>
               </div>
-              <div className="rounded-lg border border-border p-3 flex items-center gap-2">
+              <div className="rounded-xl border border-border p-3 flex items-center gap-2">
                 <AlertCircle className="w-4 h-4 text-error" />
                 <div>
                   <p className="text-lg font-bold text-text-primary leading-none">{errorCount}</p>
@@ -214,7 +214,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
             <ErrorList title="Invalid rows (skipped)" errors={parsed?.errors ?? []} accent="error" />
             <ErrorList title="Duplicates (skipped)" errors={parsed?.duplicates ?? []} accent="warning" />
             {validRows === 0 && (
-              <p className="text-sm text-text-muted">No valid rows to import. Fix the rows above or {fileName ? 'choose another file' : 'start again'}.</p>
+              <p className="text-body-sm text-text-secondary">No valid rows to import. Fix the rows above or {fileName ? 'choose another file' : 'start again'}.</p>
             )}
           </div>
         )}
@@ -222,7 +222,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
         {phase === 'uploading' && (
           <div className="space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-text-muted">Creating {kind.labelPlural.toLowerCase()}…</span>
+              <span className="text-text-secondary">Creating {kind.labelPlural.toLowerCase()}…</span>
               <span className="font-medium text-text-primary">{progress.done} / {progress.total}</span>
             </div>
             <div className="h-2 rounded-full bg-surface-hover overflow-hidden">
@@ -237,7 +237,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
 
         {phase === 'done' && (
           <div className="space-y-3">
-            <div className="rounded-lg border border-border p-4 flex items-center gap-3">
+            <div className="rounded-xl border border-border p-4 flex items-center gap-3">
               <CheckCircle2 className="w-6 h-6 text-success shrink-0" />
               <div>
                 <p className="text-sm font-bold text-text-primary">
@@ -247,7 +247,7 @@ export default function BulkImportModal({ open, onClose, kind, existingItems, on
               </div>
             </div>
             <ErrorList title="Rows that failed (nothing was partially written)" errors={results?.failed ?? []} accent="error" />
-            {results?.failed.length === 0 && <p className="text-sm text-text-muted">All rows imported successfully.</p>}
+            {results?.failed.length === 0 && <p className="text-body-sm text-text-secondary">All rows imported successfully.</p>}
           </div>
         )}
       </div>

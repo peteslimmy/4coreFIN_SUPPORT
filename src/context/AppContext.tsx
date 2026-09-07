@@ -11,7 +11,6 @@ import { normalizeStatus } from '../lib/ticketStateMachine';
 import { connectEvents } from '../lib/api';
 
 import { clearAppData } from '../lib/db';
-import { queryClient, queryKeys } from '../lib/queryClient';
 import type { TransitionRule } from '../lib/ticketStateMachine';
 import { useConfigDomain, ConfigProvider } from './ConfigContext';
 import { useAdminDomain, AdminProvider } from './AdminContext';
@@ -43,6 +42,12 @@ export interface NotificationConfig {
   email: string;
 }
 
+export interface LoginResult {
+  ok: boolean;
+  /** Server-provided error message (lockout, suspension, invalid credentials). */
+  message?: string;
+}
+
 export interface AppContextType {
   isLoading: boolean;
   isAuthenticated: boolean;
@@ -50,7 +55,7 @@ export interface AppContextType {
   setMustChangePassword: Dispatch<SetStateAction<boolean>>;
   currentRole: UserRole;
   currentUser: CurrentUser;
-  handleLogin: (email: string, password: string) => Promise<boolean>;
+  handleLogin: (email: string, password: string) => Promise<LoginResult>;
   handleLogout: () => void;
   handleRoleChange: (role: UserRole) => void;
   tickets: TicketRecord[];
@@ -98,7 +103,6 @@ export interface AppContextType {
   setNotificationConfigs: Dispatch<SetStateAction<NotificationConfig[]>>;
   showToast: (message: string, type?: 'success' | 'info' | 'error' | 'warning', duration?: number, action?: { label: string; onClick: () => void }) => void;
   logAuditAction: (ticketId: string | null, action: string, details: string) => Promise<void>;
-  saveToStorage: (t?: TicketRecord[], c?: CommentRecord[], a?: AuditLog[], m?: MajorIncidentRecord[], wn?: WatcherNotification[], uList?: UserRecord[], sRules?: SlaRule[], hList?: HolidayRecord[], tTemplates?: TicketTemplate[], kArticles?: KbArticle[]) => void;
   getTicketRisk: (t: TicketRecord) => { isAtRisk: boolean; riskScore: number; reason: string };
   notifyWatchers: (ticket: TicketRecord, message: string, updatedTicketsList?: TicketRecord[]) => void;
   getScopedTickets: (allTickets?: TicketRecord[]) => TicketRecord[];
@@ -118,35 +122,6 @@ export function useApp() {
   return ctx;
 }
 
-
-/**
- * Seed the TanStack Query cache with bootstrap payload so domain hooks
- * (useTickets, useComments, ...) resolve instantly without a second fetch.
- * This keeps the legacy context state and the new query layer in sync.
- */
-function seedQueryCacheFromBootstrap(data: BootstrapData): void {
-  const set = (key: readonly unknown[], value: unknown) => {
-    if (value !== undefined) queryClient.setQueryData(key, value);
-  };
-  set(queryKeys.tickets.all(), data.tickets);
-  set(queryKeys.comments.all(), data.comments);
-  set(queryKeys.auditLogs.all(500), data.auditLogs);
-  set(queryKeys.notifications.all(), data.watcherNotifications);
-  set(queryKeys.majorIncidents.all(), data.majorIncidents);
-  set(queryKeys.users.all(), data.users);
-  set(queryKeys.customers.all(), data.customers);
-  set(queryKeys.evidence.all(), data.evidence);
-  set(queryKeys.config.slaRules(), data.slaRules);
-  set(queryKeys.config.holidays(), data.holidays);
-  set(queryKeys.config.ticketTemplates(), data.ticketTemplates);
-  set(queryKeys.config.kbArticles(), data.kbArticles);
-  set(queryKeys.config.savedReplies(), data.savedReplies);
-  set(queryKeys.config.businessUnits(), data.businessUnits);
-  set(queryKeys.config.partners(), data.partners);
-  set(queryKeys.config.categories(), data.categories);
-  set(queryKeys.config.formConfigs(), data.buFormConfigs);
-  set(queryKeys.config.roles(), getRoles(data.roles));
-}
 
 /**
  * Merge a server notification list into local state without dropping any
@@ -188,18 +163,8 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   // removed: they re-serialized every collection on every write, stored
   // sensitive rows on shared machines, and exhausted the 5 MB quota as data
   // grew.
-  const saveToStorage = useCallback((
-    _t?: TicketRecord[], _c?: CommentRecord[], _a?: AuditLog[], _m?: MajorIncidentRecord[],
-    _wn?: WatcherNotification[], _uList?: UserRecord[], _sRules?: SlaRule[],
-    _hList?: HolidayRecord[], _tTemplates?: TicketTemplate[], _kArticles?: KbArticle[],
-    _sReplies?: string[], _cList?: CustomerRecord[],
-    _buList?: string[], _partList?: string[], _catList?: CategoryRecord[],
-    _eList?: FileEvidence[], _fConfigs?: BuFormConfig[], _rList?: RoleDefinition[],
-  ) => {
-    // Intentional no-op.
-  }, []);
 
-  const ticket = useTicketDomain({ shell, admin, saveToStorage, showToast });
+  const ticket = useTicketDomain({ shell, admin, showToast });
 
   const { logAuditAction, notifyWatchers, transitionTicket, handleCreateTicket } = ticket;
   const { tickets: ticketList, comments: commentList, setAuditLogs: setTicketAuditLogs } = ticket;
@@ -209,7 +174,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
   // and the session-restore effect below does not re-fire on every render.
   const hydrateFromBootstrap = useCallback(async () => {
     const data = await api.bootstrap();
-    seedQueryCacheFromBootstrap(data);
     if (data.tickets) ticket.setTickets(data.tickets);    if (data.comments) ticket.setComments(data.comments);
     if (data.auditLogs) ticket.setAuditLogs(data.auditLogs);
     if (data.watcherNotifications) ticket.setWatcherNotifications(data.watcherNotifications);
@@ -244,7 +208,6 @@ function AppProviderInner({ children }: { children: ReactNode }) {
         .then(fresh => {
           if (!Array.isArray(fresh)) return;
           ticket.setEvidence(fresh);
-          queryClient.setQueryData(queryKeys.evidence.all(), fresh);
         })
         .catch(() => { /* offline or session ended — keep current links */ });
     }, EVIDENCE_REFRESH_MS);
@@ -287,13 +250,14 @@ function AppProviderInner({ children }: { children: ReactNode }) {
     };
     setTicketAuditLogs(prev => {
       const updated = [newAudit, ...prev];
-      saveToStorage(ticketList, commentList, updated);
       return updated;
     });
-  }, [showToast, ticketList, commentList, saveToStorage, shell, setTicketAuditLogs, setActiveTab]);
+  }, [showToast, ticketList, commentList, shell, setTicketAuditLogs, setActiveTab]);
 
-  // Login handler — calls server API for proper JWT auth
-  const handleLogin = useCallback(async (email: string, password: string): Promise<boolean> => {
+  // Login handler — calls the server API for proper JWT auth. Returns a
+  // LoginResult so the login form can render the server's exact message
+  // inline (lockout 423, suspension 403 and invalid-credential 401 differ).
+  const handleLogin = useCallback(async (email: string, password: string): Promise<LoginResult> => {
     try {
       const { user, mustChangePassword } = await api.login(email, password);
       const legacyName = user.name || '';
@@ -308,24 +272,31 @@ function AppProviderInner({ children }: { children: ReactNode }) {
         // Server unavailable — keep existing state from localStorage/seed
       }
 
-      if (user.role === UserRole.EXECUTIVE) {
-        setActiveTab('dashboard');
-      } else if (user.role === UserRole.SUPER_ADMIN) {
-        setActiveTab('reference_data');
-      } else if (user.role === UserRole.PARTNER) {
-        setActiveTab('payment_partner_portal');
-      } else if (user.role === UserRole.CUSTOMER) {
-        setActiveTab('customer_portal');
-      } else {
-        setActiveTab('tickets');
+      // A deep link (/app/<tab>) that led to the login page wins over the
+      // role default. The URL rewrite into /app happens in App's
+      // URL-adoption effect once isAuthenticated flips (UiContext never
+      // writes URLs under /auth*, so it cannot do this itself).
+      if (!window.location.pathname.startsWith('/app/')) {
+        if (user.role === UserRole.EXECUTIVE) {
+          setActiveTab('dashboard');
+        } else if (user.role === UserRole.SUPER_ADMIN) {
+          setActiveTab('reference_data');
+        } else if (user.role === UserRole.PARTNER) {
+          setActiveTab('payment_partner_portal');
+        } else if (user.role === UserRole.CUSTOMER) {
+          setActiveTab('customer_portal');
+        } else {
+          setActiveTab('tickets');
+        }
       }
 
       showToast(`Welcome, ${user.firstName || legacyName.split(' ')[0] || 'User'}!`, 'success');
-      return true;
+      return { ok: true };
     } catch (err) {
+      // No toast here: the login form surfaces this message inline, and
+      // duplicating it in a toast would double-report the same failure.
       const message = err instanceof Error ? err.message : 'Login failed';
-      showToast(message, 'error');
-      return false;
+      return { ok: false, message };
     }
   }, [showToast, shell, hydrateFromBootstrap, setActiveTab]);
 
@@ -390,6 +361,11 @@ function AppProviderInner({ children }: { children: ReactNode }) {
       shell.setCurrentRole(UserRole.BU_SUPPORT);
       setActiveTab('tickets');
       showToast('Session expired. Please sign in again.', 'warning');
+      // Mirror handleLogout: align the URL with the login screen so the
+      // login form isn't rendered at a stale /app/... path.
+      if (!window.location.pathname.startsWith('/auth/')) {
+        window.history.replaceState(null, '', '/auth/login');
+      }
     };
     window.addEventListener('auth:expired', onAuthExpired);
     return () => window.removeEventListener('auth:expired', onAuthExpired);
@@ -460,11 +436,9 @@ function AppProviderInner({ children }: { children: ReactNode }) {
         const data = await api.bootstrap(['tickets', 'watcherNotifications']);
         if (data.tickets) {
           ticket.setTickets(data.tickets);
-          seedQueryCacheFromBootstrap(data);
         }
         if (data.watcherNotifications) {
           ticket.setWatcherNotifications(prev => mergeNotifications(prev, data.watcherNotifications));
-          seedQueryCacheFromBootstrap(data);
         }
       } catch {
         // transient failure — the next tick retries automatically
@@ -531,7 +505,6 @@ handleRoleChange,
     setNotificationConfigs: config.setNotificationConfigs,
     showToast,
     logAuditAction,
-    saveToStorage,
     getTicketRisk: ticket.getTicketRisk,
     notifyWatchers,
     getScopedTickets: ticket.getScopedTickets,
@@ -542,15 +515,16 @@ handleRoleChange,
     isTicketTerminal: ticket.isTicketTerminal,
     transitionTicket,
   }), [
-    handleLogin, handleLogout, handleRoleChange, showToast, logAuditAction, saveToStorage,
-    shell.isLoading, shell.isAuthenticated, shell.mustChangePassword, shell.setMustChangePassword, shell.currentRole, shell.currentUser, shell.can,
-    ticket.tickets, ticket.comments, ticket.auditLogs, ticket.watcherNotifications, ticket.evidence, ticket.majorIncidents, ticket.getTicketRisk, ticket.getScopedTickets, ticket.getAvailableTicketTransitions, ticket.isTicketTerminal,
+    // Auth state
+    handleLogin, handleLogout, handleRoleChange, showToast, logAuditAction,
+    shell.isLoading, shell.isAuthenticated, shell.mustChangePassword, shell.currentRole, shell.currentUser, shell.can,
+    // Data state
+    ticket.tickets, ticket.comments, ticket.auditLogs, ticket.watcherNotifications, ticket.evidence, ticket.majorIncidents,
     admin.users, admin.slaRules, admin.holidays, admin.ticketTemplates, admin.businessUnits, admin.businessUnitCodes, admin.partners, admin.paymentChannels, admin.categories,
     config.kbArticles, config.savedReplies, config.customers, config.buFormConfigs, config.ticketFormConfigs, config.roles, config.notificationConfigs,
+    // Computed functions
+    ticket.getTicketRisk, ticket.getScopedTickets, ticket.getAvailableTicketTransitions, ticket.isTicketTerminal,
     handleCreateTicket, notifyWatchers, transitionTicket,
-    admin.setBusinessUnitCodes, admin.setBusinessUnits, admin.setCategories, admin.setHolidays, admin.setPartners, admin.setPaymentChannels, admin.setSlaRules, admin.setTicketTemplates, admin.setUsers,
-    config.setBuFormConfigs, config.setCustomers, config.setKbArticles, config.setNotificationConfigs, config.setRoles, config.setSavedReplies, config.setTicketFormConfigs,
-    ticket.setAuditLogs, ticket.setComments, ticket.setEvidence, ticket.setMajorIncidents, ticket.setTickets, ticket.setWatcherNotifications,
   ]);
 
   return (

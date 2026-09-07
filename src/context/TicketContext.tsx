@@ -63,11 +63,10 @@ export function TicketProvider({ children, value }: { children: ReactNode; value
 interface TicketDomainDeps {
   shell: AppShellDomain;
   admin: AdminDomain;
-  saveToStorage: (t?: TicketRecord[], c?: CommentRecord[], a?: AuditLog[], m?: MajorIncidentRecord[], wn?: WatcherNotification[], uList?: unknown[], sRules?: unknown[], hList?: unknown[], tTemplates?: unknown[], kArticles?: unknown[]) => void;
   showToast: (message: string, type?: 'success' | 'info' | 'error' | 'warning') => void;
 }
 
-export function useTicketDomain({ shell, admin, saveToStorage, showToast }: TicketDomainDeps): TicketDomain {
+export function useTicketDomain({ shell, admin, showToast }: TicketDomainDeps): TicketDomain {
   const { currentUser, currentRole } = shell;
   const { slaRules, holidays, businessUnitCodes } = admin;
   const { activeTicketId, setActiveTicketId } = useUi();
@@ -109,17 +108,15 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       const previousHash = prev.length > 0 ? prev[0].hash : '';
       entryWithHash.previousHash = previousHash;
       const updated = [entryWithHash, ...prev];
-      saveToStorage(tickets, comments, updated);
       return updated;
     });
     syncAudit({ ticketId, action, details });
-  }, [currentUser, currentRole, tickets, comments, saveToStorage]);
+  }, [currentUser, currentRole, tickets, comments]);
 
   // Notify watchers
   const notifyWatchers = useCallback((ticket: TicketRecord, message: string, updatedTicketsList?: TicketRecord[]) => {
     const list = ticket.watchers || [];
     if (list.length === 0) {
-      saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents);
       return;
     }
     const newNotifications: WatcherNotification[] = list.map(watcherEmail => ({
@@ -133,10 +130,9 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
     newNotifications.forEach(n => syncNotification(n));
     setWatcherNotifications(prev => {
       const updatedWN = [...newNotifications, ...prev];
-      saveToStorage(updatedTicketsList || tickets, comments, auditLogs, majorIncidents, updatedWN);
       return updatedWN;
     });
-  }, [tickets, comments, auditLogs, majorIncidents, saveToStorage]);
+  }, [tickets, comments, auditLogs, majorIncidents]);
 
   // Authoritative, rule-gated ticket lifecycle transition.
   const getAvailableTicketTransitions = useCallback(
@@ -307,7 +303,6 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
       details: `Ticket ${tId} auto-assigned to ${record.assignedAgentId} on intake.`
     };
     setAuditLogs(prev => [assignedAudit, newAudit, ...prev]);
-    saveToStorage([record, ...tickets], comments, [assignedAudit, newAudit, ...auditLogs]);
 
     syncCreateTicket(record)
       .then(() => showToast(`Ticket ${tId} created.`, 'success'))
@@ -316,7 +311,7 @@ export function useTicketDomain({ shell, admin, saveToStorage, showToast }: Tick
         showToast(msg, 'error');
       });
     return tId;
-  }, [currentUser, currentRole, slaRules, holidays, businessUnitCodes, tickets, comments, auditLogs, saveToStorage, showToast]);
+  }, [currentUser, currentRole, slaRules, holidays, businessUnitCodes, tickets, comments, auditLogs, showToast]);
 
   const value: TicketDomain = useMemo(() => ({
     tickets, setTickets,

@@ -68,6 +68,7 @@ export default function ImageSEOEditor({ image, onClose, onSave }: ImageSEOEdito
             <button
               type="button"
               onClick={onClose}
+              aria-label="Close editor"
               className="p-2 hover:bg-surface-hover rounded-lg transition-colors"
             >
               <X className="w-5 h-5 text-text-secondary" />

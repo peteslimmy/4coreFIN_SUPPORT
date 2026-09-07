@@ -70,7 +70,7 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.2 }}
-          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-sm"
+          className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay/60 backdrop-blur-sm"
           onClick={e => { if (closeOnOverlay && e.target === overlayRef.current) onClose(); }}
           role="dialog"
           aria-modal="true"
@@ -83,14 +83,14 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2 }}
-            className={`w-full ${sizeClass} bg-surface-elevated rounded-xl shadow-modal flex flex-col max-h-[85vh]`}
+            className={`w-full ${sizeClass} glass-surface-strong rounded-2xl shadow-modal flex flex-col max-h-[85vh]`}
           >
             {title && (
-              <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
                 <h2 id={titleId} className="text-h3 text-text-primary">{title}</h2>
                 <button
                   onClick={onClose}
-                  className="p-1.5 rounded-md text-text-muted hover:text-text-primary hover:bg-surface transition-colors focus-ring"
+                  className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface transition-colors focus-ring"
                   aria-label="Close"
                 >
                   <X className="w-5 h-5" />
@@ -99,7 +99,7 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
             )}
             <div className="flex-1 overflow-y-auto px-6 py-4 text-text-primary">{children}</div>
             {footer && (
-              <div className="px-6 py-4 border-t border-border flex items-center justify-end gap-3">{footer}</div>
+              <div className="px-6 py-4 border-t border-border-subtle flex items-center justify-end gap-3">{footer}</div>
             )}
           </motion.div>
         </motion.div>

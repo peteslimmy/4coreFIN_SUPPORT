@@ -1,11 +1,12 @@
 import { useState, useEffect } from 'react';
 import { formatSlaCountdown } from '../../lib/utils';
+import { TicketRecord, TicketStatus } from '../../types/app';
 
 interface SlaCountdownProps {
-  deadline: string;
+  ticket: TicketRecord;
 }
 
-export default function SlaCountdown({ deadline }: SlaCountdownProps) {
+export default function SlaCountdown({ ticket }: SlaCountdownProps) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -13,7 +14,10 @@ export default function SlaCountdown({ deadline }: SlaCountdownProps) {
     return () => clearInterval(id);
   }, []);
 
-  const deadlineMs = new Date(deadline).getTime();
+  // Don't show countdown for closed/resolved tickets
+  if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.RESOLVED) return null;
+
+  const deadlineMs = new Date(ticket.slaDeadline).getTime();
   const diff = deadlineMs - now;
 
   if (diff <= 0) {

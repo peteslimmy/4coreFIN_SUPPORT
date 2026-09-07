@@ -5,6 +5,7 @@ import { Bell, Shield, ChevronDown, Menu } from 'lucide-react';
 import BrandLogo from '../BrandLogo';
 import Sidebar from '../Sidebar';
 import CommandPalette from '../CommandPalette';
+import BottomNavigation from './BottomNavigation';
 import { UserRole, type TicketRecord, type MajorIncidentRecord, type WatcherNotification } from '../../types/app';
 
 const APP_NAME = '4CORE Payment Support';
@@ -39,7 +40,9 @@ function RouteLoadingFallback() {
 
 /* ─── TopBar ────────────────────────────────────────────────────────── */
 
-function TopBar({
+import React from 'react';
+
+const TopBar = React.memo(function TopBar({
   currentUser,
   currentRole,
   watcherNotifications,
@@ -72,7 +75,7 @@ function TopBar({
   ).length;
 
   return (
-    <div className="bg-surface-card border-b border-border-subtle px-4 lg:px-6 py-2 flex items-center justify-between z-50 shrink-0 gap-2">
+    <div className="bg-surface-card border-b border-border-subtle px-4 lg:px-6 py-2 flex items-center justify-between z-50 shrink-0 gap-2 relative">
       {/* Left: brand + mobile menu trigger */}
       <div className="flex items-center gap-2 shrink-0">
         <button
@@ -148,7 +151,7 @@ function TopBar({
       </div>
     </div>
   );
-}
+});
 
 /* ─── AppShell ──────────────────────────────────────────────────────── */
 
@@ -168,7 +171,7 @@ export default function AppShell({
   return (
     <div className="flex flex-col h-screen w-full bg-app font-sans text-text-primary overflow-hidden">
       {/* Skip link */}
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:px-4 focus:py-2 focus:bg-primary focus:text-[#fff] focus:rounded-lg focus:text-sm focus:font-semibold">
         Skip to main content
       </a>
 
@@ -207,25 +210,31 @@ export default function AppShell({
           Skip to main content
         </a>
 
-        <main id="main-content" tabIndex={-1} className="flex-1 flex flex-col overflow-y-auto bg-app scrollbar-gutter-stable">
+        <main id="main-content" tabIndex={-1} className="flex-1 min-w-0 flex flex-col overflow-y-auto bg-app scrollbar-gutter-stable lg:pb-6 pb-20">
           <PageErrorBoundaryWrapper>
             <Suspense fallback={<RouteLoadingFallback />} className="flex-1">
               {children}
             </Suspense>
           </PageErrorBoundaryWrapper>
 
-          <footer className="h-9 bg-surface-card border-t border-border-subtle px-4 lg:px-8 flex items-center justify-between shrink-0 text-text-muted">
-            <div className="flex items-center gap-4">
-              <span className="text-caption font-medium flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 bg-success rounded-full" />
-                TLS 1.3 / AES-256
-              </span>
-              <span className="text-caption font-medium hidden sm:inline">10-Year GAID Compliance</span>
-            </div>
-            <span className="text-caption font-medium">{APP_VERSION}</span>
-          </footer>
+          {/* Subtle footer with version only */}
+          <div className="h-6 bg-surface-card border-t border-border-subtle px-4 lg:px-8 flex items-center justify-between shrink-0 text-caption text-text-muted lg:block hidden">
+            <span className="hidden sm:inline">4CoreFinSupport v1.0</span>
+            <span className="text-xs text-text-muted/70">© {new Date().getFullYear()} 4Core</span>
+          </div>
         </main>
       </div>
+
+      {/* Mobile bottom navigation */}
+      <BottomNavigation
+        activeTab={activeTab}
+        setActiveTab={setActiveTab}
+        currentRole={currentRole}
+        tickets={tickets}
+        watcherNotifications={watcherNotifications}
+        majorIncidents={majorIncidents}
+        currentUser={currentUser}
+      />
 
       {/* Global overlays */}
       <CommandPalette />
@@ -240,18 +249,9 @@ import PageErrorBoundary from '../ui/PageErrorBoundary';
 function PageErrorBoundaryWrapper({ children }: { children: ReactNode }) {
   return (
     <PageErrorBoundary pageName="Workspace">
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="page-content"
-          className="flex-1 flex flex-col min-h-0"
-          initial={{ opacity: 0, y: 4 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -4 }}
-          transition={{ duration: 0.15 }}
-        >
-          {children}
-        </motion.div>
-      </AnimatePresence>
+      <div className="flex-1 flex flex-col min-h-0">
+        {children}
+      </div>
     </PageErrorBoundary>
   );
 }

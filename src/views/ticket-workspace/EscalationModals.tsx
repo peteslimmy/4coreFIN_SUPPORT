@@ -43,7 +43,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
   const {
     setTickets, watcherNotifications, setWatcherNotifications,
     comments, auditLogs, majorIncidents, users, slaRules, holidays, ticketTemplates, kbArticles,
-    saveToStorage, showToast, currentUser, logAuditAction, tickets,
+    showToast, currentUser, logAuditAction, tickets,
   } = useApp();
 
   if (!activeTicket) return null;
@@ -52,7 +52,7 @@ export default function EscalationModals(props: EscalationModalsProps) {
     <>
       {showEscalationModal && (
         <Modal open={showEscalationModal} onClose={() => { setShowEscalationModal(false); setEscalationReason(''); }} title="Manual Escalation" size="sm">
-          <p className="text-xs text-text-muted mb-4">Provide a mandatory reason for escalating this ticket to CRITICAL priority. This will be recorded in the compliance audit trail.</p>
+          <p className="text-body-sm text-text-secondary mb-4">Provide a mandatory reason for escalating this ticket to CRITICAL priority. This will be recorded in the compliance audit trail.</p>
           <Textarea
             value={escalationReason}
             onChange={(e) => { setEscalationReason(e.target.value); clearError('escalationReason'); }}
@@ -63,13 +63,13 @@ export default function EscalationModals(props: EscalationModalsProps) {
           <div className="flex gap-2 justify-end mt-4">
             <button
               onClick={() => { setShowEscalationModal(false); setEscalationReason(''); clearFormErrors(); }}
-              className="px-3 py-1.5 text-xs text-text-muted font-semibold cursor-pointer"
+              className="px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover rounded-xl transition-all duration-200 focus-ring"
             >
               Cancel
             </button>
             <button
               onClick={confirmEscalation}
-              className="px-3 py-1.5 bg-warning hover:bg-warning-dark text-[#fff] rounded text-xs font-semibold cursor-pointer"
+              className="px-4 py-2 text-sm font-bold text-white rounded-xl transition-all duration-200 bg-warning hover:bg-warning-dark active:bg-warning-dark focus-ring"
             >
               Confirm Escalation
             </button>
@@ -84,10 +84,10 @@ export default function EscalationModals(props: EscalationModalsProps) {
           title={notifyWatcherModal.watcherEmail === 'BULK' ? 'Bulk Notification' : `Notify ${notifyWatcherModal.watcherEmail}`}
           size="sm"
           footer={
-            <div className="flex gap-2 w-full">
+            <div className="flex gap-2 justify-end w-full">
               <button
                 onClick={() => { setNotifyWatcherModal({ isOpen: false, watcherEmail: null }); setDirectMessageText(''); }}
-                className="px-3 py-1.5 text-xs text-text-muted font-semibold"
+                className="px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover rounded-xl transition-all duration-200 focus-ring"
               >
                 Cancel
               </button>
@@ -107,7 +107,6 @@ export default function EscalationModals(props: EscalationModalsProps) {
                   const updatedWN = [...newNotifications, ...watcherNotifications];
                   setWatcherNotifications(updatedWN);
                   newNotifications.forEach(n => syncNotification(n));
-                  saveToStorage(tickets, comments, auditLogs, majorIncidents, updatedWN, users, slaRules, holidays, ticketTemplates, kbArticles);
                   showToast(`Direct urgent notification sent to ${recipients.length} watcher(s).`);
                   setNotifyWatcherModal({ isOpen: false, watcherEmail: null });
                   setDirectMessageText('');
@@ -115,14 +114,14 @@ export default function EscalationModals(props: EscalationModalsProps) {
                     setSelectedWatcherIds(new Set());
                   }
                 }}
-                className="px-3 py-1.5 bg-brand-900 text-[#fff] rounded text-xs font-semibold"
+                className="px-4 py-2 text-sm font-bold text-white rounded-xl transition-all duration-200 bg-primary hover:bg-primary-dark active:bg-primary-dark focus-ring"
               >
                 Send Notification
               </button>
             </div>
           }
         >
-          <p className="text-xs text-text-muted mb-4">Send a direct, urgent, and tagged message to this watcher.</p>
+          <p className="text-body-sm text-text-secondary mb-4">Send a direct, urgent, and tagged message to this watcher.</p>
           <Textarea
             value={directMessageText}
             onChange={(e) => setDirectMessageText(e.target.value)}
@@ -159,7 +158,6 @@ export default function EscalationModals(props: EscalationModalsProps) {
             return t;
           });
           setTickets(u);
-          saveToStorage(u, comments, auditLogs);
           const changedTicket = u.find(t => t.id === activeTicket.id);
           if (changedTicket) syncTicketUpdate(changedTicket.id, { watchers: changedTicket.watchers || [] });
           showToast(`Removed ${watcher}.`, 'info');

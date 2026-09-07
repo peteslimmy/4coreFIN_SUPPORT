@@ -1,4 +1,4 @@
-import { TicketPriority, type TicketRecord } from '../../types/app';
+import { TicketPriority, TicketStatus, type TicketRecord } from '../../types/app';
 import { SLA_AT_RISK_PCT, FALLBACK_SLA_DURATION_MS } from '../../lib/constants';
 
 export function getSubmitterName(ticket: TicketRecord): string {
@@ -30,13 +30,25 @@ export function getAgeDisplay(createdAt: string | undefined): string {
   return 'just now';
 }
 
-export function getSlaState(deadlineMs: number, now: number, createdAt?: string) {
-  const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : FALLBACK_SLA_DURATION_MS;
-  const start = deadlineMs - total;
-  const elapsed = now - start;
-  const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
-  const remaining = deadlineMs - now;
-  if (remaining <= 0) return { breached: true, atRisk: false };
-  if (pct > SLA_AT_RISK_PCT) return { breached: false, atRisk: true };
-  return { breached: false, atRisk: false };
+export function formatCardDate(createdAt: string | undefined): string {
+  if (!createdAt) return '';
+  const d = new Date(createdAt);
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+}
+
+export function getSlaState(deadlineMs: number, now: number, createdAt?: string, status?: TicketStatus) {
+    // Don't calculate SLA for closed/resolved tickets
+    if (status === TicketStatus.CLOSED || status === TicketStatus.RESOLVED) {
+      return { breached: false, atRisk: false };
+    }
+    
+    const total = createdAt ? Math.max(1, deadlineMs - new Date(createdAt).getTime()) : FALLBACK_SLA_DURATION_MS;
+    const start = deadlineMs - total;
+    const elapsed = now - start;
+    const pct = Math.min(100, Math.max(0, (elapsed / total) * 100));
+    const remaining = deadlineMs - now;
+    if (remaining <= 0) return { breached: true, atRisk: false };
+    if (pct > SLA_AT_RISK_PCT) return { breached: false, atRisk: true };
+    return { breached: false, atRisk: false };
 }

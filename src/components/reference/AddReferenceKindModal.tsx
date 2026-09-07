@@ -33,14 +33,14 @@ export default function AddReferenceKindModal({
         <>
           <button
             onClick={onClose}
-            className="px-4 py-2 rounded-lg text-sm font-semibold text-text-muted hover:bg-surface-hover transition"
+            className="px-4 py-2 text-sm font-semibold text-text-secondary hover:bg-surface-hover rounded-xl transition-all duration-200 focus-ring"
           >
             Cancel
           </button>
           <button
             onClick={onSubmit}
             disabled={saving}
-            className="px-4 py-2 rounded-lg bg-accent text-[#fff] text-sm font-semibold hover:bg-accent-dark transition disabled:opacity-50"
+            className="px-4 py-2 text-sm font-bold text-white rounded-xl transition-all duration-200 bg-primary hover:bg-primary-dark active:bg-primary-dark focus-ring disabled:opacity-50"
           >
             {saving ? 'Creating…' : 'Create Kind'}
           </button>

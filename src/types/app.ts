@@ -2,6 +2,7 @@ export enum TicketStatus {
   RECEIPT = 'RECEIPT',
   ASSIGNED = 'ASSIGNED',
   INVESTIGATE = 'INVESTIGATE',
+  REOPENED = 'REOPENED',
   RESOLVED = 'RESOLVED',
   CLOSED = 'CLOSED',
   WAITING_CUSTOMER = 'WAITING_CUSTOMER',
@@ -74,6 +75,19 @@ export interface TicketRecord {
     resolvedAt?: string;
     resolvedBy?: string;
   };
+  /** Reopen justification and metadata */
+  reopenJustification?: string;
+  reopenReason?: string;
+  reopenAt?: string;
+  reopenBy?: string;
+  /** RCA override by SUPER_ADMIN */
+  rcaOverrideReason?: string;
+  rcaOverrideBy?: string;
+  rcaOverrideAt?: string;
+  /** SLA policy version that was applied when ticket was created */
+  slaPolicyVersion?: string;
+  /** Partner organization ID (foreign key to partner_organizations table) */
+  partnerOrgId?: string;
 }
 
 export interface CustomerRecord {

@@ -79,3 +79,63 @@ export function formatSlaDeadline(deadlineMs: number, nowMs = Date.now()): strin
   if (diffMs < 0) return `Breached -${duration}`;
   return `${duration} remaining`;
 }
+
+/**
+ * Scannable SLA countdown for card pills.
+ * Returns object for flexible rendering, not pre-formatted string.
+ */
+export interface SlaCountdownParts {
+  hours: number;
+  minutes: number;
+  seconds: number;
+  isBreached: boolean;
+  totalMinutes: number;
+}
+
+/** Parse ms into parts for granular rendering */
+export function parseSlaCountdown(deadlineMs: number, nowMs = Date.now()): SlaCountdownParts {
+  const diffMs = deadlineMs - nowMs;
+  const absMs = Math.abs(diffMs);
+  const hours = Math.floor(absMs / MS_HOUR);
+  const minutes = Math.floor((absMs % MS_HOUR) / MS_MINUTE);
+  const seconds = Math.floor((absMs % MS_MINUTE) / 1000);
+  return {
+    hours,
+    minutes,
+    seconds,
+    isBreached: diffMs < 0,
+    totalMinutes: Math.floor(absMs / MS_MINUTE),
+  };
+}
+
+/** Human-friendly tiered format for pills */
+export function formatSlaPillText(parts: SlaCountdownParts): string {
+  const { hours, minutes, isBreached } = parts;
+  if (isBreached) {
+    if (hours > 0) return `−${hours}h ${minutes}m`;
+    return `−${minutes}m`;
+  }
+  if (hours > 24) return `${Math.floor(hours / 24)}d ${hours % 24}h`;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m`;
+  return '<1m';
+}
+
+/** Compact format for dense lists: "2h17m" or "−45m" */
+export function formatSlaCompact(parts: SlaCountdownParts): string {
+  const { hours, minutes, isBreached } = parts;
+  const prefix = isBreached ? '−' : '';
+  if (hours > 0) return `${prefix}${hours}h${minutes}m`;
+  return `${prefix}${minutes}m`;
+}
+
+/** Full format for tooltips/modals: "2 hours 17 minutes remaining" */
+export function formatSlaVerbose(parts: SlaCountdownParts): string {
+  const { hours, minutes, seconds, isBreached } = parts;
+  const unit = isBreached ? 'breached' : 'remaining';
+  const chunks: string[] = [];
+  if (hours > 0) chunks.push(`${hours} hour${hours === 1 ? '' : 's'}`);
+  if (minutes > 0 || hours > 0) chunks.push(`${minutes} minute${minutes === 1 ? '' : 's'}`);
+  if (chunks.length === 0) chunks.push(`${seconds} second${seconds === 1 ? '' : 's'}`);
+  return `${chunks.join(' ')} ${unit}`;
+}

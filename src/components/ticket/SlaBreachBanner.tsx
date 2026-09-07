@@ -1,14 +1,39 @@
-import { useMemo } from 'react';
-import { Info } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { TicketRecord, TicketStatus } from '../../types/app';
 
-export default function SlaBreachBanner({ ticket }: { ticket: { slaDeadline: string; partner: string } }) {
-  const breached = useMemo(() => new Date(ticket.slaDeadline).getTime() < Date.now(), [ticket.slaDeadline]); // eslint-disable-line react-hooks/purity -- Date.now() is safe in useMemo for SLA comparison
+export default function SlaBreachBanner({ ticket }: { ticket: TicketRecord }) {
+  const [breached, setBreached] = useState(false);
+
+  useEffect(() => {
+    const checkBreach = () => {
+      // Don't show breach banner for closed/resolved tickets
+      if (ticket.status === TicketStatus.CLOSED || ticket.status === TicketStatus.RESOLVED) {
+        setBreached(false);
+        return;
+      }
+      
+      // Check if SLA is breached
+      if (!ticket.slaDeadline) {
+        setBreached(false);
+        return;
+      }
+      
+      setBreached(new Date(ticket.slaDeadline).getTime() < Date.now());
+    };
+
+    checkBreach();
+    
+    // Check every minute for changes
+    const interval = setInterval(checkBreach, 60 * 1000);
+    return () => clearInterval(interval);
+  }, [ticket.slaDeadline, ticket.status]);
+
   if (!breached) return null;
   return (
-    <div className="bg-error/5 border-b border-error/15 px-5 py-3">
-      <div className="flex items-center gap-2">
-        <Info className="w-4 h-4 text-error shrink-0" aria-hidden="true" />
-        <span className="text-xs font-bold text-error">{ticket.partner} Partner Team / SLA Breached</span>
+    <div className="absolute inset-x-0 top-0 bg-primary/20 border-l-4 border-error pulse animate-pulse">
+      <div className="flex items-center gap-2 px-3 py-1">
+        <span className="w-1.5 h-1.5 rounded-full bg-error" aria-hidden="true"></span>
+        <span className="text-[8px] text-error font-medium">SLA BREACHED</span>
       </div>
     </div>
   );

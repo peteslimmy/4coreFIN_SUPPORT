@@ -39,7 +39,7 @@ interface MajorIncidentsPageProps {
 }
 
 function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentId, handleDeclareMajorIncident }: MajorIncidentsPageProps) {
-  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, partners, businessUnits, currentRole, showToast, logAuditAction, saveToStorage, notifyWatchers, comments, auditLogs, currentUser, can } = useApp();
+  const { isLoading, majorIncidents, setMajorIncidents, tickets, setTickets, partners, businessUnits, currentRole, showToast, logAuditAction, notifyWatchers, comments, auditLogs, currentUser, can } = useApp();
 
   const [showDeclareMajorModal, setShowDeclareMajorModal] = useState(false);
   const [declareStep, setDeclareStep] = useState<1 | 2>(1);
@@ -87,8 +87,6 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
     const targetTicket = updatedTickets.find(t => t.id === ticketId);
     if (targetTicket) {
       notifyWatchers(targetTicket, `Ticket ${targetTicket.id} was linked to Major Incident ID: ${miId}.`, updatedTickets);
-    } else {
-      saveToStorage(updatedTickets, comments, auditLogs, updatedMIs);
     }
     syncTicketUpdate(ticketId, { majorIncidentId: miId });
     const linkedMI = updatedMIs.find(mi => mi.id === miId);
@@ -115,8 +113,6 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
     const targetTicket = updatedTickets.find(t => t.id === ticketId);
     if (targetTicket) {
       notifyWatchers(targetTicket, `Ticket ${targetTicket.id} was unlinked from Major Incident ID: ${miId}.`, updatedTickets);
-    } else {
-      saveToStorage(updatedTickets, comments, auditLogs, updatedMIs);
     }
     syncTicketUpdate(ticketId, { majorIncidentId: null });
     const linkedMI = updatedMIs.find(mi => mi.id === miId);
@@ -140,7 +136,6 @@ function MajorIncidentsPage({ selectedMajorIncidentId, setSelectedMajorIncidentI
       return mi;
     });
     setMajorIncidents(updatedMIs);
-    saveToStorage(tickets, comments, auditLogs, updatedMIs);
     const updatedMI = updatedMIs.find(mi => mi.id === miId);
     if (updatedMI) syncMajorIncidentUpdate(miId, { timeline: updatedMI.timeline });
     logAuditAction(null, 'MAJOR_INCIDENT_TIMELINE_ADD', `Added milestone update to Incident ${miId}: "${messageText.slice(0, 40)}..."`);

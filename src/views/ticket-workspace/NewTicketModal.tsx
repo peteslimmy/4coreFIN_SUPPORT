@@ -58,6 +58,16 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
     setCustomerQuery('');
   };
 
+  const customerFullName = `${form.customerFirstName} ${form.customerLastName}`.trim();
+
+  const handleCustomerNameChange = (value: string) => {
+    const trimmed = value.trim();
+    const parts = trimmed.split(/\s+/).filter(Boolean);
+    const firstName = parts[0] ?? '';
+    const lastName = parts.length > 1 ? parts.slice(1).join(' ') : '';
+    setForm(prev => ({ ...prev, customerFirstName: firstName, customerLastName: lastName, customerId: undefined }));
+  };
+
   const clearError = (field: string) => setErrors(prev => ({ ...prev, [field]: '' }));
 
   /* Per-step validation — gates Next until required fields are filled.
@@ -80,14 +90,13 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
   ];
 
   return (
-    <Modal open={isOpen} onClose={onClose} title="Create New Ticket">
+    <Modal open={isOpen} onClose={onClose} title="Create New Ticket" size="lg">
       <SliderForm
         steps={[
           {
-            label: 'Customer',
-            title: 'Customer Identity',
-            subtitle: 'Optional — link an existing customer or enter new details. You can skip this step.',
-            errorCount: stepErrorCounts[0],
+            label: 'Ticket',
+            title: 'Create New Ticket',
+            subtitle: 'Capture the complaint details so it routes correctly.',
             content: (
               <div className="space-y-4">
                 <div className="relative">
@@ -124,6 +133,14 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
                     </div>
                   )}
                 </div>
+
+                <Input
+                  label="Customer Name"
+                  value={customerFullName}
+                  onChange={(e) => handleCustomerNameChange(e.target.value)}
+                  placeholder="e.g. John Doe"
+                  helperText="Required for new customer records"
+                />
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Input
                     label="Customer First Name"
@@ -157,41 +174,7 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
                     helperText="Optional"
                   />
                 </div>
-                {form.customerId && (
-                  <div className="flex items-center justify-between rounded-lg border border-primary/30 bg-primary/5 px-3 py-2">
-                    <p className="text-xs text-text-secondary">Linked to existing customer <span className="font-semibold text-text-primary">{form.customerEmail}</span></p>
-                    <button type="button" onClick={clearCustomer} className="flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-error transition focus-ring">
-                      <X className="w-3.5 h-3.5" /> Unlink
-                    </button>
-                  </div>
-                )}
-              </div>
-            ),
-          },
-          {
-            label: 'Issue',
-            title: 'Transaction & Issue Details',
-            subtitle: 'Classify the complaint so it routes to the right team.',
-            errorCount: stepErrorCounts[1],
-            content: (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <Input
-                    label="Amount (NGN)"
-                    type="number"
-                    min="0"
-                    step="0.01"
-                    value={form.amount}
-                    onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
-                    placeholder="0.00"
-                  />
-                  <Input
-                    label="Transaction ID"
-                    value={form.transactionId}
-                    onChange={(e) => setForm(prev => ({ ...prev, transactionId: e.target.value }))}
-                    placeholder="TXN_..."
-                  />
-                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <Select
                     label="Partner"
@@ -210,6 +193,32 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
                     error={errors.category}
                   />
                 </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <Select
+                    label="Priority"
+                    value={form.priority}
+                    onChange={(e) => setForm(prev => ({ ...prev, priority: e.target.value as TicketPriority }))}
+                    options={Object.values(TicketPriority).map(p => ({ value: p, label: p }))}
+                  />
+                  <Input
+                    label="Amount (NGN)"
+                    type="number"
+                    min="0"
+                    step="0.01"
+                    value={form.amount}
+                    onChange={(e) => setForm(prev => ({ ...prev, amount: e.target.value }))}
+                    placeholder="0.00"
+                  />
+                </div>
+
+                <Input
+                  label="Transaction ID"
+                  value={form.transactionId}
+                  onChange={(e) => setForm(prev => ({ ...prev, transactionId: e.target.value }))}
+                  placeholder="TXN_..."
+                />
+
                 <Select
                   label="Bank"
                   value={form.bankName}
@@ -217,34 +226,29 @@ export default function NewTicketModal({ isOpen, onClose, form, setForm, errors,
                   options={NIGERIAN_BANK_OPTIONS}
                   helperText="Choose N/A if no bank is involved, or BANK NOT LISTED if yours is missing."
                 />
-                <Select
-                  label="Priority"
-                  value={form.priority}
-                  onChange={(e) => setForm(prev => ({ ...prev, priority: e.target.value as TicketPriority }))}
-                  options={Object.values(TicketPriority).map(p => ({ value: p, label: p }))}
+
+                <Textarea
+                  label="Description"
+                  required
+                  value={form.description}
+                  onChange={(e) => { setForm(prev => ({ ...prev, description: e.target.value })); clearError('description'); }}
+                  rows={6}
+                  placeholder="Describe the issue in detail..."
+                  error={errors.description}
                 />
+
+                {form.customerId && (
+                  <div className="flex items-center justify-between rounded-xl border border-primary/30 bg-primary/5 px-3 py-2">
+                    <p className="text-xs text-text-secondary">Linked to existing customer <span className="font-semibold text-text-primary">{form.customerEmail}</span></p>
+                    <button type="button" onClick={clearCustomer} className="flex items-center gap-1 text-xs font-semibold text-text-muted hover:text-error transition focus-ring">
+                      <X className="w-3.5 h-3.5" /> Unlink
+                    </button>
+                  </div>
+                )}
               </div>
-            ),
-          },
-          {
-            label: 'Details',
-            title: 'Incident Description',
-            subtitle: 'Describe what happened so agents can investigate quickly.',
-            errorCount: stepErrorCounts[2],
-            content: (
-              <Textarea
-                label="Description"
-                required
-                value={form.description}
-                onChange={(e) => { setForm(prev => ({ ...prev, description: e.target.value })); clearError('description'); }}
-                rows={6}
-                placeholder="Describe the issue in detail..."
-                error={errors.description}
-              />
-            ),
-          },
+            )
+          }
         ]}
-        onStepValidate={validateStep}
         onSubmit={() => onSubmit()}
         submitLabel="Create Ticket"
       />

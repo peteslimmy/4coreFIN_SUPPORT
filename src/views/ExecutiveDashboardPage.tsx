@@ -1,4 +1,4 @@
-import React, { lazy, Suspense, useState, useMemo } from 'react';
+import React, { lazy, Suspense, useState, useMemo, useEffect } from 'react';
 import { Download, BarChart2, Users, Layers, Star, ShieldAlert, FileBarChart } from 'lucide-react';
 import Tabs from '../components/ui/Tabs';
 import Button from '../components/ui/Button';
@@ -210,6 +210,23 @@ function ExecutiveDashboardPage() {
   const healthColor = metrics.healthScore >= 90 ? 'text-success' : metrics.healthScore >= 75 ? 'text-warning' : 'text-error';
   const healthDot = metrics.healthScore >= 90 ? 'bg-success' : metrics.healthScore >= 75 ? 'bg-warning' : 'bg-error';
 
+  // Last updated timestamp
+  const [lastUpdated, setLastUpdated] = useState(Date.now());
+  useEffect(() => {
+    const interval = setInterval(() => setLastUpdated(Date.now()), 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const formatLastUpdated = () => {
+    const diff = Date.now() - lastUpdated;
+    if (diff < 60000) return 'Just now';
+    const mins = Math.floor(diff / 60000);
+    if (mins < 60) return `${mins}m ago`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `${hours}h ago`;
+    return new Date(lastUpdated).toLocaleDateString();
+  };
+
   // --- Loading State ---
   if (isLoading) {
     return (
@@ -225,7 +242,7 @@ function ExecutiveDashboardPage() {
 
   return (
     <PageTransition>
-      <PageContainer className="space-y-5">
+      <PageContainer className="space-y-6">
         <PageHeader
           title="Executive Performance Desk"
           subtitle="BPO operational intelligence — SLA, financial exposure, Payment Partner quality, and compliance"
@@ -255,6 +272,10 @@ function ExecutiveDashboardPage() {
                   <span className={`text-h3 font-bold ${healthColor}`}>{metrics.healthScore}%</span>
                 </div>
               </div>
+              <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-surface-hover rounded-lg border border-border-subtle">
+                <span className="text-caption text-text-muted">Updated</span>
+                <span className="text-caption font-mono text-text-secondary">{formatLastUpdated()}</span>
+              </div>
             </div>
           }
         />
@@ -279,7 +300,7 @@ function ExecutiveDashboardPage() {
 
         {/* --- TAB: Performance --- */}
         {dashboardTab === 'performance' && (
-          <div role="tabpanel" id="tabpanel-performance" aria-labelledby="tab-performance">
+          <div role="tabpanel" id="tabpanel-performance" aria-labelledby="tab-performance" className="space-y-6 animate-slide-in">
             <DashboardAlerts alerts={proactiveAlerts} />
 
             <KpiGrid
@@ -402,7 +423,7 @@ function ExecutiveDashboardPage() {
 
         {/* --- TAB: Operations --- */}
         {dashboardTab === 'operations' && (
-          <div role="tabpanel" id="tabpanel-operations" aria-labelledby="tab-operations">
+          <div role="tabpanel" id="tabpanel-operations" aria-labelledby="tab-operations" className="space-y-6 animate-slide-in">
             <PartnerScorecard data={metrics.partnerMetrics} />
 
             {/* --- Dispute Value + Resolution Quality --- */}
@@ -475,7 +496,7 @@ function ExecutiveDashboardPage() {
 
         {/* --- TAB: Quality --- */}
         {dashboardTab === 'quality' && (
-          <div role="tabpanel" id="tabpanel-quality" aria-labelledby="tab-quality">
+          <div role="tabpanel" id="tabpanel-quality" aria-labelledby="tab-quality" className="space-y-6 animate-slide-in">
             {/* --- Category Breakdown --- */}
             <GovernanceChart
               type="pie"
@@ -512,20 +533,24 @@ function ExecutiveDashboardPage() {
 
         {/* --- TAB: Risk & Compliance --- */}
         {dashboardTab === 'risk' && (
-          <Suspense fallback={tabFallback}>
-            <RiskComplianceTab
-              onDrill={(d) => setGovDrill({ open: true, title: d.title, subtitle: d.subtitle, rows: d.rows, context: d.context, metadata: d.metadata })}
-              onCrossFilter={setCrossFilter}
-              crossFilter={crossFilter}
-            />
-          </Suspense>
+          <div role="tabpanel" id="tabpanel-risk" aria-labelledby="tab-risk" className="space-y-6 animate-slide-in">
+            <Suspense fallback={tabFallback}>
+              <RiskComplianceTab
+                onDrill={(d) => setGovDrill({ open: true, title: d.title, subtitle: d.subtitle, rows: d.rows, context: d.context, metadata: d.metadata })}
+                onCrossFilter={setCrossFilter}
+                crossFilter={crossFilter}
+              />
+            </Suspense>
+          </div>
         )}
 
         {/* --- TAB: Reports --- */}
         {dashboardTab === 'reports' && (
-          <Suspense fallback={tabFallback}>
-            <ReportsTab />
-          </Suspense>
+          <div role="tabpanel" id="tabpanel-reports" aria-labelledby="tab-reports" className="space-y-6 animate-slide-in">
+            <Suspense fallback={tabFallback}>
+              <ReportsTab />
+            </Suspense>
+          </div>
         )}
 
         {/* --- Drill-Down Modal --- */}

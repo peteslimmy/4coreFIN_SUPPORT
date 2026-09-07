@@ -23,6 +23,19 @@ describe('rbac', () => {
     expect(hasPermission(buSupport, 'admin:config')).toBe(true);
   });
 
+  it('does not grant resolve permission to BU_SUPPORT roles', () => {
+    const roles = getRoles([]);
+    const buSupportL1 = roles.find(r => r.id === 'BU_SUPPORT_L1')!;
+    const buSupportL2 = roles.find(r => r.id === 'BU_SUPPORT_L2')!;
+    const buSupportL3 = roles.find(r => r.id === 'BU_SUPPORT_L3')!;
+    const buSupportLegacy = roles.find(r => r.id === 'BU_SUPPORT')!;
+    
+    expect(hasPermission(buSupportL1, 'tickets:resolve')).toBe(false);
+    expect(hasPermission(buSupportL2, 'tickets:resolve')).toBe(false);
+    expect(hasPermission(buSupportL3, 'tickets:resolve')).toBe(false);
+    expect(hasPermission(buSupportLegacy, 'tickets:resolve')).toBe(false);
+  });
+
   it('keeps EXECUTIVE read-only', () => {
     const exec = getRoles([]).find(r => r.id === 'EXECUTIVE')!;
     expect(hasPermission(exec, 'tickets:view')).toBe(true);
