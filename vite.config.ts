@@ -12,6 +12,7 @@ export default defineConfig(() => {
       },
     },
     server: {
+      port: 3001,
       watch: {},
     },
     build: {
@@ -26,6 +27,8 @@ export default defineConfig(() => {
           manualChunks: {
             react: ['react', 'react-dom', 'react-dom/client'],
             anim: ['framer-motion'],
+            xlsx: ['xlsx'],
+            executive: ['src/views/ExecutiveDashboardPage.tsx'],
           },
         },
       },

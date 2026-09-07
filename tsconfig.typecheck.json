@@ -4,37 +4,23 @@
     "experimentalDecorators": true,
     "useDefineForClassFields": false,
     "module": "ESNext",
-    "lib": [
-      "ES2022",
-      "DOM",
-      "DOM.Iterable"
-    ],
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "isolatedModules": true,
     "moduleDetection": "force",
     "allowJs": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "paths": {
-      "@/*": [
-        "./*"
-      ]
+      "@/*": ["./*"]
     },
     "allowImportingTsExtensions": true,
     "noEmit": true,
-    "types": [
-      "vitest/globals",
-      "vite/client"
-    ],
+    "types": ["vitest/globals", "vite/client"],
     "strict": false,
-    "incremental": true,
+    "incremental": false,
     "esModuleInterop": true,
-    "resolveJsonModule": true,
-    "plugins": [
-      {
-        "name": "next"
-      }
-    ]
+    "resolveJsonModule": true
   },
   "exclude": [
     "src/**/*.test.*",
@@ -47,11 +33,13 @@
     "supabase/functions",
     "src/app",
     ".next",
-    "next-env.d.ts"
+    "next-env.d.ts",
+    "src/views",
+    "src/components",
+    "src/hooks",
+    "src/context",
+    "src/App.tsx",
+    "src/main.tsx"
   ],
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    ".next/types/**/*.ts"
-  ]
+  "include": ["**/*.ts", "**/*.tsx"]
 }

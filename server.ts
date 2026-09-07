@@ -13,6 +13,7 @@ import { createAdminSettingsRouter } from "./server/routes/adminSettings";
 import { createReferenceRouter } from "./server/routes/reference";
 import { startSlaJob, stopSlaJob } from "./server/slaJob";
 import { startEscalationJob, stopEscalationJob } from "./server/escalationEngine";
+import { initEventBus } from "./server/eventBus";
 import { requireAuth, requireCsrf, type AuthedRequest } from "./server/auth";
 import { logger, requestIdMiddleware } from "./server/logger";
 import { idempotencyMiddleware } from "./server/middleware/idempotency";
@@ -314,6 +315,11 @@ app.use(compression({ threshold: 1024, level: 6 }));
 
   startSlaJob(Number(process.env.SLA_CHECK_INTERVAL_MS) || 60_000);
   startEscalationJob(Number(process.env.ESCALATION_CHECK_INTERVAL_MS) || 120_000);
+
+  // Cross-process SSE event bus (LISTEN/NOTIFY) so broadcasts reach clients
+  // connected to the Next.js server during the transition and to other
+  // replicas in multi-instance deployments.
+  initEventBus();
 
   // Graceful shutdown handler
   let isShuttingDown = false;
