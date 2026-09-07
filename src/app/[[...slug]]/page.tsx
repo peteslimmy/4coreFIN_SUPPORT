@@ -17,6 +17,12 @@ const App = dynamic(() => import('../../App'), {
   ),
 });
 
+// Provider stack mirrored from the Vite entry (src/main.tsx). App calls
+// useApp()/useUi() at its root, so it must mount inside AppProvider —
+// without this a clean page load crashes with "useApp must be used within
+// AppProvider" (the Vite dev server masked it by serving its own entry).
+const Providers = dynamic(() => import('../Providers'), { ssr: false });
+
 export default function CatchAllPage() {
   const pathname = usePathname();
   // Normalize trailing slashes so the SPA's pathname checks stay stable.
@@ -25,5 +31,9 @@ export default function CatchAllPage() {
       window.history.replaceState(null, '', pathname.slice(0, -1));
     }
   }, [pathname]);
-  return <App />;
+  return (
+    <Providers>
+      <App />
+    </Providers>
+  );
 }
