@@ -195,8 +195,8 @@ export function RightDrawer({
         <Dialog.Overlay className="fixed inset-0 z-50 bg-overlay" />
         <Dialog.Content
           className={`
-            glass-surface-strong flex flex-col
-            ${isSmallMobile ? 'inset-0 rounded-none' : 'max-h-[90vh] rounded-t-2xl rounded-b-2xl'}
+            bg-surface-elevated border-l border-border shadow-modal flex flex-col
+            ${isSmallMobile ? 'inset-0 rounded-none border-l-0' : 'max-h-[90vh] rounded-t-2xl rounded-b-2xl'}
             ${isSmallMobile ? 'w-full' : 'w-[360px]'}
             ${isTablet ? 'right-0' : ''}
           `}
@@ -231,7 +231,7 @@ export function FABCluster({ activeTicket }: { activeTicket: TicketRecord | null
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.8 }}
             onClick={uiActions.toggleDrawer}
-            className="glass-surface-strong flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg focus-ring"
+            className="bg-surface-elevated border border-border flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg focus-ring"
             aria-label="Close details"
           >
             <span className="text-xs font-medium text-text-primary">Details</span>
@@ -242,13 +242,13 @@ export function FABCluster({ activeTicket }: { activeTicket: TicketRecord | null
 
       <button
         onClick={uiActions.toggleDrawer}
-        className={`glass-surface-strong flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg focus-ring ${hasUnreadNotifications ? 'ring-2 ring-warning' : ''}`}
+        className={`bg-surface-elevated border border-border flex items-center gap-2 px-3 py-2 rounded-xl shadow-lg focus-ring ${hasUnreadNotifications ? 'ring-2 ring-warning' : ''}`}
         aria-label="Open details"
       >
         <Brain className="w-4 h-4 text-primary" />
         <span className="text-xs font-medium text-text-primary hidden sm:inline">Details</span>
         {watcherCount > 0 && (
-          <span className="w-5 h-5 rounded-full bg-primary text-[#fff] text-[10px] font-bold flex items-center justify-center">
+          <span className="w-5 h-5 rounded-full bg-primary text-white text-[10px] font-bold flex items-center justify-center">
             {watcherCount > 99 ? '99+' : watcherCount}
           </span>
         )}

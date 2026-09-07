@@ -28,9 +28,9 @@ const priorityStyles: Record<string, { bg: string; text: string }> = {
 };
 
 const sizeStyles = {
-  xs: 'text-micro leading-none px-1.5 py-0.5',
-  sm: 'text-ticket-caption leading-none px-2 py-1',
-  md: 'text-caption leading-none px-2.5 py-1',
+  xs: 'text-[11px] leading-none px-2 py-0.5',
+  sm: 'text-[11px] leading-none px-2 py-1',
+  md: 'text-xs leading-none px-2.5 py-1',
 };
 
 export default function StatusBadge({ status, priority, label, size = 'sm', className = '' }: StatusBadgeProps) {
@@ -39,14 +39,14 @@ export default function StatusBadge({ status, priority, label, size = 'sm', clas
 
   if (!style) {
     return (
-      <span className={`inline-flex items-center font-semibold tracking-wider rounded-md ${sizeStyles[size]} bg-surface-hover text-text-muted ${className}`}>
+      <span className={`inline-flex items-center font-semibold rounded-md ${sizeStyles[size]} bg-surface-hover text-text-muted ${className}`}>
         {displayLabel}
       </span>
     );
   }
 
   return (
-    <span className={`inline-flex items-center font-semibold tracking-wider rounded-md ${sizeStyles[size]} ${style.bg} ${style.text} ${className}`}>
+    <span className={`inline-flex items-center font-semibold rounded-full ring-1 ring-inset ring-black/5 ${sizeStyles[size]} ${style.bg} ${style.text} ${className}`}>
       {displayLabel}
     </span>
   );

@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback, useState, useEffect } from 'react';
+import React, { useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { motion } from 'framer-motion';
 import { Ticket, List, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 
@@ -63,6 +63,16 @@ export function TicketWorkspacePageV2({ handleDeclareMajorIncident }: TicketWork
   const canCreateTicket = can('tickets:create');
   const isMobile = useMediaQuery('(max-width: 1023px)');
   const showMobileTicketList = uiState.showMobileTicketList;
+
+  // Mobile list drawer: auto-close once a ticket is actually selected,
+  // instead of leaving the overlay covering the ticket just opened.
+  const prevTicketIdRef = useRef<string | null>(activeTicketId ?? null);
+  useEffect(() => {
+    if (showMobileTicketList && activeTicketId && prevTicketIdRef.current !== activeTicketId) {
+      uiActions.setMobileTicketList(false);
+    }
+    prevTicketIdRef.current = activeTicketId ?? null;
+  }, [activeTicketId, showMobileTicketList, uiActions]);
 
   // Swipe gestures for mobile: right swipe opens ticket list, left swipe closes it
   useSwipeGestures({
@@ -284,7 +294,7 @@ export function TicketWorkspacePageV2({ handleDeclareMajorIncident }: TicketWork
             type="button"
             onClick={() => uiActions.setMobileTicketList(true)}
             aria-label="Show ticket list"
-            className="h-11 w-11 rounded-full bg-primary text-[#fff] shadow-lg flex items-center justify-center hover:bg-primary-dark transition-colors focus-ring"
+            className="h-11 w-11 rounded-full bg-primary text-white shadow-lg flex items-center justify-center hover:bg-primary-dark transition-colors focus-ring"
           >
             <List className="w-5 h-5" />
           </button>

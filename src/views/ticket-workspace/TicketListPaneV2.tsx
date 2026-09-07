@@ -9,11 +9,12 @@ import { useUi } from '../../context/UiContext';
 import { useTicketUI } from '../../context/TicketUIContext';
 import TicketCardV2 from '../../components/ticket/TicketCardV2';
 import { useKeyboardShortcuts } from '../../hooks/useKeyboardShortcuts';
+import { cn } from '../../lib/utils';
 
 const PRIORITY_FILTERS = [
   { label: 'All', value: 'ALL' },
-  { label: 'Critical (4)', value: 'CRITICAL' },
-  { label: 'High (12)', value: 'HIGH' },
+  { label: 'Critical', value: 'CRITICAL' },
+  { label: 'High', value: 'HIGH' },
   { label: 'Medium', value: 'MEDIUM' },
 ] as const;
 
@@ -147,66 +148,77 @@ export default function TicketListPaneV2({ onNewTicket }: TicketListPaneV2Props)
   };
 
   const scopedCount = getScopedTickets(tickets).length;
+  const priorityCounts = useMemo(() => {
+    const counts: Record<string, number> = { ALL: scopedCount, CRITICAL: 0, HIGH: 0, MEDIUM: 0 };
+    for (const t of getScopedTickets(tickets)) {
+      if (counts[t.priority] !== undefined) counts[t.priority]++;
+    }
+    return counts;
+  }, [tickets, scopedCount, getScopedTickets]);
 
   return (
     <div className="flex flex-col h-full w-72 border-r border-border bg-surface-elevated shrink-0">
       <div className="flex flex-col h-full">
         {/* HEADER */}
-        <div className="px-3 pt-3 pb-2 shrink-0">
-          <div className="flex items-center justify-between mb-2.5">
+        <div className="px-4 pt-4 pb-3 shrink-0">
+          <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <span className="text-overline text-text-muted">Tickets</span>
-              <span className="text-label-caps font-semibold px-1.5 py-0.5 rounded-full bg-primary/10 text-primary">
+              <span className="text-[13px] font-bold text-text-primary tracking-tight">Tickets</span>
+              <span className="text-[11px] font-semibold px-1.5 py-0.5 rounded-full bg-primary-light text-primary">
                 {filteredTickets.length}/{scopedCount}
               </span>
             </div>
             {onNewTicket && (
-              <button onClick={onNewTicket} className="flex items-center gap-1 px-2.5 py-1.5 bg-primary text-[#fff] rounded-md text-label-caps font-semibold hover:bg-primary-dark transition focus-ring shrink-0">
-                <Plus className="w-3 h-3" /> New
+              <button onClick={onNewTicket} className="flex items-center gap-1 px-3 py-1.5 bg-primary text-white rounded-lg text-xs font-bold hover:bg-primary-dark transition focus-ring shrink-0 shadow-sm">
+                <Plus className="w-3.5 h-3.5" /> New
               </button>
             )}
           </div>
 
           {/* SEARCH */}
           <div className="relative">
-            <Search className="w-4 h-4 text-text-muted absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <Search className="w-4 h-4 text-text-muted absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
             <input
               type="text"
               placeholder="Search tickets, IDs, customers..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               aria-label="Search tickets"
-              className="text-sm bg-surface border border-border rounded-lg outline-none transition-all duration-200 w-full pl-8 pr-3 py-1.5 focus:ring-2 focus:ring-accent/20 focus:border-accent focus:bg-surface-card"
+              className="text-[13px] bg-surface-card border border-border rounded-lg outline-none transition-all duration-200 w-full pl-9 pr-3 py-2 placeholder:text-text-muted focus:ring-2 focus:ring-primary/15 focus:border-primary/40 focus:bg-surface-card"
             />
           </div>
         </div>
 
-        {/* FILTER PILLS — priority only, matching screenshot */}
-        <div className="flex h-[40px] items-center gap-[6px] border-b border-[#e5e7eb] px-[8px] shrink-0">
+        {/* FILTER PILLS — priority only, live counts */}
+        <div className="flex h-[44px] items-center gap-1.5 border-b border-border px-3 shrink-0 overflow-x-auto">
           {PRIORITY_FILTERS.map(f => {
             const active = priorityFilter === f.value;
+            const count = priorityCounts[f.value];
             return (
               <button
                 key={f.value}
                 type="button"
                 onClick={() => setPriorityFilter(f.value)}
                 className={[
-                  'h-[24px] rounded-[6px] px-[8px]',
-                  'text-[10px] font-medium leading-none',
+                  'h-[26px] rounded-full px-2.5 whitespace-nowrap',
+                  'text-[11px] font-semibold leading-none',
                   'transition-colors duration-150',
-                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-[#991b1b]/30',
+                  'focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/30',
                   active
-                    ? 'bg-[#111827] text-white'
+                    ? 'bg-text-primary text-white'
                     : f.value === 'CRITICAL'
-                      ? 'border border-[#fecdd3] bg-[#fff5f6] text-[#dc2626]'
+                      ? 'bg-error-light text-error-dark'
                       : f.value === 'HIGH'
-                        ? 'border border-[#fcd34d] bg-[#fffaf0] text-[#d97706]'
-                        : f.value === 'MEDIUM'
-                          ? 'h-[24px] rounded-[6px] px-[5px] border border-[#dbe3ec] bg-[#f8fafc] text-[#334155]'
-                          : 'border border-[#dbe3ec] bg-[#f8fafc] text-[#334155]',
+                        ? 'bg-warning-light text-warning-dark'
+                        : 'bg-surface-hover text-text-secondary hover:bg-surface-hover',
                 ].join(' ')}
               >
                 {f.label}
+                {typeof count === 'number' && count > 0 && (
+                  <span className={cn('ml-1 tabular-nums', active ? 'text-white/70' : 'opacity-60')}>
+                    {count}
+                  </span>
+                )}
               </button>
             );
           })}

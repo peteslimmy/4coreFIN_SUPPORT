@@ -83,11 +83,11 @@ export default function Modal({ open, onClose, title, size = 'md', children, foo
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.95, y: 10 }}
             transition={{ duration: 0.2 }}
-            className={`w-full ${sizeClass} glass-surface-strong rounded-2xl shadow-modal flex flex-col max-h-[85vh]`}
+            className={`w-full ${sizeClass} bg-surface-elevated border border-border rounded-2xl shadow-modal flex flex-col max-h-[85vh]`}
           >
             {title && (
               <div className="flex items-center justify-between px-6 py-4 border-b border-border-subtle">
-                <h2 id={titleId} className="text-h3 text-text-primary">{title}</h2>
+                <h2 id={titleId} className="font-heading text-base font-semibold text-text-primary">{title}</h2>
                 <button
                   onClick={onClose}
                   className="p-1.5 rounded-lg text-text-muted hover:text-text-primary hover:bg-surface transition-colors focus-ring"

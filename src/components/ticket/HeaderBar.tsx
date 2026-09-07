@@ -58,36 +58,54 @@ export function HeaderBar({
   const ownerName = ticket.assignedAgentId
     ? ticket.assignedAgentId.replace(/ Team\s*$/i, '')
     : ticket.partner;
+  const customerName = ticket.customerName || ownerName;
+  const slaTone = sla.breached
+    ? 'bg-error-light text-error-dark'
+    : sla.atRisk
+      ? 'bg-warning-light text-warning-dark'
+      : 'bg-surface-hover text-text-secondary';
+  const slaSourceHint = sla.source === 'rule'
+    ? 'Deadline set by a configured SLA category rule'
+    : 'No category rule matched; using the priority fallback SLA';
 
   return (
-    <header className="glass-surface sticky top-0 z-10 shrink-0 px-4 py-3">
+    <header className="sticky top-0 z-10 shrink-0 px-4 pt-3.5 pb-3 bg-surface-elevated/95 backdrop-blur-sm border-b border-border">
+      {/* Row 1 — identity: customer first, then ID + badges */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-overline text-text-muted">Ticket ID</span>
-          <span className="font-numeric font-bold text-[11px] text-text-primary tracking-tight">{ticket.id}</span>
-          <PriorityBadge priority={ticket.priority} />
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
+          <h2 className="font-heading font-semibold text-[15px] text-text-primary truncate min-w-0">
+            {customerName}
+          </h2>
+          <span className="font-mono text-[11px] text-text-muted tracking-tight shrink-0">{ticket.id}</span>
+        </div>
+
+        <div className="flex items-center gap-1.5 shrink-0 flex-wrap">
           <StatusBadge status={ticket.status} size="xs" />
+          <PriorityBadge priority={ticket.priority} />
           {ticket.isEscalated && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-error/10 text-error dark:bg-error/20 rounded-full text-[11px] font-semibold uppercase tracking-wider">
+            <span className="inline-flex items-center px-2 py-0.5 bg-error-light text-error-dark rounded-full text-[11px] font-semibold">
               Escalated
             </span>
           )}
           {ticket.duplicateOf && (
-            <span className="px-2 py-0.5 bg-accent/10 text-accent-dark dark:bg-accent/20 rounded-full text-[11px] font-semibold uppercase tracking-wider" title={`Duplicate of ${ticket.duplicateOf}`}>
+            <span className="px-2 py-0.5 bg-surface-hover text-text-secondary rounded-full text-[11px] font-semibold" title={`Duplicate of ${ticket.duplicateOf}`}>
               Dup of {ticket.duplicateOf}
             </span>
           )}
-        </div>
-
-        <div className="flex items-center gap-2 text-xs text-text-muted min-w-0 flex-1">
-          <span className="w-2 h-2 rounded-full bg-accent shrink-0" />
-          <span className="truncate">
-            Owner: <strong className="font-semibold text-text-primary">{ownerName}</strong>
-          </span>
+          {sla.deadline && (
+            <span
+              className={`inline-flex items-center gap-1.5 h-[22px] px-2 rounded-full text-[11px] font-semibold font-mono tabular-nums ${slaTone}`}
+              title={slaSourceHint}
+            >
+              <AlertTriangle className={`w-3 h-3 ${sla.breached ? 'text-error' : sla.atRisk ? 'text-warning' : 'text-text-muted opacity-60'}`} />
+              {sla.formattedShort}
+            </span>
+          )}
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 mt-3 flex-wrap">
+      {/* Row 2 — actions + owner */}
+      <div className="flex items-center justify-between gap-2 mt-2.5 flex-wrap">
         <div className="flex items-center gap-1.5">
           <button
             type="button"
@@ -171,20 +189,10 @@ export function HeaderBar({
           )}
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="h-6 w-px bg-border hidden sm:block" />
-          <div className="flex items-center gap-2">
-            {sla.deadline && (
-              <>
-                <span className={`font-mono text-xs font-medium ${sla.breached ? 'text-error' : sla.atRisk ? 'text-warning' : 'text-text-primary'}`}>
-                  {sla.formattedShort}
-                </span>
-                <span className={`text-[11px] font-semibold px-1.5 py-0.5 rounded-full border ${sla.source === 'rule' ? 'bg-primary/10 text-primary border-primary/20' : 'bg-warning/10 text-warning border-warning/20'}`} title={sla.source === 'rule' ? 'Deadline set by a configured SLA category rule' : 'No category rule matched; using the priority fallback SLA'}>
-                  {sla.source === 'rule' ? 'Rule' : 'Default'}
-                </span>
-              </>
-            )}
-          </div>
+        <div className="flex items-center gap-1.5 text-xs text-text-muted min-w-0">
+          <span className="truncate">
+            Owner&nbsp;<strong className="font-semibold text-text-secondary">{ownerName || '—'}</strong>
+          </span>
         </div>
       </div>
     </header>
