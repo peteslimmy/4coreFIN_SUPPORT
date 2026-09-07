@@ -21,7 +21,10 @@ function matchesLike(value: any, pattern: string): boolean {
 
 function parseInSet(val: string): any[] {
   if (val.startsWith('(') && val.endsWith(')')) {
-    return val.slice(1, -1).split(',').map((v) => v.trim());
+    return val
+      .slice(1, -1)
+      .split(',')
+      .map((v) => v.trim());
   }
   return val.split(',').map((v) => v.trim());
 }
@@ -39,7 +42,7 @@ class QueryBuilder {
 
   constructor(
     private table: string,
-    private store: TableStore
+    private store: TableStore,
   ) {}
 
   select(_cols?: string, opts?: { count?: string; head?: boolean }) {
@@ -70,7 +73,10 @@ class QueryBuilder {
 
   /** PostgREST-style OR: "col.op.value,col.op.value" — rows matching ANY predicate. */
   or(clause: string) {
-    const predicates = clause.split(',').map((p) => p.trim()).filter(Boolean);
+    const predicates = clause
+      .split(',')
+      .map((p) => p.trim())
+      .filter(Boolean);
     const compiled = predicates.map((p) => {
       const m = /^([^.\s]+)\.([^.\s]+)\.(.*)$/.exec(p);
       if (!m) return () => false;
@@ -120,7 +126,11 @@ class QueryBuilder {
 
   contains(col: string, val: string) {
     let target: any[];
-    try { target = JSON.parse(val); } catch { target = [val]; }
+    try {
+      target = JSON.parse(val);
+    } catch {
+      target = [val];
+    }
     this.filters.push((r) => {
       const arr = Array.isArray(r[col]) ? r[col] : [];
       return target.some((v: any) => arr.includes(v));
@@ -203,6 +213,24 @@ class QueryBuilder {
   private execute(): Promise<{ data: any; error: any }> {
     if (this.pendingInsert) {
       const tableRows = this.store[this.table] || (this.store[this.table] = []);
+      // Surface unique-constraint violations like Postgres would, so routes
+      // that rely on insert-and-catch-23505 (atomic dedupe) are testable.
+      // Mirrors the uq_email_inbound_message_id index (migration 077) on the
+      // email_ingest.inbound_emails table.
+      if (
+        this.table === 'email_ingest.inbound_emails' &&
+        this.pendingInsert[0]?.message_id != null &&
+        tableRows.some((r: any) => r.message_id === this.pendingInsert[0].message_id)
+      ) {
+        this.pendingInsert = null;
+        return Promise.resolve({
+          data: null,
+          error: {
+            code: '23505',
+            message: 'duplicate key value violates unique constraint "uq_email_inbound_message_id"',
+          },
+        });
+      }
       tableRows.push(...this.pendingInsert);
       const inserted = [...this.pendingInsert];
       this.pendingInsert = null;
@@ -229,13 +257,23 @@ class QueryBuilder {
         }
       }
       if (this.singleMode) {
-        return Promise.resolve(updated.length > 0 ? { data: updated[0], error: null } : { data: null, error: { message: 'No rows returned', code: 'PGRST116' } });
+        if (updated.length > 0) {
+          return Promise.resolve({ data: updated[0], error: null });
+        }
+        // Real PostgREST: .single() errors on zero rows, .maybeSingle() does not.
+        return Promise.resolve(
+          this.singleMode === 'maybeSingle'
+            ? { data: null, error: null }
+            : { data: null, error: { message: 'No rows returned', code: 'PGRST116' } },
+        );
       }
       return Promise.resolve({ data: updated, error: null });
     }
 
     const rows = this.computeRows();
-    const totalCount = this.countMode ? (this.store[this.table] || []).filter((r) => this.filters.every((f) => f(r))).length : undefined;
+    const totalCount = this.countMode
+      ? (this.store[this.table] || []).filter((r) => this.filters.every((f) => f(r))).length
+      : undefined;
     if (this.headMode) {
       return Promise.resolve({ data: null, count: rows.length, error: null });
     }
@@ -244,7 +282,7 @@ class QueryBuilder {
         return Promise.resolve(
           this.singleMode === 'maybeSingle'
             ? { data: null, error: null }
-            : { data: null, error: { message: 'No rows returned', code: 'PGRST116' } }
+            : { data: null, error: { message: 'No rows returned', code: 'PGRST116' } },
         );
       }
       return Promise.resolve({ data: rows[0], error: null });
@@ -263,6 +301,9 @@ export function createFakeSupabase(seed: TableStore) {
     store[table] = rows.map((r) => ({ ...r }));
   }
   return {
+    // Exposed so tests can mutate/assert on the LIVE store the fake queries
+    // (the seed passed in is cloned, not referenced).
+    store,
     from: (table: string) => new QueryBuilder(table, store),
     // Minimal auth stub so auth-provider code paths are type-safe in tests.
     // Tests operate in "local" provider mode by default, so these are not
@@ -273,7 +314,7 @@ export function createFakeSupabase(seed: TableStore) {
       // password_hash (bcrypt) or the plaintext `password_plaintext` column.
       signInWithPassword: async ({ email, password }: any) => {
         const row = (store.users || []).find(
-          (u: any) => String(u.email).toLowerCase() === String(email).toLowerCase()
+          (u: any) => String(u.email).toLowerCase() === String(email).toLowerCase(),
         );
         if (!row) {
           return { data: null, error: { message: 'Invalid login credentials' } };
@@ -287,7 +328,10 @@ export function createFakeSupabase(seed: TableStore) {
         if (!ok) {
           return { data: null, error: { message: 'Invalid login credentials' } };
         }
-        return { data: { user: { id: 'auth-' + email, email, password_plaintext: password } }, error: null };
+        return {
+          data: { user: { id: 'auth-' + email, email, password_plaintext: password } },
+          error: null,
+        };
       },
       resetPasswordForEmail: async (_email: string, _opts: any) => ({ data: {}, error: null }),
       getUser: async (token: string) => {
@@ -324,8 +368,13 @@ export function createFakeSupabase(seed: TableStore) {
       createBucket: async () => ({ error: null }),
       from: (_bucket: string) => ({
         upload: async () => ({ error: null }),
-        getPublicUrl: (path: string) => ({ data: { publicUrl: `https://fake.supabase.co/storage/${path}` } }),
-        createSignedUrl: (_path: string, _expiresIn: number) => ({ data: { signedUrl: `https://fake.supabase.co/storage/${_path}?signed` }, error: null }),
+        getPublicUrl: (path: string) => ({
+          data: { publicUrl: `https://fake.supabase.co/storage/${path}` },
+        }),
+        createSignedUrl: (_path: string, _expiresIn: number) => ({
+          data: { signedUrl: `https://fake.supabase.co/storage/${_path}?signed` },
+          error: null,
+        }),
         remove: async () => ({ error: null }),
       }),
     },
