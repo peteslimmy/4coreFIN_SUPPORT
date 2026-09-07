@@ -13,7 +13,7 @@ Customers, BU Support (L1/L2/L3), Payment Partner representatives, Executives, S
 ## 3. Core user journeys
 1. **Intake:** BU agent (or customer) files ticket → customer auto-linked by (email, BU) → duplicate check → SLA deadline computed → audit TICKET_CREATED.
 2. **Investigation:** assign → investigate → request partner/customer input (waiting states pause SLA) → partner replies.
-3. **Resolution:** partner/SUPER_ADMIN completes RCA → RESOLVED (state machine enforces RCA completeness).
+3. **Resolution:** Partner completes RCA → RESOLVED (state machine enforces RCA completeness).
 4. **Closure:** customer feedback required → CLOSED; rejects reopen with escalation.
 5. **Major incident:** L2+ declares, links tickets, tracks timeline + PIR.
 

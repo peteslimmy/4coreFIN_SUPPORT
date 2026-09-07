@@ -50,7 +50,7 @@
 | 7 | 4 hours later: Marcus (Parkway) replies via partner portal | Comment appears in Sarah's panel; SLA clock not yet resumed | ActivityPane | comments (SSE) |
 | 8 | Sarah reviews Marcus's response + evidence | Evidence pane shows attached root-cause analysis PDF | TicketDetailPane | evidence |
 | 9 | Sarah verifies RCA completeness | RCA complete? Yes | Internal checklist | — |
-| 10 | Sarah transitions to RESOLVED | State machine: INVESTIGATE → RESOLVED (SUPER_ADMIN / PARTNER role gate, RCA required) | Status dropdown | ticketStateMachine |
+| 10 | Sarah assigns ticket to Partner for resolution | Ticket routed to Partner queue | Status indicator | assignedAgentId |
 | 11 | System requests customer feedback | Customer notification sent; feedback form available to Chidinma | Customer portal | notifications |
 | 12 | Chidinma submits 4/5 feedback within 2 hours | System: RESOLVED → CLOSED transition unlocked | Feedback panel | tickets.feedbackScore, feedbackComment |
 | 13 | Sarah closes ticket | Ticket → CLOSED; closure audit entry; watcher notified | Status dropdown → Close | tickets, auditLogs, watcherNotifications |
@@ -72,7 +72,7 @@
 | 6 | Marcus navigates to Evidence tab | Existing evidence listed; no upload permission (read-only for evidence) | Evidence pane | evidence |
 | 7 | Marcus submits RCA via status action | Form: Root Cause Summary (textarea), Impact Assessment, Preventive Owner, Due Date | RCA submit modal | pir table |
 | 8 | System validates RCA completeness | All required fields filled → transition to RESOLVED enabled | Inline validation | ticketStateMachine |
-| 9 | Sarah transitions ticket to RESOLVED | Status updates; closure gate waits for customer feedback | Status indicator | tickets.status |
+| 9 | Marcus transitions ticket to RESOLVED | State machine: INVESTIGATE → RESOLVED (PARTNER role only, RCA required) | Status dropdown | ticketStateMachine |
 | 10 | System sends closure notification to customer | Email + in-app notification | — | notifications, email service |
 
 **Emotional arc:** Obligated (new ticket in queue) → Pressured (SLA ticking) → Collaborative (internal team comment) → Satisfied (RCA submitted, ticket resolved)

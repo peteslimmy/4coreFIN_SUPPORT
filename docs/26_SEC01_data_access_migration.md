@@ -1,6 +1,10 @@
 # SEC-01: Per-Request User-JWT Data Access (Migration Specification)
 
-**Status:** Specified — not yet implemented.
+**Status:** Partially implemented (2026-09-06).
+- Done: `lib/server/supabaseUser.ts` (`supabaseForUser(accessToken)` factory; Supabase access token issued at login and stored in the session), `server/supabaseAdmin.ts` (greppable service-role client), migration `082_user_jwt_rls.sql` (`user_jwt_*` policies resolving scope via `app_user_scope()` keyed on `auth.uid()` — no GUC/`set_config` dependency).
+- Deviation from this spec: no `tenantContext` middleware or `set_config` GUCs; scope resolution is via a SECURITY DEFINER function instead. Migration number is 082 (not 081).
+- Outstanding: repositories are not yet migrated to the user client (spec steps D/E); the cross-tenant isolation integration test has not been run against a live project. Until step E ("flip the default") completes, the service client remains the effective data path and RLS is defense-in-depth, not the primary boundary.
+
 **Priority:** P0 security architecture (the single biggest remaining finding).
 **Prerequisite:** A disposable Supabase test project with `TEST_SUPABASE_*` secrets configured (so the integration suite in `tests/*.test.ts` can run end-to-end).
 

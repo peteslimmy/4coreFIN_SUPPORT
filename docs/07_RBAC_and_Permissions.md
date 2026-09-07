@@ -14,12 +14,19 @@
 
 Tiers are strictly additive (L1 ⊂ L2 ⊂ L3). Custom roles may be defined in the admin UI and stored in `app_config.roles`; system-role overrides replace the defaults.
 
-## Permission matrix (29 permissions)
-Groups: Tickets (view/create/edit/resolve/delete/escalate/merge/unmask/assign), Comments & Notifications (view/create/internal + notifications:view), Operations (major-incidents manage/declare, customers:manage, partner:rca), Oversight (audit view/write/verify, reports:view, executive:dashboard), Administration (config/users/forms/access/branding/landing_page/sla, users:view).
+## Permission matrix (30 permissions)
+Groups: Tickets (view/create/edit/resolve/delete/escalate/merge/unmask/assign), Comments & Notifications (view/create/internal + notifications:view), Operations (major-incidents manage/declare, customers:manage, partner:rca), Oversight (audit view/write/verify, reports:view, executive:dashboard), Administration (config/users/forms/access/branding/landing_page/sla, users:view), AI (ai:use).
+
+> **Canonical source (2026-09-06):** `shared/rbac.ts`. `src/lib/rbac.ts` and `server/rbac.ts` are
+> re-export shims — the TypeScript definitions in `shared/rbac.ts` win on any drift with this
+> document. Changes since this matrix was written: `ai:use` added (gates all `/api/gemini/*`
+> endpoints server-side; granted to every role except CUSTOMER), `admin:config` split into
+> `admin:config:read|write` for the tiered roles, and `tickets:escalate` now additionally requires
+> a mandatory reason (≥10 chars) that is recorded in the compliance audit trail.
 
 | Permission | L1 | L2 | L3 | legacy | PARTNER | EXEC | CUST |
 |---|---|---|---|---|---|---|---|
-| tickets:view/create/edit/resolve/assign | ✔ | ✔ | ✔ | ✔ | edit only | view | create/view |
+| tickets:view/create/edit/resolve/assign | view/create/edit/assign | view/create/edit/assign | view/create/edit/assign | view/create/edit/assign | view/edit | view | create/view |
 | tickets:escalate / merge / unmask | — | ✔ | ✔ | ✔ | — | unmask | — |
 | tickets:delete | — | — | ✔ | ✔ | — | — | — |
 | major-incidents:manage | ✔ | ✔ | ✔ | ✔ | ✔ | — | — |

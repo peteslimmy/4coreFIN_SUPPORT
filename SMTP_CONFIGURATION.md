@@ -11,8 +11,7 @@
 
 ## Credentials
 - **Username:** MS_Cs8jxG@test-2p0347z19oylzdrn.mlsender.net
-- **Password:** [ENCRYPTED IN DATABASE] 
-  (Original: mssp.7MOIDRw.o65qngkwq73gwr12.VIBwZRM)
+- **Password:** [REDACTED — was committed in plaintext here; credential must be rotated. Live value lives encrypted in the `config` table.]
 
 ## Email Settings (Updated for Domain Verification)
 - **From Email:** MS_Cs8jxG@test-2p0347z19oylzdrn.mlsender.net

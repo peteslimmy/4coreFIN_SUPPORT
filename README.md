@@ -15,12 +15,20 @@ FinTech Incident Control & Payment Operations Intelligence.
 
 | Command | Description |
 |---|---|
-| `npm run dev` | Start the Express + Vite dev server |
-| `npm run build` | Production build (Vite + server bundle) |
-| `npm run start` | Run the production server (`dist/server.cjs`) |
-| `npm run lint` | ESLint + `tsc --noEmit` |
+| `npm run dev:next` | Start the Next.js dev server (frontend + ported API routes) on :3000 |
+| `npm run dev:legacy-api` | Start the legacy Express API on :3001 (serves routes not yet ported; Next proxies to it) |
+| `npm run dev` | Start the legacy Express + Vite dev server (pre-migration mode) |
+| `npm run build:next` | Next.js production build |
+| `npm run build` | Legacy production build (Vite + server bundle) |
+| `npm run start:next` | Run the Next.js production server |
+| `npm run start` | Run the legacy production server (`dist/server.cjs`) |
+| `npm run lint` | ESLint + typecheck (`tsconfig.typecheck.json`) |
 | `npm run test` | Unit/integration tests (Vitest) |
 | `npm run test:e2e` | End-to-end tests (Playwright) |
+
+> **Migration note:** the app is being migrated from Express to Next.js (App Router).
+> See [`docs/27_NextJS_Migration.md`](docs/27_NextJS_Migration.md) for the target architecture,
+> which routes are already Next-native, and the cutover plan.
 
 ## Documentation
 

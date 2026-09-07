@@ -19,3 +19,31 @@ test-results/
 playwright-report/
 storybook-static/
 temp.cjs
+
+# Ad-hoc probe/audit run outputs
+*-out.txt
+*-err.txt
+.deep-probe.txt
+.next/
+next-env.d.ts
+
+# Scratch / ad-hoc debug artifacts (must never be committed)
+0
+test_connection*.ts
+test_one_setting.ts
+test_simple.ts
+testimport.ts
+check_constraint.ts
+run-upload.mjs
+simulate-login.ts
+login-simulation.html
+open-login-simulation.bat
+test_schema_client.ts
+index_response.html
+*-results.txt
+vitest-output.txt
+.opencode/
+tsconfig.tsbuildinfo
+e2e/.e2e-meta.json
+
+temp.cjs

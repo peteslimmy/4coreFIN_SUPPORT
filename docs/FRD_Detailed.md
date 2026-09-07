@@ -113,7 +113,7 @@
 | INVESTIGATE | WAITING_PARTNER | WAIT_PARTNER | BU agents | Starts SLA pause clock |
 | INVESTIGATE | WAITING_INTERNAL | WAIT_INTERNAL | BU agents | Starts SLA pause clock |
 | WAITING_* | INVESTIGATE | *_REPLIED / INTERNAL_RESUMED | BU agents (+Partner for WAITING_PARTNER) | Accumulates pause span |
-| INVESTIGATE | RESOLVED | RESOLVE | SUPER_ADMIN, PARTNER | Full RCA required |
+| INVESTIGATE | RESOLVED | RESOLVE | PARTNER | Full RCA required |
 | RESOLVED | CLOSED | CLOSE | BU agents | Customer feedback score 1–5 required |
 | RESOLVED | INVESTIGATE | REJECT_AND_REOPEN | BU agents | Auto-escalates, increment escalationCount |
 | CLOSED | INVESTIGATE | REOPEN | BU agents | — |

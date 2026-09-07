@@ -53,7 +53,7 @@ export async function login(page: Page, email = DEMO_EMAIL, password = DEMO_PASS
   await page.getByPlaceholder('you@company.com').fill(email);
   await page.getByPlaceholder('Enter your password').fill(password);
   await page.getByRole('button', { name: /Sign In/i }).click();
-  await page.waitForURL(/\/(tickets|dashboard|reference_data|customer_portal|payment_partner_portal|admin_settings|workspace)/, { timeout: 15_000 }).catch(() => {});
+  await page.waitForURL(/\/app\/|\/(tickets|dashboard|reference_data|customer_portal|payment_partner_portal|admin_settings)/, { timeout: 15_000 }).catch(() => {});
   await page.locator('#main-content').waitFor({ state: 'visible', timeout: 15_000 }).catch(() => {});
   await page.waitForTimeout(500);
   // Dismiss the first-run onboarding tour if it appears.

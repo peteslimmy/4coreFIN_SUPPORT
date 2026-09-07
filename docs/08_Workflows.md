@@ -9,7 +9,7 @@ RECEIPT ──Assign──▶ ASSIGNED ──Start Investigation──▶ INVEST
                      Wait for Customer ───────────┘  │  └─ Partner/Customer/Internal replied
                      Wait for Partner  ──┐           │      (SLA paused while waiting)
                      Wait Internal      ──┴─▶ WAITING_*
-INVESTIGATE ──Resolve (RCA complete; SUPER_ADMIN/PARTNER)──▶ RESOLVED
+INVESTIGATE ──Resolve (RCA complete; PARTNER only)──▶ RESOLVED
 RESOLVED ──Close (feedback required)──▶ CLOSED
 RESOLVED ──Reject & Reopen (auto-escalate)──▶ INVESTIGATE
 CLOSED ──Reopen──▶ INVESTIGATE
